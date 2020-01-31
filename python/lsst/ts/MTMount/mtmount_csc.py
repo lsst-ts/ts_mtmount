@@ -29,7 +29,7 @@ from . import command_futures
 from . import commands
 from . import replies
 from . import communicator
-from . import mock_controller
+from . import mock
 from . import utils
 
 
@@ -437,9 +437,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 reply_port = self.mock_reply_port
             else:
                 reply_port = self.config.reply_port
-            self.mock_controller = mock_controller.MockController(
-                reply_port=reply_port, log=self.log
-            )
+            self.mock_controller = mock.Controller(reply_port=reply_port, log=self.log)
             await asyncio.wait_for(self.mock_controller.start_task, timeout=2)
         except Exception as e:
             err_msg = "Could not start mock controller"
