@@ -51,15 +51,18 @@ class BaseFieldInfo(metaclass=abc.ABCMeta):
         Name of field. Must be a valid Python identifier.
     doc : `str`
         Description of the field.
-    default : ``any`` or `None`
+    default : ``any`` or `None` (optional)
         Default value (using the native type of this FieldInfo).
         If `None` then this field must be specified
         when constructing a command or reply.
+    dtype : ``class``
+        Data type.
     """
 
-    def __init__(self, name, doc, default=None):
+    def __init__(self, name, doc, dtype, default=None):
         self.name = name
         self.doc = doc
+        self.dtype = dtype
         self._default = default
         if default is not None:
             self.assert_value_ok(default)
@@ -68,11 +71,9 @@ class BaseFieldInfo(metaclass=abc.ABCMeta):
     def default(self):
         return self._default
 
-    @abc.abstractmethod
     def assert_value_ok(self, value):
-        """Raise ValueError if the specified value is not of the correct type.
-        """
-        raise NotImplementedError()
+        if not isinstance(value, self.dtype):
+            raise ValueError(f"value={value!r} is not of type {self.dtype.__name__}")
 
     @abc.abstractmethod
     def value_from_str(self, strval):
@@ -103,11 +104,21 @@ class BaseFieldInfo(metaclass=abc.ABCMeta):
 
 class BoolFieldInfo(BaseFieldInfo):
     """A bool field with str representation "0"/"1".
+
+    Parameters
+    ----------
+    name : `str`
+        Name of field. Must be a valid Python identifier.
+    doc : `str`
+        Description of the field.
+    default : ``any`` or `None` (optional)
+        Default value (using the native type of this FieldInfo).
+        If `None` then this field must be specified
+        when constructing a command or reply.
     """
 
-    def assert_value_ok(self, value):
-        if not isinstance(value, bool):
-            raise ValueError(f"value={value!r} is not a bool")
+    def __init__(self, name, doc, default=None):
+        super().__init__(name=name, doc=doc, dtype=bool, default=default)
 
     def value_from_str(self, strval):
         return bool(int(strval))
@@ -125,24 +136,25 @@ class EnumFieldInfo(BaseFieldInfo):
         Name of field. Must be a valid Python identifier.
     doc : `str`
         Description of the field.
-    EnumClass : ``enum``
+    dtype : ``enum``
         Class of enum; any of the enum classes from the enum package is fine.
-    default : ``EnumClass`` or `None`
+    default : ``dtype`` or `None`
         Default value.
         If `None` then this field must be specified
         when constructing a command or reply.
     """
 
-    def __init__(self, name, doc, EnumClass, default=None):
-        self.EnumClass = EnumClass
-        super().__init__(name=name, doc=doc, default=default)
+    def __init__(self, name, doc, dtype, default=None):
+        if not issubclass(dtype, enum.Enum):
+            raise ValueError(f"dtype={dtype!r} must be an enum.Enum")
+        super().__init__(name=name, doc=doc, dtype=dtype, default=default)
 
     def assert_value_ok(self, value):
-        self.EnumClass(value)
+        self.dtype(value)
 
     def value_from_str(self, strval):
         intval = int(strval)
-        return self.EnumClass(intval)
+        return self.dtype(intval)
 
     def str_from_value(self, value):
         return str(value.value)
@@ -165,7 +177,7 @@ class FixedEnumFieldInfo(EnumFieldInfo):
         super().__init__(
             name=name,
             doc=f"{name} field with a fixed value: {default!r}",
-            EnumClass=type(default),
+            dtype=type(default),
             default=default,
         )
 
@@ -181,7 +193,21 @@ class FixedEnumFieldInfo(EnumFieldInfo):
 
 class FloatFieldInfo(BaseFieldInfo):
     """A float field.
+
+    Parameters
+    ----------
+    name : `str`
+        Name of field. Must be a valid Python identifier.
+    doc : `str`
+        Description of the field.
+    default : ``any`` or `None` (optional)
+        Default value (using the native type of this FieldInfo).
+        If `None` then this field must be specified
+        when constructing a command or reply.
     """
+
+    def __init__(self, name, doc, default=None):
+        super().__init__(name=name, doc=doc, dtype=float, default=default)
 
     def assert_value_ok(self, value):
         if not (isinstance(value, float) or isinstance(value, int)):
@@ -196,11 +222,21 @@ class FloatFieldInfo(BaseFieldInfo):
 
 class IntFieldInfo(BaseFieldInfo):
     """An int field.
+
+    Parameters
+    ----------
+    name : `str`
+        Name of field. Must be a valid Python identifier.
+    doc : `str`
+        Description of the field.
+    default : ``any`` or `None` (optional)
+        Default value (using the native type of this FieldInfo).
+        If `None` then this field must be specified
+        when constructing a command or reply.
     """
 
-    def assert_value_ok(self, value):
-        if not isinstance(value, int):
-            raise ValueError(f"value={value!r} is not an int")
+    def __init__(self, name, doc, default=None):
+        super().__init__(name=name, doc=doc, dtype=int, default=default)
 
     def value_from_str(self, strval):
         return int(strval)
@@ -208,11 +244,21 @@ class IntFieldInfo(BaseFieldInfo):
 
 class StrFieldInfo(BaseFieldInfo):
     """A str field.
+
+    Parameters
+    ----------
+    name : `str`
+        Name of field. Must be a valid Python identifier.
+    doc : `str`
+        Description of the field.
+    default : ``any`` or `None` (optional)
+        Default value (using the native type of this FieldInfo).
+        If `None` then this field must be specified
+        when constructing a command or reply.
     """
 
-    def assert_value_ok(self, value):
-        if not isinstance(value, str):
-            raise ValueError(f"value={value!r} is not a str")
+    def __init__(self, name, doc, default=None):
+        super().__init__(name=name, doc=doc, dtype=str, default=default)
 
     def value_from_str(self, strval):
         return strval
@@ -247,7 +293,7 @@ class TimeFieldInfo(BaseFieldInfo):
         self.scale = scale
         # Don't pass default=True to the parent class,
         # because it is not a valid time.
-        super().__init__(name=name, doc=doc, default=None)
+        super().__init__(name=name, doc=doc, dtype=astropy.time.Time, default=None)
         self._default = default
 
     @property
@@ -312,7 +358,7 @@ class SourceFieldInfo(EnumFieldInfo):
         super().__init__(
             name="source",
             doc=f"Source of the {what}; a `Source`",
-            EnumClass=enums.Source,
+            dtype=enums.Source,
             # TODO: change this when we have a value for the CSC
             default=enums.Source.HHD,
         )

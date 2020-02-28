@@ -84,7 +84,7 @@ class FieldInfoTestCase(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     field_info.assert_value_ok(bad_value)
 
-    def check_fixed_field_info(self, factory, EnumClass, expected_name):
+    def check_fixed_field_info(self, factory, dtype, expected_name):
         """Check a FixedFieldInfo class or a subclass.
 
         Parameters
@@ -92,18 +92,18 @@ class FieldInfoTestCase(unittest.TestCase):
         factory : ``callable``
             Function that constructs a `FixedEnumFieldInfo` or subclass.
             It accepts one argument: default.
-        EnumClass : `EnumClass`
+        dtype : `dtype`
             Enum class of the field.
         expected_name : `str`
             Expected name of field info.
         """
-        for default in EnumClass:
+        for default in dtype:
             with self.subTest(default=default):
                 field_info = factory(default=default)
-                self.assertIs(field_info.EnumClass, EnumClass)
+                self.assertIs(field_info.dtype, dtype)
                 self.assertEqual(field_info.name, expected_name)
 
-                other_values = tuple(value for value in EnumClass if value != default)
+                other_values = tuple(value for value in dtype if value != default)
                 other_int_values = tuple(value.value for value in other_values)
                 self.check_field_basics(
                     field_info=field_info,
@@ -123,7 +123,7 @@ class FieldInfoTestCase(unittest.TestCase):
 
     def test_enum_field_info(self):
         field_info = MTMount.field_info.EnumFieldInfo(
-            name=self.name, doc=self.doc, EnumClass=ExampleEnum
+            name=self.name, doc=self.doc, dtype=ExampleEnum
         )
         self.check_name_doc(field_info)
         self.check_field_basics(
@@ -140,7 +140,7 @@ class FieldInfoTestCase(unittest.TestCase):
             )
 
         self.check_fixed_field_info(
-            factory=factory, EnumClass=ExampleEnum, expected_name=self.name
+            factory=factory, dtype=ExampleEnum, expected_name=self.name
         )
 
     def test_float_field_info(self):
@@ -206,14 +206,14 @@ class FieldInfoTestCase(unittest.TestCase):
     def test_command_code_field_info(self):
         self.check_fixed_field_info(
             MTMount.field_info.CommandCodeFieldInfo,
-            EnumClass=MTMount.CommandCode,
+            dtype=MTMount.CommandCode,
             expected_name="command_code",
         )
 
     def test_reply_code_field_info(self):
         self.check_fixed_field_info(
             MTMount.field_info.ReplyCodeFieldInfo,
-            EnumClass=MTMount.ReplyCode,
+            dtype=MTMount.ReplyCode,
             expected_name="reply_code",
         )
 
@@ -223,7 +223,7 @@ class FieldInfoTestCase(unittest.TestCase):
             self.assertEqual(field_info.name, "source")
             self.assertIn(what, field_info.doc)
             self.assertIsInstance(field_info, MTMount.field_info.EnumFieldInfo)
-            self.assertIs(field_info.EnumClass, MTMount.Source)
+            self.assertIs(field_info.dtype, MTMount.Source)
 
     def test_timestamp_field_info(self):
         field_info = MTMount.field_info.TimestampFieldInfo()

@@ -186,6 +186,9 @@ class ReplyCode(enum.IntEnum):
     """Reply codes for messages read from the Operation Manager.
 
     The values and names are from LL_MESSAGE in ll_commands.h.
+    except that ON_STATE_INFO is hard-coded in ``eui_communication.cpp``
+    in ``EUICommunication::onStateInfo`` and replaces the obsolete
+    SETTINGS from ll_commands.h.
     """
 
     ACK = 0
@@ -193,7 +196,7 @@ class ReplyCode(enum.IntEnum):
     DONE = 2
     ERROR = 3
     WARNING = 4
-    SETTINGS = 5
+    ON_STATE_INFO = 5
     IN_POSITION = 6
 
 

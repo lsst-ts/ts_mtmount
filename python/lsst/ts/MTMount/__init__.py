@@ -23,6 +23,9 @@ from .constants import *
 from .enums import *
 from .utils import *
 from . import field_info
+from . import base_message
+from . import commands
+from . import replies
 
 try:
     from .version import *
