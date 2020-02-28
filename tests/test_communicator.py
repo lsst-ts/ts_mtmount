@@ -20,10 +20,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
-import copy
 import contextlib
 import logging
-import time
 import unittest
 
 import asynctest
@@ -60,6 +58,7 @@ class CommunicatorTestCase(asynctest.TestCase):
     ):
         r"""Make two `lsst.ts.MTMount.Communicator`\ s, ``self.comm1``
         and ``self.comm2``, that talk to each other.
+        ``comm1`` sends commands and ``comm2`` sends replies.
 
         Parameters
         ----------
@@ -80,6 +79,7 @@ class CommunicatorTestCase(asynctest.TestCase):
             server_host=MTMount.LOCAL_HOST,
             server_port=0,  # Pick random
             log=self.log,
+            read_replies=True,
             connect_client=False,
             server_connect_callback=server_connect_callback,
         )
@@ -100,6 +100,7 @@ class CommunicatorTestCase(asynctest.TestCase):
             server_host=MTMount.LOCAL_HOST,
             server_port=0,
             log=self.log,
+            read_replies=False,
             connect_client=False,
             server_connect_callback=server_connect_callback,
         )
@@ -144,19 +145,40 @@ class CommunicatorTestCase(asynctest.TestCase):
         self.server_connect_callback_data.append((server.name, server.connected))
 
     async def test_basic_communication(self):
+        tai_time = astropy.time.Time("2020-02-03T14:15:16.500", scale="tai")
+        # A representative sampling of commands, including
+        # bool, int, float, and time fields.
+        commands = (
+            MTMount.commands.ElevationAxisTracking(
+                sequence_id=1, position=12, velocity=0.3, tai_time=tai_time
+            ),
+            MTMount.commands.AzimuthAxisTracking(
+                sequence_id=2, position=12, velocity=0.3, tai_time=tai_time
+            ),
+            MTMount.commands.MirrorCoverPower(sequence_id=3, drive=2, on=True),
+        )
+        replies = (
+            MTMount.replies.AckReply(sequence_id=1, timeout_ms=3500),
+            MTMount.replies.DoneReply(sequence_id=2),
+            MTMount.replies.ErrorReply(
+                on=True, active=False, code=47, what="test error"
+            ),
+            MTMount.replies.InPositionReply(in_position=5),
+        )
+
         for use_server_connect_callback in (False, True):
             with self.subTest(use_server_connect_callback=use_server_connect_callback):
                 async with self.make_communicators(
                     use_server_connect_callback=use_server_connect_callback
                 ):
                     await self.check_basic_communication(
-                        reader=self.comm1, writer=self.comm2
+                        reader=self.comm1, writer=self.comm2, messages=replies
                     )
                     await self.check_basic_communication(
-                        reader=self.comm2, writer=self.comm1
+                        reader=self.comm2, writer=self.comm1, messages=commands
                     )
 
-    async def check_basic_communication(self, reader, writer):
+    async def check_basic_communication(self, reader, writer, messages):
         """Check that we can write messages to a writer
         and read them from a reader.
 
@@ -166,65 +188,15 @@ class CommunicatorTestCase(asynctest.TestCase):
             Communicator to read from.
         writer : `lsst.ts.MTMount.Communicator`
             Communicator to write to.
+        messages : `List` [`lsst.ts.MTMount.BaseMessage`]
+            Messages to send.
+            If the writer is ``self.comm1`` then these must be commands.
+            If the writer is ``self.comm2`` then these must be replies.
         """
-        for parameters in (
-            (),
-            ("param1",),
-            ("param1", "param2", "param3"),
-            ("many parameters",) * 500,
-        ):
-            message = MTMount.Message(
-                code=1,
-                sequence_id=2,
-                origin_id=3,
-                source=4,
-                timestamp=astropy.time.Time.now(),
-                parameters=parameters,
-            )
+        for message in messages:
             await writer.write(message)
             read_message = await reader.read()
             self.assertEqual(message, read_message)
-
-    async def test_message_constructor_invalid(self):
-        good_kwargs = dict(
-            code=1,
-            sequence_id=2,
-            origin_id=3,
-            source=4,
-            timestamp=astropy.time.Time.now(),
-            parameters=("foo", "bar"),
-        )
-        message = MTMount.Message(**good_kwargs)
-        self.assertEqual(message.code, good_kwargs["code"])
-        self.assertEqual(message.sequence_id, good_kwargs["sequence_id"])
-        self.assertEqual(message.origin_id, good_kwargs["origin_id"])
-        self.assertEqual(message.timestamp, good_kwargs["timestamp"])
-        self.assertEqual(message.parameters, good_kwargs["parameters"])
-
-        for param_name in ("code", "sequence_id", "origin_id", "source"):
-            with self.subTest(param_name=param_name):
-                bad_kwargs = copy.copy(good_kwargs)
-                bad_kwargs[param_name] = "not an integer"
-                with self.assertRaises(ValueError):
-                    MTMount.Message(**bad_kwargs)
-
-                bad_kwargs[param_name] = 53.2  # Not an integer
-                with self.assertRaises(ValueError):
-                    MTMount.Message(**bad_kwargs)
-
-        for bad_timestamp in (time.time(), 12, 7.6, "2010:05:06T12:00:00"):
-            with self.subTest(bad_timestamp=bad_timestamp):
-                bad_kwargs = copy.copy(good_kwargs)
-                bad_kwargs["timestamp"] = bad_timestamp
-                with self.assertRaises(ValueError):
-                    MTMount.Message(**bad_kwargs)
-
-        for bad_parameters in ("not a tuple or list", 1, 1.3, None):
-            with self.subTest(bad_parameters=bad_parameters):
-                bad_kwargs = copy.copy(good_kwargs)
-                bad_kwargs["parameters"] = bad_parameters
-                with self.assertRaises(ValueError):
-                    MTMount.Message(**bad_kwargs)
 
 
 if __name__ == "__main__":

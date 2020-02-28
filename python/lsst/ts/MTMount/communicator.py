@@ -22,11 +22,12 @@
 __all__ = ["Communicator"]
 
 from . import client_server_pair
-from . import message
+from . import commands
+from . import replies
 
 
 class Communicator(client_server_pair.ClientServerPair):
-    r"""Read and write `Message``\ s using Tekniker's
+    r"""Read and write `BaseMessage`\ s using Tekniker's
     communication protocol.
 
     Parameters
@@ -45,9 +46,11 @@ class Communicator(client_server_pair.ClientServerPair):
         If 0 then use a random port.
     log : `logging.Logger`
         Logger.
-    connect_client : `bool`
+    read_replies : `bool`
+        If True then read replies, else read commands.
+    connect_client : `bool` (optional)
         Connect the client at construction time?
-    server_connect_callback : callable
+    server_connect_callback : callable (optional)
         Function to call when a connection is made to the socket server.
 
     Notes
@@ -71,6 +74,7 @@ class Communicator(client_server_pair.ClientServerPair):
         server_host,
         server_port,
         log,
+        read_replies,
         connect_client=True,
         server_connect_callback=None,
     ):
@@ -85,13 +89,17 @@ class Communicator(client_server_pair.ClientServerPair):
             server_connect_callback=server_connect_callback,
         )
         self.eol_bytes = "\r\n".encode()
+        if read_replies:
+            self.parse_read_fields = replies.parse_reply
+        else:
+            self.parse_read_fields = commands.parse_command
 
     async def write(self, message):
         """Write a message.
 
         Parameters
         ----------
-        message : `Message`
+        message : `BaseMessage`
             Message to write.
         """
         self.client_writer.write(message.encode())
@@ -102,8 +110,10 @@ class Communicator(client_server_pair.ClientServerPair):
 
         Returns
         -------
-        message : `Message`
+        message : `BaseMessage`
             The message read.
         """
         read_bytes = await self.server_reader.readuntil(self.eol_bytes)
-        return message.Message.from_bytes(read_bytes)
+        read_str = read_bytes.decode()[:-2]
+        fields = read_str.split("\n")
+        return self.parse_read_fields(fields)
