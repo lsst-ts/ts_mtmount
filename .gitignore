@@ -1,21 +1,10 @@
-.sconsign.dblite
-config.log
-.sconf_temp
-*.o
-*.os
-*.so
-*.cfgc
-*.pyc
-*_wrap.cc
-*Lib.py
-
-# Built by sconsUtils
-version.py
-bin/
-
-# Pytest
-tests/.tests
-pytest_session.txt
-.cache/
+.swp
+.cache
 .pytest_cache
-.coverage
+.coverage*
+pytest_session.txt
+.scon*
+*.log
+__pycache__
+tests/.tests
+python/lsst/ts/MTMount/version.py
