@@ -21,6 +21,7 @@
 
 from .constants import *
 from .enums import *
+from . import field_info
 
 try:
     from .version import *
