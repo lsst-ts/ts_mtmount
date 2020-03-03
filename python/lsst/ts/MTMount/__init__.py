@@ -28,6 +28,7 @@ from . import commands
 from . import replies
 from .client_server_pair import *
 from .communicator import *
+from . import testutils
 
 try:
     from .version import *
