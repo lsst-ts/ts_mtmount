@@ -26,6 +26,8 @@ from . import field_info
 from . import base_message
 from . import commands
 from . import replies
+from .client_server_pair import *
+from .communicator import *
 
 try:
     from .version import *
