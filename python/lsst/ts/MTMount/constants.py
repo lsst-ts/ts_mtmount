@@ -20,21 +20,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-LOCAL_HOST = "127.0.0.1"
+# CSC TCP/IP default configuration
+# These values are for the HHD.
+# Update this when Tekniker adds a dedicated pair of ports for the CSC.
+CSC_REPLY_PORT = 40005
+CSC_COMMAND_PORT = 40006
 
-# Engineering user interface (EUI) TCP/IP default configuration
-EUI_CONNECTION_PORT = 60006
-EUI_LISTENING_PORT = 60005
-EUI_HOST = "127.0.0.1"  # FIXME
-
-# Handheld device (HHD) TCP/IP default configuration
-HHD_CONNECTION_PORT = 40006
-HHD_LISTENING_PORT = 40005
-HHD_HOST = "192.168.0.1"
-
-# PXI low-level controller TCP/IP default configuration
-PXI_CONNECTION_PORT = 50006
-PXI_LISTENING_PORT = 50005
-PXI_HOST = "127.0.0.1"  # FIXME
-
+# We probably don't need this, because -1 apparently means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
