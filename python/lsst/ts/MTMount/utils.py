@@ -19,11 +19,41 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["get_timestamp"]
+__all__ = ["get_tai_time", "get_utc_time", "wrap_parameter_doc"]
 
+import textwrap
 
 import astropy.time
 
 
-def get_timestamp():
+def get_tai_time():
+    """Get current TAI as an astropy.time.Time.
+    """
+    return astropy.time.Time(astropy.time.Time.now(), scale="tai")
+
+
+def get_utc_time():
+    """Get current UTC as an astropy.time.Time.
+    """
     return astropy.time.Time.now()
+
+
+_ParamWrapper = textwrap.TextWrapper(
+    width=79, initial_indent="    ", subsequent_indent="    "
+)
+
+
+def wrap_parameter_doc(text):
+    """Wrap a parameter description appropriately for a doc string.
+
+    Parameters
+    ----------
+    doc : `str`
+       Documentation to wrap; typically a `FieldInfo.doc`.
+
+    Returns
+    -------
+    wrapped_doc : `str`
+        The doc wrapped to 79 characters with 4 spaces of indentation.
+    """
+    return _ParamWrapper.fill(text)
