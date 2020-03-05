@@ -20,6 +20,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
+    "AckOnlyCommandCodes",
+    "Command",
     "ElevationAxisPower",
     "ElevationAxisStop",
     "ElevationAxisMove",
@@ -44,13 +46,69 @@ __all__ = [
     "parse_command",
 ]
 
-from .base_message import BaseMessage
+from lsst.ts import salobj
+from . import base_message
 from . import enums
 from . import field_info
+from . import utils
+
+MAX_SEQUENCE_ID = (1 << 31) - 1
+
+
+# Command that are done when ACK is received
+AckOnlyCommandCodes = set(
+    (
+        enums.CommandCode.AZIMUTH_AXIS_TRACKING,
+        enums.CommandCode.ELEVATION_AXIS_TRACKING,
+        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK_CAMERA,
+    )
+)
+
+
+class Command(base_message.BaseMessage):
+    """Base class for commands.
+
+    Set sequence_id to an incrementing integer (that eventually
+    wraps around), by default.
+    """
+
+    sequence_id_generator = salobj.index_generator(imax=MAX_SEQUENCE_ID)
+
+    def __init__(self, **kwargs):
+        if kwargs.get("sequence_id") is None:
+            kwargs["sequence_id"] = next(self.sequence_id_generator)
+        return super().__init__(**kwargs)
+
+
+def make_command_doc(cls):
+    """Make and attach a doc string to a command class.
+    """
+    param_strings = []
+    for finfo in cls.field_infos:
+        param_doc = utils.wrap_parameter_doc(finfo.doc)
+        is_optional = finfo.default is not None or finfo.name == "sequence_id"
+        optional_str = " (optional)" if is_optional else ""
+        param_strings.append(
+            f"{finfo.name} : `{finfo.dtype.__name__}{optional_str}`\n{param_doc}"
+        )
+    param_block = "\n".join(param_strings)
+    cls.__doc__ = f"""{cls.__name__} command.
+
+Parameters
+----------
+{param_block}
+"""
 
 
 def make_command_field_infos(command_code, parameters=()):
     """Make field_infos for a command.
+
+    Parameters
+    ----------
+    command_code : `CommandCode`
+        Command code.
+    parameters : `List` [`FieldInfo`] (optional)
+        Field information for command parameters, if any.
     """
     for param in parameters:
         if not isinstance(param, field_info.BaseFieldInfo):
@@ -112,51 +170,51 @@ Other elevation and azimuth axis commands:
 """
 
 
-class ElevationAxisPower(BaseMessage):
+class ElevationAxisPower(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_AXIS_POWER, _PowerParameters
     )
 
 
-class ElevationAxisStop(BaseMessage):
+class ElevationAxisStop(Command):
     field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_STOP)
 
 
-class ElevationAxisMove(BaseMessage):
+class ElevationAxisMove(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_AXIS_MOVE, _MoveParameters
     )
 
 
-class ElevationAxisTracking(BaseMessage):
+class ElevationAxisTracking(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_AXIS_TRACKING, _TrackingParameters
     )
 
 
-class AzimuthAxisPower(BaseMessage):
+class AzimuthAxisPower(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_AXIS_POWER, _PowerParameters
     )
 
 
-class AzimuthAxisStop(BaseMessage):
+class AzimuthAxisStop(Command):
     field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_STOP)
 
 
-class AzimuthAxisMove(BaseMessage):
+class AzimuthAxisMove(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_AXIS_MOVE, _MoveParameters
     )
 
 
-class AzimuthAxisTracking(BaseMessage):
+class AzimuthAxisTracking(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_AXIS_TRACKING, _TrackingParameters
     )
 
 
-class MainPowerSupplyPower(BaseMessage):
+class MainPowerSupplyPower(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.MAIN_POWER_SUPPLY_POWER, _PowerParameters
     )
@@ -178,7 +236,7 @@ Other mirror cover commands:
 """
 
 
-class MirrorCoverPower(BaseMessage):
+class MirrorCoverPower(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_POWER,
         (field_info.IntFieldInfo(name="drive", doc="Drive index: one of 0, 1, 2, 3"),)
@@ -186,21 +244,21 @@ class MirrorCoverPower(BaseMessage):
     )
 
 
-class MirrorCoverStop(BaseMessage):
+class MirrorCoverStop(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_STOP,
         (field_info.IntFieldInfo(name="drive", doc="Drive index: one of 0, 1, 2, 3"),),
     )
 
 
-class MirrorCoverOpen(BaseMessage):
+class MirrorCoverOpen(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_OPEN,
         (field_info.IntFieldInfo(name="drive", doc="Drive index: one of 0, 1, 2, 3"),),
     )
 
 
-class MirrorCoverClose(BaseMessage):
+class MirrorCoverClose(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_CLOSE,
         (field_info.IntFieldInfo(name="drive", doc="Drive index: one of 0, 1, 2, 3"),),
@@ -225,36 +283,36 @@ Other camera cable wrap commands:
 """
 
 
-class CameraCableWrapPower(BaseMessage):
+class CameraCableWrapPower(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_POWER, _PowerParameters
     )
 
 
-class CameraCableWrapStop(BaseMessage):
+class CameraCableWrapStop(Command):
     field_infos = make_command_field_infos(enums.CommandCode.CAMERA_CABLE_WRAP_STOP)
 
 
-class CameraCableWrapMove(BaseMessage):
+class CameraCableWrapMove(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_MOVE, _MoveParameters
     )
 
 
-class CameraCableWrapTrackCamera(BaseMessage):
+class CameraCableWrapTrackCamera(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_TRACK_CAMERA, _TrackingParameters
     )
 
 
-class CameraCableWrapDriveEnable(BaseMessage):
+class CameraCableWrapDriveEnable(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_ENABLE,
         (field_info.IntFieldInfo(name="drive", doc="Drive index"),) + _PowerParameters,
     )
 
 
-class CameraCableWrapEnableTrackCamera(BaseMessage):
+class CameraCableWrapEnableTrackCamera(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACK_CAMERA,
         (
@@ -287,6 +345,9 @@ Commands = (
     CameraCableWrapTrackCamera,
     CameraCableWrapEnableTrackCamera,
 )
+
+for command in Commands:
+    make_command_doc(command)
 
 
 def _make_command_dict():
