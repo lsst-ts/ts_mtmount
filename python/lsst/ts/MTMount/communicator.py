@@ -63,7 +63,6 @@ class Communicator(client_server_pair.ClientServerPair):
     -----
     Tekniker's OperationManager software connects to each component
     (PXI, EUI and HHD) using two TCP/IP sockets:
-
     * A client socket for output; data is only written to this socket.
         For the PXI this is used to send commands.
         For EUI and HDD this is used to send replies.

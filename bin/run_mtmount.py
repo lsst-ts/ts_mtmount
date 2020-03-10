@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # This file is part of ts_MTMount.
 #
 # Developed for the LSST Data Management System.
@@ -16,23 +17,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 
-from .constants import *
-from .enums import *
-from .utils import *
-from . import field_info
-from . import base_message
-from . import commands
-from . import replies
-from .client_server_pair import *
-from .communicator import *
-from .command_futures import *
-from .mtmount_csc import *
-from . import testutils
+from lsst.ts import MTMount
 
-try:
-    from .version import *
-except ImportError:
-    __version__ = "?"
+asyncio.run(MTMount.MTMountCsc.amain(index=None))
