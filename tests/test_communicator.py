@@ -7,7 +7,7 @@
 # for details of code ownership.
 #
 # This program is free software: you can redistribute it and/or modify
-# it under the eol_bytess of the GNU General Public License as published by
+# it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
@@ -27,7 +27,7 @@ import unittest
 import asynctest
 import astropy.time
 
-# from lsst.ts import hexrotcomm
+from lsst.ts import salobj
 from lsst.ts import MTMount
 
 # Standard timeout for TCP/IP messages (sec).
@@ -49,13 +49,11 @@ class CommunicatorTestCase(asynctest.TestCase):
         self.log.addHandler(logging.StreamHandler())
 
         # List of (server name, is connected). A new item is appended
-        # each time self.server_connect_callback is called.
-        self.server_connect_callback_data = []
+        # each time self.connect_callback is called.
+        self.connect_callback_data = []
 
     @contextlib.asynccontextmanager
-    async def make_communicators(
-        self, connect_clients=True, use_server_connect_callback=True
-    ):
+    async def make_communicators(self, connect_clients=True, use_connect_callback=True):
         r"""Make two `lsst.ts.MTMount.Communicator`\ s, ``self.comm1``
         and ``self.comm2``, that talk to each other.
         ``comm1`` sends commands and ``comm2`` sends replies.
@@ -64,24 +62,22 @@ class CommunicatorTestCase(asynctest.TestCase):
         ----------
         connect_clients : `bool` (optional)
             Connect the clients to the servers?
-        use_server_connect_callback : `bool` (optional)
-            Specify a server_connect_callback?
-            If True then use self.server_connect_callback.
+        use_connect_callback : `bool` (optional)
+            Specify a connect_callback?
+            If True then use self.connect_callback.
         """
-        server_connect_callback = (
-            self.server_connect_callback if use_server_connect_callback else None
-        )
+        connect_callback = self.connect_callback if use_connect_callback else None
 
         self.comm1 = MTMount.Communicator(
             name="comm1",
             client_host=None,
             client_port=0,  # Not yet known
-            server_host=MTMount.LOCAL_HOST,
+            server_host=salobj.LOCAL_HOST,
             server_port=0,  # Pick random
             log=self.log,
             read_replies=True,
             connect_client=False,
-            server_connect_callback=server_connect_callback,
+            connect_callback=connect_callback,
         )
         self.assertFalse(self.comm1.server_connected)
         self.assertFalse(self.comm1.client_connected)
@@ -97,12 +93,12 @@ class CommunicatorTestCase(asynctest.TestCase):
             name="comm2",
             client_host=None,
             client_port=self.comm1.server_port,
-            server_host=MTMount.LOCAL_HOST,
+            server_host=salobj.LOCAL_HOST,
             server_port=0,
             log=self.log,
             read_replies=False,
             connect_client=False,
-            server_connect_callback=server_connect_callback,
+            connect_callback=connect_callback,
         )
         # Wait for comm2 server to start
         self.assertFalse(self.comm2.server_connected)
@@ -132,17 +128,22 @@ class CommunicatorTestCase(asynctest.TestCase):
             self.assertTrue(self.comm2.server_connected)
             self.assertTrue(self.comm2.client_connected)
             self.assertTrue(self.comm2.connected)
-            if use_server_connect_callback:
-                self.assertEqual(len(self.server_connect_callback_data), 2)
+            if use_connect_callback:
+                self.assertEqual(len(self.connect_callback_data), 4)
             else:
-                self.assertEqual(self.server_connect_callback_data, [])
+                self.assertEqual(self.connect_callback_data, [])
         try:
             yield
         finally:
             await asyncio.gather(self.comm1.close(), self.comm2.close())
 
-    def server_connect_callback(self, server):
-        self.server_connect_callback_data.append((server.name, server.connected))
+    def connect_callback(self, communicator):
+        print(
+            f"Communicator({communicator.name}): "
+            f"client connected: {communicator.client_connected}; "
+            f"server connected: {communicator.server_connected}"
+        )
+        self.connect_callback_data.append((communicator.name, communicator.connected))
 
     async def test_basic_communication(self):
         tai_time = astropy.time.Time("2020-02-03T14:15:16.500", scale="tai")
@@ -166,10 +167,10 @@ class CommunicatorTestCase(asynctest.TestCase):
             MTMount.replies.InPositionReply(in_position=5),
         )
 
-        for use_server_connect_callback in (False, True):
-            with self.subTest(use_server_connect_callback=use_server_connect_callback):
+        for use_connect_callback in (False, True):
+            with self.subTest(use_connect_callback=use_connect_callback):
                 async with self.make_communicators(
-                    use_server_connect_callback=use_server_connect_callback
+                    use_connect_callback=use_connect_callback
                 ):
                     await self.check_basic_communication(
                         reader=self.comm1, writer=self.comm2, messages=replies

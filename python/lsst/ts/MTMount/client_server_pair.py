@@ -31,6 +31,7 @@ class ClientServerPair:
 
     This class exists because Tekniker's OperationManager software connects
     to each component using a client and server pair of sockets.
+    The client only writes data and the server only reads data.
     See `Communicator` for a higher level abstraction.
 
     Parameters
@@ -51,10 +52,9 @@ class ClientServerPair:
         Logger.
     connect_client : `bool`
         Connect the client at construction time?
-    server_connect_callback : callable or `None`
-        Function to call when a connection is made to the socket server.
-        It receives one argument: the server, as an
-        `lsst.ts.hexrotcomm.OneClientServer`.
+    connect_callback : callable or `None`
+        Synchronous function to call when a connection is made or dropped.
+        It receives one argument: this ClientServerPair.
 
     Notes
     -----
@@ -66,6 +66,8 @@ class ClientServerPair:
       or `None` if not connected.
     * ``client_reader``: client socket reader, an `asyncio.StreamReader`
       or `None` if not connected.
+    * ``connect_task`` (only available if ``connect_client`` true):
+      an `asyncio.Task` that is set done when connected.
     """
 
     connect_retry_interval = 0.1
@@ -80,26 +82,31 @@ class ClientServerPair:
         server_port,
         log,
         connect_client=True,
-        server_connect_callback=None,
+        connect_callback=None,
     ):
         self.name = name
         self.client_host = client_host
         self.client_port = client_port
         self.client_reader = None
         self.client_writer = None
-        self.log = log
-        self._server_connect_callback = server_connect_callback
+        self.log = log.getChild(f"ClientServerPair({self.name})")
+        self.connect_callback = connect_callback
         self._server = hexrotcomm.OneClientServer(
             name=name,
             host=server_host,
             port=server_port,
             log=log,
-            connect_callback=server_connect_callback,
+            connect_callback=self.call_connect_callback,
         )
         if connect_client:
             self.connect_task = asyncio.create_task(self.connect())
-        else:
-            self.connect_task = asyncio.Future()
+        self.log.info(
+            "Constructed with "
+            f"client_port={self.client_port}; "
+            f"client_host={self.client_host}; "
+            f"server_port={self.server_port}; "
+            f"server_host={self.server_host}; "
+        )
 
     @property
     def client_connected(self):
@@ -109,6 +116,24 @@ class ClientServerPair:
             or self.client_writer.is_closing()
             or self.client_reader.at_eof()
         )
+
+    @property
+    def connected(self):
+        """Are both the client and server connected?"""
+        return self.client_connected and self.server_connected
+
+    @property
+    def server_connected(self):
+        """Is the server connected?"""
+        return self._server.connected
+
+    @property
+    def server_host(self):
+        return self._server.host
+
+    @property
+    def server_port(self):
+        return self._server.port
 
     @property
     def server_reader(self):
@@ -122,39 +147,29 @@ class ClientServerPair:
         """
         return self._server.writer
 
-    @property
-    def server_port(self):
-        return self._server.port
-
-    async def wait_server_port(self):
-        """Wait for the server to start, then return the port.
-
-        Useful when you have specified port=0, e.g. for unit tests.
+    def call_connect_callback(self, *args, **kwargs):
+        """Call the connect_callback if it exists. Any arguments are ignored.
         """
-        await self._server.start_task
-        return self.server_port
-
-    @property
-    def server_host(self):
-        return self._server.host
-
-    @property
-    def server_connected(self):
-        """Is the server connected?"""
-        return self._server.connected
-
-    @property
-    def connected(self):
-        """Are both the client and server connected?"""
-        return self.client_connected and self.server_connected
+        if self.connect_callback is None:
+            return
+        try:
+            self.connect_callback(self)
+        except Exception:
+            self.log.exception("connect_callback failed")
 
     async def close(self):
-        """Close both the server and the client."""
-        await self._server.close()
-        await self.close_client()
+        """Close both the server and the client, to clean up when finished.
+
+        Set the server done_task done.
+        """
+        await self.close_client()  # Does not call connect_callback.
+        await self._server.close()  # Does call connect_callback.
 
     async def close_client(self):
-        """Close the client."""
+        """Close the client.
+
+        Warning: does NOT call the connect_callback.
+        """
         if self.client_writer is not None and not self.client_writer.is_closing():
             self.client_writer.close()
 
@@ -171,8 +186,8 @@ class ClientServerPair:
         -----
         This will wait forever for a connection.
         """
-        if self.client_writer is not None and not self.client_writer.is_closing():
-            self.client_writer.close()
+        self.log.info(f"connect(port={port})")
+        await self.close_client()
         if port is not None:
             self.client_port = port
         if not self.client_port:
@@ -180,14 +195,23 @@ class ClientServerPair:
 
         while True:
             try:
-                self.log.debug(
+                self.log.info(
                     f"connect: connect to host={self.client_host}, port={self.client_port}"
                 )
                 self.client_reader, self.client_writer = await asyncio.open_connection(
                     host=self.client_host, port=self.client_port
                 )
+                self.call_connect_callback()
                 return
             except Exception as e:
                 self.log.warning(f"connect failed with {e}; retrying")
                 await asyncio.sleep(self.connect_retry_interval)
         await self._server.connect_task
+
+    async def wait_server_port(self):
+        """Wait for the server to start, then return the port.
+
+        Useful when you have specified port=0, e.g. for unit tests.
+        """
+        await self._server.start_task
+        return self.server_port
