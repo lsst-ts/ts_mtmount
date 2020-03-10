@@ -38,11 +38,10 @@ import asyncio
 import logging
 import sys
 
+from lsst.ts import salobj
 from lsst.ts import MTMount
 
 logging.basicConfig()
-
-LOCAL_HOST = "127.0.0.1"
 
 
 async def stdin_generator():
@@ -57,6 +56,27 @@ async def stdin_generator():
         if not line:  # EOF.
             break
         yield line.decode("utf-8").strip()
+
+
+def print_connected(descr, communicator):
+    """Print state of a connection.
+
+    Parameters
+    ----------
+    descr : `str`
+        Brief description, such as "TMA commander".
+    communicator : `Communicator`
+        Communicator
+    """
+
+    def connected_str(connected):
+        return "connected" if connected else "disconnected"
+
+    print(
+        f"{descr}: "
+        f"client {connected_str(communicator.client_connected)}, "
+        f"server {connected_str(communicator.server_connected)}"
+    )
 
 
 class Commander:
@@ -85,7 +105,7 @@ class Commander:
 
         self.simulator = None
         if simulate:
-            host = LOCAL_HOST
+            host = salobj.LOCAL_HOST
             self.simulator = TrivialSimulator(
                 command_port=command_port, reply_port=reply_port, log=self.log
             )
@@ -99,11 +119,10 @@ class Commander:
             log=self.log,
             read_replies=True,
             connect_client=True,
-            server_connect_callback=self.server_connect_callback,
+            connect_callback=self.connect_callback,
         )
         self.read_loop_task = asyncio.create_task(self.read_loop())
         self.command_loop_task = asyncio.create_task(self.command_loop())
-        self._sequence_id = 0
         self.command_dict = dict(
             ccw_power=MTMount.commands.CameraCableWrapPower,
             ccw_stop=MTMount.commands.CameraCableWrapStop,
@@ -114,10 +133,12 @@ class Commander:
         )
         self.help_text = f"""Send commands to the telescope mount assemply.
 
-Commands:
+TMA Commands:
 {self.get_command_help()}
-* exit
-* help
+
+Other commands:
+exit  # Exit from this commander
+help  # Print this help
 """
 
     async def close(self):
@@ -142,10 +163,6 @@ Commands:
         CommandClass = self.command_dict[cmd_name]
         arg_infos = CommandClass.field_infos[5:]
         return " ".join(arg.name for arg in arg_infos)
-
-    def next_sequence_id(self):
-        self._sequence_id += 1
-        return self._sequence_id
 
     async def handle_command(self, cmd_name, args):
         """Parse arguments and issue a command.
@@ -175,7 +192,7 @@ Commands:
             info.name: info.value_from_str(arg) for arg, info in zip(args, arg_infos)
         }
 
-        cmd = CommandClass(sequence_id=self.next_sequence_id(), **kwargs)
+        cmd = CommandClass(**kwargs)
         await self.communicator.write(cmd)
 
     async def read_loop(self):
@@ -186,16 +203,18 @@ Commands:
             read_message = await self.communicator.read()
             print(f"read {read_message}")
 
-    def server_connect_callback(self, server):
-        state_str = "connected to" if server.connected else "disconnected from"
-        print(f"Operation Mananger {state_str} the commander server")
+    def connect_callback(self, communicator):
+        print_connected(descr="TMA commander", communicator=communicator)
+        if communicator.connected:
+            asyncio.create_task(self.send_sample_replies())
 
     async def command_loop(self):
         try:
             print(f"Waiting to connect to the operation manager")
             await self.communicator.connect_task
             print(f"\n{self.help_text}")
-            async for line in stdin_generator():
+            async for line in salobj.stream_as_generator(stream=sys.stdin):
+                line = line.strip()
                 # Strip trailing comment, if any.
                 if "#" in line:
                     line = line.split("#", maxsplit=1)[0].strip()
@@ -229,14 +248,14 @@ class TrivialSimulator:
         self.log = log.getChild("simulator")
         self.communicator = MTMount.Communicator(
             name="trivial_simulator",
-            client_host=LOCAL_HOST,
+            client_host=salobj.LOCAL_HOST,
             client_port=reply_port,
-            server_host=LOCAL_HOST,
+            server_host=salobj.LOCAL_HOST,
             server_port=command_port,
             log=self.log,
             read_replies=False,
             connect_client=True,
-            server_connect_callback=self.server_connect_callback,
+            connect_callback=self.connect_callback,
         )
         self.read_loop_task = asyncio.create_task(self.read_loop())
 
@@ -251,13 +270,16 @@ class TrivialSimulator:
         while True:
             read_command = await self.communicator.read()
             self.log.debug(f"read {read_command}")
+            reply = MTMount.replies.AckReply(
+                sequence_id=read_command.sequence_id, timeout_ms=100
+            )
+            await self.communicator.write(reply)
             reply = MTMount.replies.DoneReply(sequence_id=read_command.sequence_id)
             await self.communicator.write(reply)
 
-    def server_connect_callback(self, server):
-        state_str = "connected to" if server.connected else "disconnected from"
-        print(f"Trivial simulator {state_str} the TMA commander")
-        if server.connected:
+    def connect_callback(self, communicator):
+        print_connected(descr="Trivial simulator", communicator=communicator)
+        if communicator.connected:
             asyncio.create_task(self.send_sample_replies())
 
     async def send_sample_replies(self):
@@ -267,9 +289,14 @@ class TrivialSimulator:
             MTMount.replies.AckReply(sequence_id=99997, timeout_ms=1234),
             MTMount.replies.NoAckReply(sequence_id=99998, explanation="Example NoAck"),
             MTMount.replies.DoneReply(sequence_id=99999),
-            MTMount.replies.WarningReply(active=False, code=1),
-            MTMount.replies.ErrorReply(on=False, active=False, code=2),
-            MTMount.replies.OnStateInfoReply(description="Example OnStateInfoReply"),
+            MTMount.replies.WarningReply(
+                active=False, code=1, extra_data=["Example warning"]
+            ),
+            MTMount.replies.ErrorReply(
+                on=False, active=False, code=2, extra_data=["Example error"]
+            ),
+            MTMount.replies.OnStateInfoReply(description="Example onStateInfo"),
+            MTMount.replies.InPositionReply(in_position=0),
         ):
             await self.communicator.write(reply)
 
@@ -277,18 +304,18 @@ class TrivialSimulator:
 async def amain():
     parser = argparse.ArgumentParser(f"Send commands to Tekniker's TMA")
     parser.add_argument(
-        "--host", default=MTMount.HHD_HOST, help="TMA operation manager IP address."
+        "--host", default="192.168.0.1", help="TMA operation manager IP address."
     )
     parser.add_argument(
         "--reply-port",
         type=int,
-        default=MTMount.HHD_LISTENING_PORT,
+        default=MTMount.CSC_REPLY_PORT,
         help="TCP port for replies.",
     )
     parser.add_argument(
         "--command-port",
         type=int,
-        default=MTMount.HHD_CONNECTION_PORT,
+        default=MTMount.CSC_COMMAND_PORT,
         help="TCP port for commands.",
     )
     parser.add_argument(
