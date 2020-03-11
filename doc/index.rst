@@ -1,12 +1,42 @@
-################################
-ts_MTMount documentation preview
-################################
+.. py:currentmodule:: lsst.ts.MTMount
 
-.. This page is for local development only. It isn't published to pipelines.lsst.io.
+###############
+lsst.ts.MTMount
+###############
 
-.. Link the index pages of package and module documentation directions (listed in manifest.yaml).
+A CSC that controls the Simonyi Survey Telescope main axes and related components.
+
+It communicates with a low level controller written by Tekniker. For more information see `lsst.ts.MTMount-tekniker_info`_.
+
+.. .. _lsst.ts.MTMount-using:
+
+.. Using lsst.ts.MTMount
+.. =====================
+
+Tekniker Info
+=============
 
 .. toctree::
-   :maxdepth: 1
+    tekniker_info
+    :maxdepth: 2
 
-   lsst.ts.MTMount/index
+.. _lsst.ts.MTMount-contributing:
+
+Contributing
+============
+
+``lsst.ts.MTMount`` is developed at https://github.com/lsst-ts/ts_MTMount.
+You can find Jira issues for this module using `labels=ts_MTMount <https://jira.lsstcorp.org/issues/?jql=project%20%3D%20DM%20AND%20labels%20%20%3D%20ts_MTMount>`_.
+
+
+.. _lsst.ts.MTMount-pyapi:
+
+Python API reference
+====================
+
+.. automodapi:: lsst.ts.MTMount
+    :no-main-docstr:
+    :no-inheritance-diagram:
+.. automodapi:: lsst.ts.MTMount.mock
+    :no-main-docstr:
+    :no-inheritance-diagram:

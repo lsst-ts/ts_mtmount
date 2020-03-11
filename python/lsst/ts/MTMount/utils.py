@@ -19,18 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from .constants import *
-from .enums import *
-from .utils import *
-from . import field_info
-from . import base_message
-from . import commands
-from . import replies
-from .client_server_pair import *
-from .communicator import *
-from . import testutils
+__all__ = ["get_timestamp"]
 
-try:
-    from .version import *
-except ImportError:
-    __version__ = "?"
+
+import astropy.time
+
+
+def get_timestamp():
+    return astropy.time.Time.now()

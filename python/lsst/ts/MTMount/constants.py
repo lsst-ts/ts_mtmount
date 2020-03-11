@@ -19,18 +19,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from .constants import *
-from .enums import *
-from .utils import *
-from . import field_info
-from . import base_message
-from . import commands
-from . import replies
-from .client_server_pair import *
-from .communicator import *
-from . import testutils
 
-try:
-    from .version import *
-except ImportError:
-    __version__ = "?"
+LOCAL_HOST = "127.0.0.1"
+
+# Engineering user interface (EUI) TCP/IP default configuration
+EUI_CONNECTION_PORT = 60006
+EUI_LISTENING_PORT = 60005
+EUI_HOST = "127.0.0.1"  # FIXME
+
+# Handheld device (HHD) TCP/IP default configuration
+HHD_CONNECTION_PORT = 40006
+HHD_LISTENING_PORT = 40005
+HHD_HOST = "192.168.0.1"
+
+# PXI low-level controller TCP/IP default configuration
+PXI_CONNECTION_PORT = 50006
+PXI_LISTENING_PORT = 50005
+PXI_HOST = "127.0.0.1"  # FIXME
+
+MIRROR_COVER_DRIVES = (0, 1, 2, 3)
