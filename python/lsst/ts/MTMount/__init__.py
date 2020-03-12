@@ -28,6 +28,8 @@ from . import commands
 from . import replies
 from .client_server_pair import *
 from .communicator import *
+from .command_futures import *
+from .mtmount_csc import *
 from . import testutils
 
 try:

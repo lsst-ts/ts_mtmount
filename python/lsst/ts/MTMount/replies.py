@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
+    "Reply",
     "AckReply",
     "NoAckReply",
     "DoneReply",
@@ -32,9 +33,43 @@ __all__ = [
     "parse_reply",
 ]
 
-from .base_message import BaseMessage
+from . import base_message
 from . import enums
 from . import field_info
+from . import utils
+
+
+class Reply(base_message.BaseMessage):
+    """Base class for replies.
+
+    This primarily exists to allow better documentation of APIs
+    and to allow testing for "is a reply".
+    """
+
+    pass
+
+
+def make_reply_doc(cls):
+    """Make and attach a doc string to a reply class.
+    """
+    short_class_name = cls.__name__
+    if short_class_name.endswith("Reply"):
+        short_class_name = short_class_name[:-5]
+    param_strings = []
+    for finfo in cls.field_infos:
+        param_doc = utils.wrap_parameter_doc(finfo.doc)
+        is_optional = finfo.default is not None
+        optional_str = " (optional)" if is_optional else ""
+        param_strings.append(
+            f"{finfo.name} : `{finfo.dtype.__name__}{optional_str}`\n{param_doc}"
+        )
+    param_block = "\n".join(param_strings)
+    cls.__doc__ = f"""{short_class_name} command.
+
+Parameters
+----------
+{param_block}
+"""
 
 
 def make_reply_field_infos(reply_code, field_infos):
@@ -71,7 +106,7 @@ _ResponseFieldInfos = (
 )
 
 
-class AckReply(BaseMessage):
+class AckReply(Reply):
     """Command ACK (started) reply."""
 
     field_infos = make_reply_field_infos(
@@ -85,7 +120,7 @@ class AckReply(BaseMessage):
     )
 
 
-class NoAckReply(BaseMessage):
+class NoAckReply(Reply):
     """Command NOACK (rejected or failed) reply."""
 
     field_infos = make_reply_field_infos(
@@ -99,13 +134,13 @@ class NoAckReply(BaseMessage):
     )
 
 
-class DoneReply(BaseMessage):
+class DoneReply(Reply):
     """Command DONE reply."""
 
     field_infos = make_reply_field_infos(enums.ReplyCode.DONE, _ResponseFieldInfos)
 
 
-class WarningReply(BaseMessage):
+class WarningReply(Reply):
     field_infos = make_reply_field_infos(
         enums.ReplyCode.WARNING,
         (
@@ -123,7 +158,7 @@ class WarningReply(BaseMessage):
     has_extra_data = True
 
 
-class ErrorReply(BaseMessage):
+class ErrorReply(Reply):
     field_infos = make_reply_field_infos(
         enums.ReplyCode.ERROR,
         (
@@ -144,7 +179,7 @@ class ErrorReply(BaseMessage):
     has_extra_data = True
 
 
-class OnStateInfoReply(BaseMessage):
+class OnStateInfoReply(Reply):
     field_infos = make_reply_field_infos(
         enums.ReplyCode.ON_STATE_INFO,
         (
@@ -154,7 +189,7 @@ class OnStateInfoReply(BaseMessage):
     )
 
 
-class InPositionReply(BaseMessage):
+class InPositionReply(Reply):
     """InPositionReply information
 
     Parameters
@@ -187,6 +222,9 @@ Replies = (
     OnStateInfoReply,
     InPositionReply,
 )
+
+for reply in Replies:
+    make_reply_doc(reply)
 
 
 def _make_reply_dict():

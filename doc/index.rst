@@ -37,6 +37,15 @@ Python API reference
 .. automodapi:: lsst.ts.MTMount
     :no-main-docstr:
     :no-inheritance-diagram:
+.. automodapi:: lsst.ts.MTMount.field_info
+    :no-main-docstr:
+    :no-inheritance-diagram:
+.. automodapi:: lsst.ts.MTMount.commands
+    :no-main-docstr:
+    :no-inheritance-diagram:
+.. automodapi:: lsst.ts.MTMount.replies
+    :no-main-docstr:
+    :no-inheritance-diagram:
 .. automodapi:: lsst.ts.MTMount.mock
     :no-main-docstr:
     :no-inheritance-diagram:

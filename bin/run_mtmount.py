@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # This file is part of ts_MTMount.
 #
 # Developed for the LSST Data Management System.
@@ -16,15 +17,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import asyncio
 
+from lsst.ts import MTMount
 
-# CSC TCP/IP default configuration
-# These values are for the HHD.
-# Update this when Tekniker adds a dedicated pair of ports for the CSC.
-CSC_REPLY_PORT = 40005
-CSC_COMMAND_PORT = 40006
-
-# We probably don't need this, because -1 apparently means "all drives".
-MIRROR_COVER_DRIVES = (0, 1, 2, 3)
+asyncio.run(MTMount.MTMountCsc.amain(index=None))

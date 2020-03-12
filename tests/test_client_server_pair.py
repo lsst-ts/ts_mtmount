@@ -7,7 +7,7 @@
 # for details of code ownership.
 #
 # This program is free software: you can redistribute it and/or modify
-# it under the eol_bytess of the GNU General Public License as published by
+# it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
@@ -26,7 +26,7 @@ import unittest
 
 import asynctest
 
-# from lsst.ts import hexrotcomm
+from lsst.ts import salobj
 from lsst.ts import MTMount
 
 # Standard timeout for TCP/IP messages (sec).
@@ -46,11 +46,11 @@ class ClientServerPairTestCase(asynctest.TestCase):
         self.log.addHandler(logging.StreamHandler())
 
         # List of (server name, is connected). A new item is appended
-        # each time self.server_connect_callback is called.
-        self.server_connect_callback_data = []
+        # each time self.connect_callback is called.
+        self.connect_callback_data = []
 
     @contextlib.asynccontextmanager
-    async def make_pairs(self, connect_clients=True, use_server_connect_callback=True):
+    async def make_pairs(self, connect_clients=True, use_connect_callback=True):
         """Make two ``lsst.ts.MTMount.ClientServerPairs``, ``self.pair1`` and
         ``self.pair2``, that talk to each other.
 
@@ -58,23 +58,21 @@ class ClientServerPairTestCase(asynctest.TestCase):
         ----------
         connect_clients : `bool` (optional)
             Connect the clients to the servers?
-        use_server_connect_callback : `bool` (optional)
-            Specify a server_connect_callback?
-            If True then use self.server_connect_callback.
+        use_connect_callback : `bool` (optional)
+            Specify a connect_callback?
+            If True then use self.connect_callback.
         """
-        server_connect_callback = (
-            self.server_connect_callback if use_server_connect_callback else None
-        )
+        connect_callback = self.connect_callback if use_connect_callback else None
 
         self.pair1 = MTMount.ClientServerPair(
             name="pair1",
             client_host=None,
             client_port=0,  # Not yet known
-            server_host=MTMount.LOCAL_HOST,
+            server_host=salobj.LOCAL_HOST,
             server_port=0,  # Pick random
             log=self.log,
             connect_client=False,
-            server_connect_callback=server_connect_callback,
+            connect_callback=connect_callback,
         )
         self.assertFalse(self.pair1.server_connected)
         self.assertFalse(self.pair1.client_connected)
@@ -90,11 +88,11 @@ class ClientServerPairTestCase(asynctest.TestCase):
             name="pair2",
             client_host=None,
             client_port=self.pair1.server_port,
-            server_host=MTMount.LOCAL_HOST,
+            server_host=salobj.LOCAL_HOST,
             server_port=0,
             log=self.log,
             connect_client=False,
-            server_connect_callback=server_connect_callback,
+            connect_callback=connect_callback,
         )
         # Wait for pair2 server to start
         self.assertFalse(self.pair2.server_connected)
@@ -124,24 +122,27 @@ class ClientServerPairTestCase(asynctest.TestCase):
             self.assertTrue(self.pair2.server_connected)
             self.assertTrue(self.pair2.client_connected)
             self.assertTrue(self.pair2.connected)
-            if use_server_connect_callback:
-                self.assertEqual(len(self.server_connect_callback_data), 2)
+            if use_connect_callback:
+                self.assertEqual(len(self.connect_callback_data), 4)
             else:
-                self.assertEqual(self.server_connect_callback_data, [])
+                self.assertEqual(self.connect_callback_data, [])
         try:
             yield
         finally:
             await asyncio.gather(self.pair1.close(), self.pair2.close())
 
-    def server_connect_callback(self, server):
-        self.server_connect_callback_data.append((server.name, server.connected))
+    def connect_callback(self, client_server):
+        print(
+            f"ClientServer({client_server.name}): "
+            f"client connected: {client_server.client_connected}; "
+            f"server connected: {client_server.server_connected}"
+        )
+        self.connect_callback_data.append((client_server.name, client_server.connected))
 
     async def test_basic_communication(self):
-        for use_server_connect_callback in (False, True):
-            with self.subTest(use_server_connect_callback=use_server_connect_callback):
-                async with self.make_pairs(
-                    use_server_connect_callback=use_server_connect_callback
-                ):
+        for use_connect_callback in (False, True):
+            with self.subTest(use_connect_callback=use_connect_callback):
+                async with self.make_pairs(use_connect_callback=use_connect_callback):
                     await self.check_basic_communication(
                         reader=self.pair1.client_reader, writer=self.pair2.server_writer
                     )
@@ -159,7 +160,7 @@ class ClientServerPairTestCase(asynctest.TestCase):
         """Check that we can write string data to write_pair client
         and read it from read_pair server.
         """
-        eol_bytes = "\r\n".encode()
+        eol_bytes = b"\r\n"
         for data in (
             "a string",
             r"a\nstring\inwith\nnewlines",

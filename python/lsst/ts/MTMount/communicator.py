@@ -21,6 +21,8 @@
 
 __all__ = ["Communicator"]
 
+import asyncio
+
 from . import client_server_pair
 from . import commands
 from . import replies
@@ -29,6 +31,9 @@ from . import replies
 class Communicator(client_server_pair.ClientServerPair):
     r"""Read and write `BaseMessage`\ s using Tekniker's
     communication protocol.
+
+    Data is written to the client socket
+    and read from the (single) server socket.
 
     Parameters
     ----------
@@ -47,17 +52,17 @@ class Communicator(client_server_pair.ClientServerPair):
     log : `logging.Logger`
         Logger.
     read_replies : `bool`
-        If True then read replies, else read commands.
+        If True then read replies, else read commands,
+        on the server port.
     connect_client : `bool` (optional)
         Connect the client at construction time?
-    server_connect_callback : callable (optional)
-        Function to call when a connection is made to the socket server.
+    connect_callback : callable (optional)
+        Synchronous function to call when a connection is made or dropped.
 
     Notes
     -----
     Tekniker's OperationManager software connects to each component
     (PXI, EUI and HHD) using two TCP/IP sockets:
-
     * A client socket for output; data is only written to this socket.
         For the PXI this is used to send commands.
         For EUI and HDD this is used to send replies.
@@ -76,7 +81,7 @@ class Communicator(client_server_pair.ClientServerPair):
         log,
         read_replies,
         connect_client=True,
-        server_connect_callback=None,
+        connect_callback=None,
     ):
         super().__init__(
             name=name,
@@ -86,24 +91,23 @@ class Communicator(client_server_pair.ClientServerPair):
             server_port=server_port,
             log=log,
             connect_client=connect_client,
-            server_connect_callback=server_connect_callback,
+            connect_callback=connect_callback,
         )
-        self.eol_bytes = "\r\n".encode()
+        self.monitor_client_writer_task = asyncio.Future()
         if read_replies:
             self.parse_read_fields = replies.parse_reply
         else:
             self.parse_read_fields = commands.parse_command
 
-    async def write(self, message):
-        """Write a message.
+    async def close(self):
+        self.monitor_client_writer_task.cancel()
+        await super().close()
 
-        Parameters
-        ----------
-        message : `BaseMessage`
-            Message to write.
-        """
-        self.client_writer.write(message.encode())
-        await self.client_writer.drain()
+    async def connect(self, port=None):
+        await super().connect(port=port)
+        self.monitor_client_writer_task = asyncio.create_task(
+            self.monitor_client_reader()
+        )
 
     async def read(self):
         """Read and return a message. Waits indefinitely.
@@ -113,7 +117,50 @@ class Communicator(client_server_pair.ClientServerPair):
         message : `BaseMessage`
             The message read.
         """
-        read_bytes = await self.server_reader.readuntil(self.eol_bytes)
-        read_str = read_bytes.decode()[:-2]
-        fields = read_str.split("\n")
-        return self.parse_read_fields(fields)
+        if not self.server_connected:
+            raise RuntimeError("Server not connected")
+        try:
+            read_bytes = await self.server_reader.readuntil(b"\r\n")
+            read_str = read_bytes.decode()[:-2]
+            fields = read_str.split("\n")
+            return self.parse_read_fields(fields)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Print details if the error is other than "connection lost"
+            if self.connected:
+                self.log.exception("Failed to read")
+            raise
+
+    async def write(self, message):
+        """Write a message.
+
+        Parameters
+        ----------
+        message : `BaseMessage`
+            Message to write.
+        """
+        if not self.client_connected:
+            raise RuntimeError("Client not connected")
+        try:
+            self.client_writer.write(message.encode())
+            await self.client_writer.drain()
+        except Exception:
+            self.log.exception(f"Failed to write {message}")
+            raise
+
+    async def monitor_client_reader(self):
+        """Monitor the client reader; if it closes then close the writer.
+        """
+        # We do not expect to read any data, but we may as well accept it
+        # if some comes in.
+        while True:
+            await self.client_reader.read(1000)
+            if self.client_reader.reader.at_eof():
+                # reader closed; close the writer
+                await self.close_client()
+                self.call_connect_callback()
+                return
+            else:
+                self.log.warning("Unexpected data read from the command socket.")
+                await asyncio.sleep(0.01)

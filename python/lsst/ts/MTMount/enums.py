@@ -102,8 +102,11 @@ class CommandCode(enum.IntEnum):
     MIRROR_COVER_STOP = 902
     MIRROR_COVER_MOVE = 903
     MIRROR_COVER_MOVE_VELOCITY = 904
-    MIRROR_COVER_OPEN = 905
-    MIRROR_COVER_CLOSE = 906
+    # WARNING: Tekniker's code uses the opposite naming convention.
+    # This code intentionally differs, so that OPEN means
+    # allow light in and CLOSE means protect the mirror.
+    MIRROR_COVER_CLOSE = 905
+    MIRROR_COVER_OPEN = 906
     MIRROR_COVER_RESET_ALARM = 907
     CAMERA_CABLE_WRAP_POWER = 1001
     CAMERA_CABLE_WRAP_STOP = 1002

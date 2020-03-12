@@ -1,6 +1,6 @@
 .. py:currentmodule:: lsst.ts.MTMount
 
-.. _lsst.ts.MTMount-Tekniker_info:
+.. _lsst.ts.MTMount-tekniker_info:
 
 Interactions with Tekniker's software
 =====================================

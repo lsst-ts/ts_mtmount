@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # This file is part of ts_MTMount.
 #
 # Developed for the LSST Data Management System.
@@ -19,41 +20,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["get_tai_time", "get_utc_time", "wrap_parameter_doc"]
+"""A simple command-line script that sends commands to the Operation Manager.
 
-import textwrap
+Must be connected to a low-level port on the Operation Manger.
+At this time the only available port is for the hand-held device,
+but Tekniker plans to make an additional port available for our CSC.
 
-import astropy.time
+Warning: this should not be used while the CSC is running.
 
+For more information:
 
-def get_tai_time():
-    """Get current TAI as an astropy.time.Time.
-    """
-    return astropy.time.Time(astropy.time.Time.now(), scale="tai")
+tma_commander.py --help
+"""
 
+import asyncio
 
-def get_utc_time():
-    """Get current UTC as an astropy.time.Time.
-    """
-    return astropy.time.Time.now()
+from lsst.ts import salobj
 
-
-_ParamWrapper = textwrap.TextWrapper(
-    width=79, initial_indent="    ", subsequent_indent="    "
-)
-
-
-def wrap_parameter_doc(text):
-    """Wrap a parameter description appropriately for a doc string.
-
-    Parameters
-    ----------
-    doc : `str`
-       Documentation to wrap; typically a `FieldInfo.doc`.
-
-    Returns
-    -------
-    wrapped_doc : `str`
-        The doc wrapped to 79 characters with 4 spaces of indentation.
-    """
-    return _ParamWrapper.fill(text)
+asyncio.run(salobj.CscCommander.amain(name="NewMTMount", index=0))

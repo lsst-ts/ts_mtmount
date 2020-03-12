@@ -110,7 +110,7 @@ def make_random_message(message_type):
 
 
 def make_random_message_with_defaults(message_type):
-    """Given a Message class, construct a message default values for
+    """Given a Message class, construct a message with default values for
     fields that have them, and random values for fields that do not.
 
     Parameters
