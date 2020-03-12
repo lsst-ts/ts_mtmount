@@ -22,6 +22,7 @@
 from .constants import *
 from .enums import *
 from .utils import *
+from .limits import *
 from . import field_info
 from . import base_message
 from . import commands
