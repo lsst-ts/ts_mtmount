@@ -15,7 +15,7 @@ Acronyms used in Tekniker's code and (sparingly) in this package:
 * BAL: Balance motors
 * CW: Cable Wrap
 * DP: Deployable Platform
-* EIB: encoder hardware: EIB is a Heidenhain term.
+* EIB: encoder interface box: EIB is a Heidenhain term.
 * EUI: Engineering User Interface
 * HHD: Hand-Held Device
 * HMI: Human-machine interface: both the EUI and HHD
