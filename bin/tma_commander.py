@@ -128,12 +128,14 @@ class Commander:
             ccw_stop=MTMount.commands.CameraCableWrapStop,
             ccw_move=MTMount.commands.CameraCableWrapMove,
             ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
-            ccw_track_camera=MTMount.commands.CameraCableWrapTrackCamera,
-            ccw_enable_track_camera=MTMount.commands.CameraCableWrapEnableTrackCamera,
+            ccw_enable_tracking=MTMount.commands.CameraCableWrapEnableTracking,
+            ccw_track=MTMount.commands.CameraCableWrapTrack,
+            disable=MTMount.commands.Disable,
+            enable=MTMount.commands.Enable,
         )
         self.help_text = f"""Send commands to the telescope mount assemply.
 
-TMA Commands:
+TMA Commands (omit the tai_time argument, if shown):
 {self.get_command_help()}
 
 Other commands:
@@ -184,6 +186,11 @@ help  # Print this help
         except KeyError:
             raise ValueError(f"Unrecognized command {cmd_name}")
         arg_infos = CommandClass.field_infos[5:]
+        has_tai_time_argument = isinstance(
+            arg_infos[-1], MTMount.field_info.TimeFieldInfo
+        )
+        if has_tai_time_argument:
+            arg_infos = arg_infos[0:-1]
         if len(args) != len(arg_infos):
             raise ValueError(
                 f"Command {cmd_name} needs {len(arg_infos)} arguments, but got {len(args)}"
@@ -191,6 +198,8 @@ help  # Print this help
         kwargs = {
             info.name: info.value_from_str(arg) for arg, info in zip(args, arg_infos)
         }
+        if has_tai_time_argument:
+            kwargs["tai_time"] = MTMount.get_tai_time()
 
         cmd = CommandClass(**kwargs)
         await self.communicator.write(cmd)
