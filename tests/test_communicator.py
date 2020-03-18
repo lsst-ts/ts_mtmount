@@ -156,7 +156,7 @@ class CommunicatorTestCase(asynctest.TestCase):
             MTMount.commands.AzimuthAxisTrack(
                 sequence_id=2, position=12, velocity=0.3, tai_time=tai_time
             ),
-            MTMount.commands.MirrorCoverPower(sequence_id=3, drive=2, on=True),
+            MTMount.commands.MirrorCoversPower(sequence_id=3, drive=2, on=True),
         )
         replies = (
             MTMount.replies.AckReply(sequence_id=1, timeout_ms=3500),
