@@ -122,14 +122,20 @@ class Communicator(client_server_pair.ClientServerPair):
         try:
             read_bytes = await self.server_reader.readuntil(b"\r\n")
             read_str = read_bytes.decode()[:-2]
-            fields = read_str.split("\n")
-            return self.parse_read_fields(fields)
         except asyncio.CancelledError:
             raise
         except Exception:
             # Print details if the error is other than "connection lost"
             if self.connected:
-                self.log.exception("Failed to read")
+                self.log.exception("Read failed")
+            raise
+        try:
+            fields = read_str.split("\n")
+            message = self.parse_read_fields(fields)
+            self.log.debug("Read %s", message)
+            return message
+        except Exception:
+            self.log.exception(f"Could not parse read data: {read_str!r}")
             raise
 
     async def write(self, message):
@@ -143,6 +149,7 @@ class Communicator(client_server_pair.ClientServerPair):
         if not self.client_connected:
             raise RuntimeError("Client not connected")
         try:
+            self.log.debug("Write %s", message)
             self.client_writer.write(message.encode())
             await self.client_writer.drain()
         except Exception:

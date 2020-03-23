@@ -68,12 +68,17 @@ class CommandFutures:
         explanation : `str`
             Explanation of what went wrong.
 
-        Sets the ``ack`` (if not done) and ``done`` futures to
+        Notes
+        -----
+        Sets the ``ack`` (if not done) else ``done`` future to
         ``lsst.ts.salobj.ExpectedError`` exception.
+
+        Do not set both, to avoid "exception was never retrieved" warnings.
         """
         if not self.ack.done():
             self.ack.set_exception(salobj.ExpectedError(explanation))
-        self.done.set_exception(salobj.ExpectedError(explanation))
+        else:
+            self.done.set_exception(salobj.ExpectedError(explanation))
 
     def setdone(self):
         """Report a command as done.

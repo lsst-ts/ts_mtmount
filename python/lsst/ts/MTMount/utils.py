@@ -19,11 +19,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["get_tai_time", "get_utc_time", "wrap_parameter_doc"]
+__all__ = [
+    "get_tai_time",
+    "get_utc_time",
+    "wrap_parameter_doc",
+]
 
 import textwrap
 
 import astropy.time
+
+# Maximum documentation string length (chars)
+MAX_DOC_LENGTH = 79
 
 
 def get_tai_time():
@@ -39,7 +46,7 @@ def get_utc_time():
 
 
 _ParamWrapper = textwrap.TextWrapper(
-    width=79, initial_indent="    ", subsequent_indent="    "
+    width=MAX_DOC_LENGTH, initial_indent="    ", subsequent_indent="    "
 )
 
 

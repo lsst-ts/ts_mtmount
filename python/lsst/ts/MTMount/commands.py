@@ -22,25 +22,47 @@
 __all__ = [
     "AckOnlyCommandCodes",
     "Command",
-    "ElevationAxisPower",
-    "ElevationAxisStop",
-    "ElevationAxisMove",
-    "ElevationAxisTracking",
-    "AzimuthAxisPower",
-    "AzimuthAxisStop",
+    "AzimuthAxisDriveEnable",
+    "AzimuthAxisDriveReset",
+    "AzimuthAxisEnableTracking",
+    "AzimuthAxisHome",
     "AzimuthAxisMove",
-    "AzimuthAxisTracking",
-    "MainPowerSupplyPower",
-    "MirrorCoverPower",
-    "MirrorCoverStop",
-    "MirrorCoverOpen",
-    "MirrorCoverClose",
-    "CameraCableWrapPower",
-    "CameraCableWrapStop",
-    "CameraCableWrapMove",
+    "AzimuthAxisPower",
+    "AzimuthAxisResetAlarm",
+    "AzimuthAxisStop",
+    "AzimuthAxisTrack",
+    "AzimuthCableWrapDriveEnable",
+    "AzimuthCableWrapDriveReset",
+    "AzimuthCableWrapEnableTracking",
+    "AzimuthCableWrapMove",
+    "AzimuthCableWrapPower",
+    "AzimuthCableWrapResetAlarm",
+    "AzimuthCableWrapStop",
+    "AzimuthCableWrapTrack",
     "CameraCableWrapDriveEnable",
-    "CameraCableWrapTrackCamera",
-    "CameraCableWrapEnableTrackCamera",
+    "CameraCableWrapDriveReset",
+    "CameraCableWrapEnableTracking",
+    "CameraCableWrapMove",
+    "CameraCableWrapPower",
+    "CameraCableWrapResetAlarm",
+    "CameraCableWrapStop",
+    "CameraCableWrapTrack",
+    "Disable",
+    "Enable",
+    "ElevationAxisDriveEnable",
+    "ElevationAxisDriveReset",
+    "ElevationAxisEnableTracking",
+    "ElevationAxisMove",
+    "ElevationAxisPower",
+    "ElevationAxisResetAlarm",
+    "ElevationAxisStop",
+    "ElevationAxisTrack",
+    "MainPowerSupplyPower",
+    "MirrorCoversClose",
+    "MirrorCoversOpen",
+    "MirrorCoversPower",
+    "MirrorCoversResetAlarm",
+    "MirrorCoversStop",
     "Commands",
     "CommandDict",
     "parse_command",
@@ -58,9 +80,10 @@ MAX_SEQUENCE_ID = (1 << 31) - 1
 # Command that are done when ACK is received
 AckOnlyCommandCodes = set(
     (
-        enums.CommandCode.AZIMUTH_AXIS_TRACKING,
-        enums.CommandCode.ELEVATION_AXIS_TRACKING,
-        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK_CAMERA,
+        enums.CommandCode.AZIMUTH_AXIS_TRACK,
+        enums.CommandCode.ELEVATION_AXIS_TRACK,
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_TRACK,
+        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK,
     )
 )
 
@@ -150,8 +173,8 @@ _MoveParameters = (
     field_info.FloatFieldInfo(name="jerk", doc="Maximum jerk (deg/second3)."),
 )
 
-_PowerParameters = (
-    field_info.BoolFieldInfo(name="on", doc="Turn the power on (True) or off (False)"),
+_OnOffParameters = (
+    field_info.BoolFieldInfo(name="on", doc="Turn on (True) or off (False)"),
 )
 
 """
@@ -160,7 +183,7 @@ Supported elevation and azimuth axis commands:
 * <AXIS>_AXIS_POWER
 * <AXIS>_AXIS_STOP
 * <AXIS>_AXIS_MOVE
-* <AXIS>_AXIS_TRACKING
+* <AXIS>_AXIS_TRACK
 
 Other elevation and azimuth axis commands:
 
@@ -170,36 +193,35 @@ Other elevation and azimuth axis commands:
 """
 
 
-class ElevationAxisPower(Command):
+class AzimuthAxisDriveEnable(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_POWER, _PowerParameters
+        enums.CommandCode.AZIMUTH_AXIS_DRIVE_ENABLE,
+        (
+            (
+                field_info.IntFieldInfo(
+                    name="drive", doc="Drive index: one of -1 (all), ?"
+                ),
+            )
+            + _OnOffParameters
+        ),
     )
 
 
-class ElevationAxisStop(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_STOP)
-
-
-class ElevationAxisMove(Command):
+class AzimuthAxisDriveReset(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_MOVE, _MoveParameters
+        enums.CommandCode.AZIMUTH_AXIS_DRIVE_RESET,
+        (field_info.IntFieldInfo(name="drive", doc="Drive index: one of -1 (all), ?"),),
     )
 
 
-class ElevationAxisTracking(Command):
+class AzimuthAxisEnableTracking(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_TRACKING, _TrackingParameters
+        enums.CommandCode.AZIMUTH_AXIS_ENABLE_TRACKING, _OnOffParameters
     )
 
 
-class AzimuthAxisPower(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_POWER, _PowerParameters
-    )
-
-
-class AzimuthAxisStop(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_STOP)
+class AzimuthAxisHome(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_HOME,)
 
 
 class AzimuthAxisMove(Command):
@@ -208,89 +230,94 @@ class AzimuthAxisMove(Command):
     )
 
 
-class AzimuthAxisTracking(Command):
+class AzimuthAxisPower(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_TRACKING, _TrackingParameters
+        enums.CommandCode.AZIMUTH_AXIS_POWER, _OnOffParameters
     )
 
 
-class MainPowerSupplyPower(Command):
+class AzimuthAxisResetAlarm(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_RESET_ALARM,)
+
+
+class AzimuthAxisStop(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_STOP)
+
+
+class AzimuthAxisTrack(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MAIN_POWER_SUPPLY_POWER, _PowerParameters
+        enums.CommandCode.AZIMUTH_AXIS_TRACK, _TrackingParameters
     )
 
 
-"""
-Supported mirror cover commands:
-
-* MIRROR_COVER_POWER = 901
-* MIRROR_COVER_STOP = 902
-* MIRROR_COVER_OPEN = 905
-* MIRROR_COVER_CLOSE = 906
-
-Other mirror cover commands:
-
-* MIRROR_COVER_MOVE = 903
-* MIRROR_COVER_MOVE_VELOCITY = 904
-* MIRROR_COVER_RESET_ALARM = 907
-"""
-
-
-class MirrorCoverPower(Command):
+class AzimuthCableWrapDriveEnable(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MIRROR_COVER_POWER,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index: one of 0, 1, 2, 3"),)
-        + _PowerParameters,
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_DRIVE_ENABLE,
+        (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),)
+        + _OnOffParameters,
     )
 
 
-class MirrorCoverStop(Command):
+class AzimuthCableWrapDriveReset(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MIRROR_COVER_STOP,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index: one of 0, 1, 2, 3"),),
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_DRIVE_RESET,
+        (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),),
     )
 
 
-class MirrorCoverOpen(Command):
+class AzimuthCableWrapEnableTracking(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MIRROR_COVER_OPEN,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index: one of 0, 1, 2, 3"),),
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_ENABLE_TRACKING, _OnOffParameters
     )
 
 
-class MirrorCoverClose(Command):
+class AzimuthCableWrapMove(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MIRROR_COVER_CLOSE,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index: one of 0, 1, 2, 3"),),
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_MOVE, _MoveParameters
     )
 
 
-"""
-Supported camera cable wrap commands:
-
-* CAMERA_CABLE_WRAP_POWER = 1001
-* CAMERA_CABLE_WRAP_STOP = 1002
-* CAMERA_CABLE_WRAP_MOVE = 1003
-* CAMERA_CABLE_WRAP_TRACK_CAMERA = 1004
-* CAMERA_CABLE_WRAP_DRIVE_ENABLE = 1006
-* CAMERA_CABLE_WRAP_ENABLE_TRACK_CAMERA = 1009
-
-Other camera cable wrap commands:
-
-* CAMERA_CABLE_WRAP_RESET_ALARM = 1005
-* CAMERA_CABLE_WRAP_DRIVE_RESET = 1007
-* CAMERA_CABLE_WRAP_MOVE_VELOCITY = 1008
-"""
-
-
-class CameraCableWrapPower(Command):
+class AzimuthCableWrapPower(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.CAMERA_CABLE_WRAP_POWER, _PowerParameters
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_POWER, _OnOffParameters
     )
 
 
-class CameraCableWrapStop(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.CAMERA_CABLE_WRAP_STOP)
+class AzimuthCableWrapResetAlarm(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_RESET_ALARM,
+    )
+
+
+class AzimuthCableWrapStop(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_CABLE_WRAP_STOP)
+
+
+class AzimuthCableWrapTrack(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_TRACK, _TrackingParameters
+    )
+
+
+class CameraCableWrapDriveEnable(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_ENABLE,
+        (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),)
+        + _OnOffParameters,
+    )
+
+
+class CameraCableWrapDriveReset(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_RESET,
+        (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),),
+    )
+
+
+class CameraCableWrapEnableTracking(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING, _OnOffParameters
+    )
 
 
 class CameraCableWrapMove(Command):
@@ -299,51 +326,196 @@ class CameraCableWrapMove(Command):
     )
 
 
-class CameraCableWrapTrackCamera(Command):
+class CameraCableWrapPower(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK_CAMERA, _TrackingParameters
+        enums.CommandCode.CAMERA_CABLE_WRAP_POWER, _OnOffParameters
     )
 
 
-class CameraCableWrapDriveEnable(Command):
+class CameraCableWrapResetAlarm(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_ENABLE,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index"),) + _PowerParameters,
+        enums.CommandCode.CAMERA_CABLE_WRAP_RESET_ALARM,
     )
 
 
-class CameraCableWrapEnableTrackCamera(Command):
+class CameraCableWrapStop(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.CAMERA_CABLE_WRAP_STOP)
+
+
+class CameraCableWrapTrack(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACK_CAMERA,
+        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK, _TrackingParameters
+    )
+
+
+class Disable(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.DISABLE,)
+
+
+class Enable(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.ENABLE,)
+
+
+class ElevationAxisDriveEnable(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_AXIS_DRIVE_ENABLE,
         (
-            field_info.BoolFieldInfo(
-                name="on",
-                doc="True to make the camera cable wrap automatically track the camera rotator.",
+            (
+                field_info.IntFieldInfo(
+                    name="drive", doc="Drive index: one of -1 (all), ?"
+                ),
+            )
+            + _OnOffParameters
+        ),
+    )
+
+
+class ElevationAxisDriveReset(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_AXIS_DRIVE_RESET,
+        (field_info.IntFieldInfo(name="drive", doc="Drive index: one of -1 (all), ?"),),
+    )
+
+
+class ElevationAxisEnableTracking(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_AXIS_ENABLE_TRACKING, _OnOffParameters
+    )
+
+
+class ElevationAxisMove(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_AXIS_MOVE, _MoveParameters
+    )
+
+
+class ElevationAxisPower(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_AXIS_POWER, _OnOffParameters
+    )
+
+
+class ElevationAxisResetAlarm(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_AXIS_RESET_ALARM,
+    )
+
+
+class ElevationAxisStop(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_STOP)
+
+
+class ElevationAxisTrack(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_AXIS_TRACK, _TrackingParameters
+    )
+
+
+class MainPowerSupplyPower(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MAIN_POWER_SUPPLY_POWER, _OnOffParameters
+    )
+
+
+"""
+Unsupported mirror cover commands:
+
+* MIRROR_COVERS_MOVE = 903
+* MIRROR_COVERS_MOVE_VELOCITY = 904
+"""
+
+
+class MirrorCoversClose(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVERS_CLOSE,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+            ),
+        ),
+    )
+
+
+class MirrorCoversOpen(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVERS_OPEN,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+            ),
+        ),
+    )
+
+
+class MirrorCoversPower(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVERS_POWER,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+            ),
+        )
+        + _OnOffParameters,
+    )
+
+
+class MirrorCoversResetAlarm(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.MIRROR_COVERS_RESET_ALARM,)
+
+
+class MirrorCoversStop(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVERS_STOP,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
             ),
         ),
     )
 
 
 Commands = (
-    ElevationAxisPower,
-    ElevationAxisStop,
-    ElevationAxisMove,
-    ElevationAxisTracking,
-    AzimuthAxisPower,
-    AzimuthAxisStop,
+    AzimuthAxisDriveEnable,
+    AzimuthAxisDriveReset,
+    AzimuthAxisEnableTracking,
+    AzimuthAxisHome,
     AzimuthAxisMove,
-    AzimuthAxisTracking,
-    MainPowerSupplyPower,
-    MirrorCoverPower,
-    MirrorCoverStop,
-    MirrorCoverOpen,
-    MirrorCoverClose,
-    CameraCableWrapPower,
-    CameraCableWrapStop,
-    CameraCableWrapMove,
+    AzimuthAxisPower,
+    AzimuthAxisResetAlarm,
+    AzimuthAxisStop,
+    AzimuthAxisTrack,
+    AzimuthCableWrapDriveEnable,
+    AzimuthCableWrapDriveReset,
+    AzimuthCableWrapEnableTracking,
+    AzimuthCableWrapMove,
+    AzimuthCableWrapPower,
+    AzimuthCableWrapResetAlarm,
+    AzimuthCableWrapStop,
+    AzimuthCableWrapTrack,
     CameraCableWrapDriveEnable,
-    CameraCableWrapTrackCamera,
-    CameraCableWrapEnableTrackCamera,
+    CameraCableWrapDriveReset,
+    CameraCableWrapEnableTracking,
+    CameraCableWrapMove,
+    CameraCableWrapPower,
+    CameraCableWrapResetAlarm,
+    CameraCableWrapStop,
+    CameraCableWrapTrack,
+    Disable,
+    Enable,
+    ElevationAxisDriveEnable,
+    ElevationAxisDriveReset,
+    ElevationAxisEnableTracking,
+    ElevationAxisMove,
+    ElevationAxisPower,
+    ElevationAxisResetAlarm,
+    ElevationAxisStop,
+    ElevationAxisTrack,
+    MainPowerSupplyPower,
+    MirrorCoversClose,
+    MirrorCoversOpen,
+    MirrorCoversPower,
+    MirrorCoversResetAlarm,
+    MirrorCoversStop,
 )
 
 for command in Commands:

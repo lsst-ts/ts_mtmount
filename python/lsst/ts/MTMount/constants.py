@@ -26,5 +26,5 @@
 CSC_REPLY_PORT = 40005
 CSC_COMMAND_PORT = 40006
 
-# We probably don't need this, because -1 apparently means "all drives".
+# We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)

@@ -150,13 +150,13 @@ class CommunicatorTestCase(asynctest.TestCase):
         # A representative sampling of commands, including
         # bool, int, float, and time fields.
         commands = (
-            MTMount.commands.ElevationAxisTracking(
+            MTMount.commands.ElevationAxisTrack(
                 sequence_id=1, position=12, velocity=0.3, tai_time=tai_time
             ),
-            MTMount.commands.AzimuthAxisTracking(
+            MTMount.commands.AzimuthAxisTrack(
                 sequence_id=2, position=12, velocity=0.3, tai_time=tai_time
             ),
-            MTMount.commands.MirrorCoverPower(sequence_id=3, drive=2, on=True),
+            MTMount.commands.MirrorCoversPower(sequence_id=3, drive=2, on=True),
         )
         replies = (
             MTMount.replies.AckReply(sequence_id=1, timeout_ms=3500),

@@ -19,22 +19,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from .constants import *
-from .enums import *
-from .utils import *
-from .limits import *
-from . import field_info
-from . import base_message
-from . import commands
-from . import replies
-from .client_server_pair import *
-from .communicator import *
-from .command_futures import *
-from .mtmount_csc import *
-from . import mock
-from . import testutils
-
-try:
-    from .version import *
-except ImportError:
-    __version__ = "?"
+from .base_device import *
+from .axis_device import *
+from .controller import *

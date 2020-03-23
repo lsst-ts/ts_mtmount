@@ -27,18 +27,30 @@ import pathlib
 from lsst.ts import salobj
 from . import command_futures
 from . import commands
+from . import enums
 from . import replies
 from . import communicator
-from . import mock_controller
+from . import mock
 from . import utils
 
 
 # Extra time to wait for commands to be done (sec)
 TIMEOUT_BUFFER = 5
 
+# Time to wait for devices to be enabled (sec)
+ENABLE_TIMEOUT = 60
+
 # Maximum time (second) between rotator application telemetry topics,
 # beyond which rotator velocity will not be estimated.
 MAX_ROTATOR_APPLICATION_GAP = 1
+
+
+DeviceEnableCommands = (
+    commands.AzimuthAxisDriveEnable,
+    commands.ElevationAxisDriveEnable,
+    commands.AzimuthCableWrapDriveEnable,
+    commands.CameraCableWrapDriveEnable,
+)
 
 
 class MTMountCsc(salobj.ConfigurableCsc):
@@ -72,10 +84,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     **Error Codes**
 
-    * 1: could not establish TCP/IP connection MTMount controller
-    * 2: connection lost with MTMount controller
-    * 3: could not start the mock controller
-    * 4: internal error (bug)
+    See `CscErrorCode`
     """
 
     def __init__(
@@ -96,6 +105,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # done_task is set to to None when the command is done.
         # Both are set to exceptions if the command fails.
         self.command_dict = dict()
+
+        self.all_devices_enabled = False
 
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = salobj.make_done_future()
@@ -222,7 +233,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             err_msg = f"Could not connection to client_host={client_host}, "
             f"reply_port={self.config.reply_port}"
             self.log.exception(err_msg)
-            self.fault(code=1, report=f"{err_msg}: {e}")
+            self.fault(
+                code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e}"
+            )
             return
 
     def connect_callback(self, communicator):
@@ -232,14 +245,52 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if self.should_be_connected and not communicator.connected:
             self.should_be_connected = False
             self.fault(
-                code=2,
+                code=enums.CscErrorCode.CONNECTION_LOST,
                 report="connection lost to low-level controller (noticed in connect_callback)",
+            )
+
+    async def enable_devices(self):
+        try:
+            await asyncio.wait_for(
+                self.send_commands(
+                    *[command(drive=-1, on=True) for command in DeviceEnableCommands]
+                ),
+                timeout=ENABLE_TIMEOUT,
+            )
+            self.all_devices_enabled = True
+        except Exception as e:
+            err_msg = "Failed to enable one or more devices"
+            self.log.exception(err_msg)
+            self.fault(
+                code=enums.CscErrorCode.ACTUATOR_ENABLE_ERROR, report=f"{err_msg}: {e}",
+            )
+
+    async def disable_devices(self):
+        self.all_devices_enabled = False
+        try:
+            await asyncio.wait_for(
+                self.send_commands(
+                    *[command(drive=-1, on=False) for command in DeviceEnableCommands]
+                ),
+                timeout=ENABLE_TIMEOUT,
+            )
+        except Exception as e:
+            err_msg = "Failed to disable one or more devices"
+            self.log.exception(err_msg)
+            self.fault(
+                code=enums.CscErrorCode.ACTUATOR_DISABLE_ERROR,
+                report=f"{err_msg}: {e}",
             )
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
             if not self.connected and self.connect_task.done():
                 await self.connect()
+            if self.summary_state == salobj.State.ENABLED:
+                if not self.all_devices_enabled:
+                    await self.enable_devices()
+            else:
+                await self.disable_devices()
         else:
             await self.close_communication()
 
@@ -283,7 +334,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
             futures = command_futures.CommandFutures()
             self.command_dict[command.sequence_id] = futures
-            print(f"*** sending command {command}")
             await self.communicator.write(command)
             await asyncio.wait_for(futures.ack, self.config.ack_timeout)
             if command.command_code in commands.AckOnlyCommandCodes:
@@ -332,7 +382,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             - self.prev_rot_application.Position
                         ) / dt
 
-                command = commands.CameraCableWrapTrackCamera(
+                command = commands.CameraCableWrapTrack(
                     position=rot_application.Position,
                     velocity=estimated_velocity,
                     tai_time=utils.get_tai_time(),
@@ -409,13 +459,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except Exception as e:
                 if self.should_be_connected:
                     if self.communicator.connected:
-                        self.log.exception("read_loop failed; possibly a bug")
+                        err_msg = "read_loop failed; possibly a bug"
+                        self.log.exception(err_msg)
                         self.fault(
-                            code=4, report=f"read_loop read failed; possibly a bug: {e}"
+                            code=enums.CscErrorCode.INTERNAL_ERROR,
+                            report=f"{err_msg}: {e}",
                         )
                     else:
                         self.fault(
-                            code=2,
+                            code=enums.CscErrorCode.CONNECTION_LOST,
                             report="connection lost to low-level controller (noticed in read_loop)",
                         )
         self.log.debug("read loop ends")
@@ -437,45 +489,83 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 reply_port = self.mock_reply_port
             else:
                 reply_port = self.config.reply_port
-            self.mock_controller = mock_controller.MockController(
-                reply_port=reply_port, log=self.log
-            )
+            self.mock_controller = mock.Controller(reply_port=reply_port, log=self.log)
             await asyncio.wait_for(self.mock_controller.start_task, timeout=2)
         except Exception as e:
             err_msg = "Could not start mock controller"
             self.log.exception(e)
-            self.fault(code=3, report=f"{err_msg}: {e}")
-            raise
+            self.fault(
+                code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR, report=f"{err_msg}: {e}"
+            )
+
+    async def do_clearError(self, data):
+        self.assert_enabled()
+        raise salobj.ExpectedError("Not yet implemented")
 
     async def do_closeMirrorCovers(self, data):
         self.assert_enabled()
-        await self.send_command(commands.MirrorCoverClose(drive=-1))
+        await self.send_command(commands.MirrorCoversClose(drive=-1))
 
     async def do_openMirrorCovers(self, data):
         self.assert_enabled()
-        await self.send_command(commands.MirrorCoverOpen(drive=-1))
+        await self.send_command(commands.MirrorCoversOpen(drive=-1))
 
     async def do_disableCameraCableWrapTracking(self, data):
         self.assert_enabled()
         self.camera_cable_wrap_task.cancel()
-        await self.send_command(commands.CameraCableWrapEnableTrackCamera(on=False))
+        await self.send_command(commands.CameraCableWrapEnableTracking(on=False))
 
     async def do_enableCameraCableWrapTracking(self, data):
         self.assert_enabled()
-        await self.send_command(commands.CameraCableWrapEnableTrackCamera(on=True))
+        await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
         self.camera_cable_wrap_task = asyncio.create_task(self.camera_cable_wrap_loop())
 
     async def do_moveToTarget(self, data):
         self.assert_enabled()
-        raise salobj.ExpectedError("Not yet implemented")
+        # Note: velocity, acceleration and jerk are maximum values,
+        # but 0 uses the default value.
+        await self.send_commands(
+            commands.AzimuthAxisMove(
+                position=data.azimuth, velocity=0, acceleration=0, jerk=0
+            ),
+            commands.ElevationAxisMove(
+                position=data.elevation, velocity=0, acceleration=0, jerk=0
+            ),
+        )
 
     async def do_trackTarget(self, data):
         self.assert_enabled()
-        raise salobj.ExpectedError("Not yet implemented")
+        tai_astropy = salobj.astropy_time_from_tai_unix(data.taiTime)
+        await self.send_commands(
+            commands.AzimuthAxisTrack(
+                tai_time=tai_astropy,
+                position=data.azimuth,
+                velocity=data.azimuthVelocity,
+            ),
+            commands.ElevationAxisTrack(
+                tai_time=tai_astropy,
+                position=data.elevation,
+                velocity=data.elevationVelocity,
+            ),
+        )
+        self.evt_target.set_put(
+            azimuth=data.azimuth,
+            elevation=data.elevation,
+            azimuthVelocity=data.azimuthVelocity,
+            elevationVelocity=data.elevationVelocity,
+            taiTime=data.taiTime,
+            trackId=data.trackId,
+            tracksys=data.tracksys,
+            radesys=data.radesys,
+            force_output=True,
+        )
 
     async def do_startTracking(self, data):
         self.assert_enabled()
-        raise salobj.ExpectedError("Not yet implemented")
+        await self.send_commands(
+            commands.ElevationAxisEnableTracking(on=True),
+            commands.AzimuthAxisEnableTracking(on=True),
+        )
 
     async def do_stop(self, data):
         self.assert_enabled()
@@ -487,7 +577,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_stopTracking(self, data):
         self.assert_enabled()
-        raise salobj.ExpectedError("Not yet implemented")
+        await self.send_commands(
+            commands.ElevationAxisEnableTracking(on=False),
+            commands.AzimuthAxisEnableTracking(on=False),
+        )
 
     @classmethod
     def add_arguments(cls, parser):
