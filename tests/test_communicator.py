@@ -162,9 +162,13 @@ class CommunicatorTestCase(asynctest.TestCase):
             MTMount.replies.AckReply(sequence_id=1, timeout_ms=3500),
             MTMount.replies.DoneReply(sequence_id=2),
             MTMount.replies.ErrorReply(
-                on=True, active=False, code=47, what="test error"
+                on=True,
+                active=False,
+                code=47,
+                subsystem=f"{MTMount.SubsystemId.MIRROR_COVERS}. MyTopVI/MyNextVI/MyNextNextVI",
+                what="test error",
             ),
-            MTMount.replies.InPositionReply(in_position=5),
+            MTMount.replies.InPositionReply(what=1, in_position=True),
         )
 
         for use_connect_callback in (False, True):

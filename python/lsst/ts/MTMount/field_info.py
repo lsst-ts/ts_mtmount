@@ -364,6 +364,22 @@ class SourceFieldInfo(EnumFieldInfo):
         )
 
 
+class SubsystemFieldInfo(StrFieldInfo):
+    """Information for the ``subsystem`` field in Warnings and Errors.
+
+    Parameters
+    ----------
+    what : `str`
+        Kind of message, e.g. "error" or "warning".
+    """
+
+    def __init__(self, what):
+        super().__init__(
+            name="subsystem",
+            doc=f"""Source of the {what}. The format is f"{{subsystem_id}}. {{details}}".""",
+        )
+
+
 class TimestampFieldInfo(TimeFieldInfo):
     """Information for the ``timestamp`` field.
     """
