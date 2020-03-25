@@ -19,18 +19,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["CscErrorCode", "CommandCode", "DeviceId", "ReplyCode", "Source"]
+__all__ = [
+    "CommandCode",
+    "CscErrorCode",
+    "DeviceId",
+    "EnabledState",
+    "ReplyCode",
+    "Source",
+    "SubsystemId",
+]
 
 import enum
-
-
-class CscErrorCode(enum.IntEnum):
-    COULD_NOT_CONNECT = 1
-    CONNECTION_LOST = 2
-    ACTUATOR_ENABLE_ERROR = 3
-    ACTUATOR_DISABLE_ERROR = 4
-    MOCK_CONTROLLER_ERROR = 98
-    INTERNAL_ERROR = 99
 
 
 class CommandCode(enum.IntEnum):
@@ -60,9 +59,9 @@ class CommandCode(enum.IntEnum):
     ENTER_CONTROL = 14
     SYSTEM_READY = 15
     ENTER_PUBLISHONLY = 16
-    HUMAN_MACHINE_INTERFACE_MOVE_TO_TARGET = 30
-    HUMAN_MACHINE_INTERFACE_TRACK_TARGET = 31
-    HUMAN_MACHINE_INTERFACE_STOP = 32
+    BOTH_AXES_MOVE = 30  # HMI_MOVE_TO_TARGET in types.h
+    BOTH_AXES_TRACK = 31  # HMI_TRACK_TARGET in types.h
+    BOTH_AXES_STOP = 32  # HMI_STOP in types.h
     AZIMUTH_AXIS_POWER = 101
     AZIMUTH_AXIS_STOP = 102
     AZIMUTH_AXIS_MOVE = 103
@@ -116,7 +115,7 @@ class CommandCode(enum.IntEnum):
     MIRROR_COVERS_MOVE = 903
     MIRROR_COVERS_MOVE_VELOCITY = 904
     # WARNING: Tekniker's code uses the opposite naming convention.
-    # This code intentionally differs, so that OPEN means
+    # These enums intentionally differ, so that OPEN means
     # allow light in and CLOSE means protect the mirror.
     MIRROR_COVERS_CLOSE = 905
     MIRROR_COVERS_OPEN = 906
@@ -151,12 +150,12 @@ class CommandCode(enum.IntEnum):
     LOCKING_PINS_MOVE_VELOCITY = 1404
     LOCKING_PINS_RESET_ALARM = 1405
     LOCKING_PINS_MOVE_ALL = 1406
-    MIRROR_COVERS_LOCK_POWER = 1501
-    MIRROR_COVERS_LOCK_STOP = 1502
-    MIRROR_COVERS_LOCK_MOVE = 1503
-    MIRROR_COVERS_LOCK_MOVE_VELOCITY = 1504
-    MIRROR_COVERS_LOCK_RESET_ALARM = 1505
-    MIRROR_COVERS_LOCK_MOVE_ALL = 1506
+    MIRROR_COVER_LOCKS_POWER = 1501
+    MIRROR_COVER_LOCKS_STOP = 1502
+    MIRROR_COVER_LOCKS_MOVE = 1503
+    MIRROR_COVER_LOCKS_MOVE_VELOCITY = 1504
+    MIRROR_COVER_LOCKS_RESET_ALARM = 1505
+    MIRROR_COVER_LOCKS_MOVE_ALL = 1506
     AZIMUTH_THERMAL_POWER = 1601
     AZIMUTH_THERMAL_TRACK_AMBIENT = 1602
     AZIMUTH_THERMAL_RESET_ALARM = 1603
@@ -180,11 +179,23 @@ class CommandCode(enum.IntEnum):
     ERROR = -100
 
 
+class CscErrorCode(enum.IntEnum):
+    COULD_NOT_CONNECT = 1
+    CONNECTION_LOST = 2
+    ACTUATOR_ENABLE_ERROR = 3
+    ACTUATOR_DISABLE_ERROR = 4
+    MOCK_CONTROLLER_ERROR = 98
+    INTERNAL_ERROR = 99
+
+
 class DeviceId(enum.Enum):
     """Devices that have POWER and RESET_ALARM commands.
 
     These are for mock devices. The values do not match
     anything in Tekniker's code.
+
+    We could use SubsystemId, instead, but that enum class includes entries
+    that have no POWER or RESET_ALARM commands.
     """
 
     ELEVATION_AXIS = enum.auto()
@@ -196,9 +207,22 @@ class DeviceId(enum.Enum):
     ENCODER_ = enum.auto()
     TOP_END_CHILLER = enum.auto()
     LOCKING_PIN = enum.auto()
+    MAIN_POWER_SUPPLY = enum.auto()
     MIRROR_COVERS = enum.auto()
-    MIRROR_COVERS_LOCK = enum.auto()
+    MIRROR_COVER_LOCKS = enum.auto()
     OIL_SUPPLY_SYSTEM = enum.auto()
+
+
+class EnabledState(enum.IntEnum):
+    """Status of enabling/disabling subsystems.
+    """
+
+    DISABLED = enum.auto()
+    ENABLED = enum.auto()
+    ENABLING = enum.auto()
+    DISABLING = enum.auto()
+    DISABLE_FAILED = enum.auto()
+    ENABLE_FAILED = enum.auto()
 
 
 class ReplyCode(enum.IntEnum):
@@ -227,3 +251,30 @@ class Source(enum.IntEnum):
     MCS = 2
     HHD = 3
     PXI = 100
+
+
+class SubsystemId(enum.IntEnum):
+    """Subsystem ID numbers.
+
+    Used in errors and warnings.
+    """
+
+    AZIMUTH_AXIS = 100
+    AZIMUTH_DRIVE = 200
+    AZIMUTH_CABLE_WRAP = 300
+    ELEVATION_AXIS = 400
+    ELEVATION_DRIVE = 500
+    MAIN_POWER_SUPPLY = 600
+    ENCODER_INTERFACE_BOX = 700
+    OIL_SUPPLY_SYSTEM = 800
+    MIRROR_COVERS = 900
+    CAMERA_CABLE_WRAP = 1000
+    BALANCE = 1100
+    DEPLOYABLE_PLATFORM = 1200
+    CABINET = 1300
+    LOCKING_PINS = 1400
+    MIRROR_COVER_LOCKS = 1500
+    AZIMUTH_THERMAL = 1600
+    ELEVATION_THERMAL = 1700
+    INTERLOCK = 1800
+    TOP_END_CHILLER = 2200
