@@ -37,18 +37,14 @@ from . import utils
 # Extra time to wait for commands to be done (sec)
 TIMEOUT_BUFFER = 5
 
-# Time to wait for devices to be enabled (sec)
-ENABLE_TIMEOUT = 60
-
 # Maximum time (second) between rotator application telemetry topics,
 # beyond which rotator velocity will not be estimated.
 MAX_ROTATOR_APPLICATION_GAP = 1
 
 
-DeviceEnableCommands = (
+AxisEnableCommands = (
     commands.AzimuthAxisDriveEnable,
     commands.ElevationAxisDriveEnable,
-    commands.AzimuthCableWrapDriveEnable,
     commands.CameraCableWrapDriveEnable,
 )
 
@@ -106,10 +102,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Both are set to exceptions if the command fails.
         self.command_dict = dict()
 
-        self.all_devices_enabled = False
+        self.command_lock = asyncio.Lock()
 
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = salobj.make_done_future()
+
+        # Task to track enabling and disabling
+        self.enable_task = salobj.make_done_future()
+        self.disable_task = salobj.make_done_future()
+        self.enable_state = enums.EnabledState.DISABLED
 
         # Task for self.camera_cable_wrap_loop
         self.camera_cable_wrap_task = salobj.make_done_future()
@@ -250,15 +251,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def enable_devices(self):
+        self.disable_task.cancel()
+        self.enabled_state = enums.EnabledState.ENABLING
         try:
-            await asyncio.wait_for(
-                self.send_commands(
-                    *[command(drive=-1, on=True) for command in DeviceEnableCommands]
-                ),
-                timeout=ENABLE_TIMEOUT,
-            )
-            self.all_devices_enabled = True
+            enable_commands = [
+                commands.TopEndChillerPower(on=True),
+                commands.MainPowerSupplyPower(on=True),
+                commands.OilSupplySystemPower(on=True),
+            ] + [command(drive=-1, on=True) for command in AxisEnableCommands]
+            await self.send_commands(*enable_commands)
+            self.enabled_state = enums.EnabledState.ENABLED
         except Exception as e:
+            self.enabled_state = enums.EnabledState.ENABLE_FAILED
             err_msg = "Failed to enable one or more devices"
             self.log.exception(err_msg)
             self.fault(
@@ -266,15 +270,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def disable_devices(self):
-        self.all_devices_enabled = False
+        self.enable_task.cancel()
+        self.enabled_state = enums.EnabledState.DISABLING
         try:
-            await asyncio.wait_for(
-                self.send_commands(
-                    *[command(drive=-1, on=False) for command in DeviceEnableCommands]
-                ),
-                timeout=ENABLE_TIMEOUT,
-            )
+            disable_commands = [commands.BothAxesStop()] + [
+                command(drive=-1, on=False) for command in AxisEnableCommands
+            ]
+            await self.send_commands(*disable_commands)
+            self.enabled_state = enums.EnabledState.DISABLED
         except Exception as e:
+            self.enabled_state = enums.EnabledState.DISABLE_FAILED
             err_msg = "Failed to disable one or more devices"
             self.log.exception(err_msg)
             self.fault(
@@ -286,12 +291,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if self.disabled_or_enabled:
             if not self.connected and self.connect_task.done():
                 await self.connect()
-            if self.summary_state == salobj.State.ENABLED:
-                if not self.all_devices_enabled:
-                    await self.enable_devices()
-            else:
-                await self.disable_devices()
+            if self.enable_state is not enums.EnabledState.ENABLED:
+                self.enable_task.cancel()
+                self.enable_task = asyncio.create_task(self.enable_devices())
+                await self.enable_task
         else:
+            if self.enable_state is not enums.EnabledState.DISABLED:
+                self.disable_task.cancel()
+                self.disable_task = asyncio.create_task(self.disable_devices())
+                await self.disable_task
             await self.close_communication()
 
     async def implement_simulation_mode(self, simulation_mode):
@@ -300,7 +308,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 f"Simulation_mode={simulation_mode} must be 0 or 1"
             )
 
-    async def send_command(self, command, wait_done=True):
+    async def send_command(self, command, dolock=True):
         """Send a command to the operation manager
         and add it to command_dict.
 
@@ -308,61 +316,75 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ----------
         command : `Command`
             Command to send.
-        wait_done : `bool` (optional)
-            Wait for the command to finish?
-            Note: always waits for the command to be acknowledged.
+        dolock : `bool` (optional)
+            Lock the port while using it?
+            Specify False for emergency commands
+            or if being called by send_commands.
 
 
         Returns
         -------
         command_futures : `command_futures.CommandFutures`
             Futures that monitor the command.
-
-        Notes
-        -----
-        If the command is one that receives no Done message then
-        ``wait_done`` is ignored and both the ack and done futures
-        are set done when the command is acknowledged.
         """
         try:
-            if not self.connected:
-                raise salobj.ExpectedError("Not connected to the low-level controller.")
-
-            if command.sequence_id in self.command_dict:
-                raise RuntimeError(
-                    f"Bug! Duplicate sequence_id {command.sequence_id} in command_dict"
-                )
-            futures = command_futures.CommandFutures()
-            self.command_dict[command.sequence_id] = futures
-            await self.communicator.write(command)
-            await asyncio.wait_for(futures.ack, self.config.ack_timeout)
-            if command.command_code in commands.AckOnlyCommandCodes:
-                # This command only receives an Ack; mark it done.
-                futures.done.set_result(None)
-            elif wait_done:
-                await asyncio.wait_for(
-                    futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
-                )
-            return futures
+            if dolock:
+                async with self.command_lock:
+                    return await self._basic_send_command(command=command)
+            else:
+                return await self._basic_send_command(command=command)
         except Exception:
             self.log.exception(f"send_command({command}) failed")
             raise
 
-    async def send_commands(self, *commands):
+    async def _basic_send_command(self, command):
+        """Implementation of send_command. Ignores the command lock.
+        """
+        if not self.connected:
+            raise salobj.ExpectedError("Not connected to the low-level controller.")
+        if command.sequence_id in self.command_dict:
+            raise RuntimeError(
+                f"Bug! Duplicate sequence_id {command.sequence_id} in command_dict"
+            )
+        futures = command_futures.CommandFutures()
+        self.command_dict[command.sequence_id] = futures
+        self.log.debug(f"write command: %s", command)
+        await self.communicator.write(command)
+        await asyncio.wait_for(futures.ack, self.config.ack_timeout)
+        if command.command_code in commands.AckOnlyCommandCodes:
+            # This command only receives an Ack; mark it done.
+            futures.done.set_result(None)
+        else:
+            await asyncio.wait_for(
+                futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
+            )
+        return futures
+
+    async def send_commands(self, *commands, dolock=True):
         """Run a set of operation manager commands.
 
         Parameters
         ----------
         commands : `List` [``Command``]
             Commands to send. The sequence_id attribute is set.
+        dolock : `bool` (optional)
+            Lock the port while using it?
+            Specify False for emergency commands.
+
+        Returns
+        -------
+        futures_list : `List` [`CommandFutures`]
+            Command future for each command.
         """
-        futures_set = []
-        for command in commands:
-            futures_set.append(await self.send_command(command, wait_done=False))
-        timeout = max(futures.timeout for futures in futures_set) + TIMEOUT_BUFFER
-        done_tasks = [futures.done for futures in futures_set]
-        await asyncio.wait_for(asyncio.gather(*done_tasks), timeout=timeout)
-        return done_tasks
+        futures_list = []
+        if dolock:
+            async with self.command_lock:
+                for command in commands:
+                    futures_list.append(await self.send_command(command, dolock=False))
+        else:
+            for command in commands:
+                futures_list.append(await self.send_command(command, dolock=False))
+        return futures_list
 
     async def camera_cable_wrap_loop(self):
         self.log.info("camera_cable_wrap_loop begins")
@@ -504,11 +526,26 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_closeMirrorCovers(self, data):
         self.assert_enabled()
-        await self.send_command(commands.MirrorCoversClose(drive=-1))
+        await self.send_commands(
+            commands.MirrorCoverLocksPower(drive=-1, on=True),
+            commands.MirrorCoversPower(drive=-1, on=True),
+            commands.MirrorCoverLocksMoveAll(drive=-1, lock=False),
+            commands.MirrorCoversClose(drive=-1),
+            commands.MirrorCoverLocksMoveAll(drive=-1, lock=True),
+            commands.MirrorCoversPower(drive=-1, on=False),
+            commands.MirrorCoverLocksPower(drive=-1, on=False),
+        )
 
     async def do_openMirrorCovers(self, data):
         self.assert_enabled()
-        await self.send_command(commands.MirrorCoversOpen(drive=-1))
+        await self.send_commands(
+            commands.MirrorCoverLocksPower(drive=-1, on=True),
+            commands.MirrorCoversPower(drive=-1, on=True),
+            commands.MirrorCoverLocksMoveAll(drive=-1, lock=False),
+            commands.MirrorCoversOpen(drive=-1),
+            commands.MirrorCoversPower(drive=-1, on=False),
+            commands.MirrorCoverLocksPower(drive=-1, on=False),
+        )
 
     async def do_disableCameraCableWrapTracking(self, data):
         self.assert_enabled()
@@ -522,30 +559,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_moveToTarget(self, data):
         self.assert_enabled()
-        # Note: velocity, acceleration and jerk are maximum values,
-        # but 0 uses the default value.
-        await self.send_commands(
-            commands.AzimuthAxisMove(
-                position=data.azimuth, velocity=0, acceleration=0, jerk=0
-            ),
-            commands.ElevationAxisMove(
-                position=data.elevation, velocity=0, acceleration=0, jerk=0
-            ),
+        await self.send_command(
+            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation,),
         )
 
     async def do_trackTarget(self, data):
         self.assert_enabled()
         tai_astropy = salobj.astropy_time_from_tai_unix(data.taiTime)
-        await self.send_commands(
-            commands.AzimuthAxisTrack(
+        await self.send_command(
+            commands.BothAxesTrack(
+                azimuth=data.azimuth,
+                azimuth_velocity=data.azimuthVelocity,
+                elevation=data.elevation,
+                elevation_velocity=data.elevationVelocity,
                 tai_time=tai_astropy,
-                position=data.azimuth,
-                velocity=data.azimuthVelocity,
-            ),
-            commands.ElevationAxisTrack(
-                tai_time=tai_astropy,
-                position=data.elevation,
-                velocity=data.elevationVelocity,
             ),
         )
         self.evt_target.set_put(
@@ -570,9 +597,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stop(self, data):
         self.assert_enabled()
         await self.send_commands(
-            commands.ElevationAxisStop(),
-            commands.AzimuthAxisStop(),
-            commands.CameraCableWrapStop(),
+            commands.BothAxesStop(), commands.CameraCableWrapStop(), lock=False,
         )
 
     async def do_stopTracking(self, data):
