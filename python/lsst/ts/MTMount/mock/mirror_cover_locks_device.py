@@ -19,14 +19,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["MirrorCoversDevice"]
+__all__ = ["MirrorCoverLocksDevice"]
 
 from .. import enums
 from .point_to_point_device import PointToPointDevice
 
 
-class MirrorCoversDevice(PointToPointDevice):
-    """Mirror covers.
+class MirrorCoverLocksDevice(PointToPointDevice):
+    """Mirror cover locks.
 
     Supports all commands except MOVE and MOVE_VELOCITY.
 
@@ -42,11 +42,11 @@ class MirrorCoversDevice(PointToPointDevice):
     def __init__(self, controller):
         super().__init__(
             controller=controller,
-            device_id=enums.DeviceId.MIRROR_COVERS,
+            device_id=enums.DeviceId.MIRROR_COVER_LOCKS,
             min_position=0,
             max_position=100,
             start_position=0,
-            speed=50,
+            speed=100,
             multi_drive=True,
         )
 
@@ -56,11 +56,9 @@ class MirrorCoversDevice(PointToPointDevice):
     def do_move_velocity(self, command):
         raise NotImplementedError("Not implemented")
 
-    def do_close(self, command):
-        return self.move(position=0, command=command)
-
-    def do_open(self, command):
-        return self.move(position=100, command=command)
+    def do_move_all(self, command):
+        position = 100 if command.lock else 0
+        return self.move(position=position, command=command)
 
     def do_stop(self, command):
         """Stop the actuator.

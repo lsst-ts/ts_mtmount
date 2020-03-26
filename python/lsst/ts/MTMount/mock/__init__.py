@@ -19,6 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from .base_device import *
 from .axis_device import *
+from .main_power_supply_device import *
+from .mirror_cover_locks_device import *
+from .mirror_covers_device import *
+from .oil_supply_system_device import *
+from .top_end_chiller_device import *
 from .controller import *

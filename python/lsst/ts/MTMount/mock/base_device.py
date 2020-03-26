@@ -21,9 +21,6 @@
 
 __all__ = ["BaseDevice"]
 
-# import asyncio
-
-# from lsst.ts import salobj
 from .. import enums
 from .. import commands
 
@@ -36,7 +33,7 @@ class BaseDevice:
     controller : `MockController`
         Mock controller.
     device_id : `DeviceId`
-        BaseDevice ID.
+        Device ID.
 
     Notes
     -----
@@ -95,8 +92,8 @@ class BaseDevice:
                 self.controller.command_dict[command_code] = do_method
                 self.log.debug(f"Add {command_code.name} command to command_dict")
 
-    async def do_power(self, command):
+    def do_power(self, command):
         self.power_on = command.on
 
-    async def do_reset_alarm(self, command):
+    def do_reset_alarm(self, command):
         self.alarm_on = False

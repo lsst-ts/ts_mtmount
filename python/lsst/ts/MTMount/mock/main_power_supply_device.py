@@ -19,51 +19,36 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["MirrorCoversDevice"]
+__all__ = ["MainPowerSupplyDevice"]
+
+import asyncio
 
 from .. import enums
-from .point_to_point_device import PointToPointDevice
+from .base_device import BaseDevice
 
 
-class MirrorCoversDevice(PointToPointDevice):
-    """Mirror covers.
-
-    Supports all commands except MOVE and MOVE_VELOCITY.
-
-    Unlike the real system, the drive argument must always be -1
-    (meaning all drives). That suffices for the CSC.
+class MainPowerSupplyDevice(BaseDevice):
+    """Main power supply.
 
     Parameters
     ----------
     controller : `MockController`
         Mock controller.
+
+    Notes
+    -----
+    The real main power supply takes about 2 minutes to turn on.
+    This mock is fast, to avoid needlessly slowing down unit tests.
     """
 
     def __init__(self, controller):
         super().__init__(
-            controller=controller,
-            device_id=enums.DeviceId.MIRROR_COVERS,
-            min_position=0,
-            max_position=100,
-            start_position=0,
-            speed=50,
-            multi_drive=True,
+            controller=controller, device_id=enums.DeviceId.MAIN_POWER_SUPPLY
         )
 
-    def do_move(self, command):
-        raise NotImplementedError("Not implemented")
-
-    def do_move_velocity(self, command):
-        raise NotImplementedError("Not implemented")
-
-    def do_close(self, command):
-        return self.move(position=0, command=command)
-
-    def do_open(self, command):
-        return self.move(position=100, command=command)
-
-    def do_stop(self, command):
-        """Stop the actuator.
-        """
-        self.supersede_move_command()
-        self.actuator.stop()
+    def do_power(self, command):
+        super().do_power(command)
+        # The real system takes about 2 minutes to turn on.
+        timeout = 120 if command.on else 0
+        asyncio.create_task(self.controller.write_done(command))
+        return timeout
