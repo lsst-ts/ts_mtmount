@@ -10,6 +10,6 @@ import lsst.ts.MTMount
 _g = globals()
 _g.update(
     build_package_configs(
-        project_name="ts_MTMount", version=lsst.ts.MTMount.version.__version__
+        project_name="ts_MTMount", version=lsst.ts.MTMount.__version__
     )
 )
