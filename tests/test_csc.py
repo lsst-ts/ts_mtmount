@@ -22,6 +22,7 @@
 import asyncio
 import pathlib
 import logging
+import time
 
 import asynctest
 
@@ -29,7 +30,7 @@ from lsst.ts import salobj
 from lsst.ts import MTMount
 
 STD_TIMEOUT = 2  # standard command timeout (sec)
-LONG_TIMEOUT = 20  # timeout for starting SAL components (sec)
+MIRROR_COVER_TIMEOUT = 5  # timeout for opening or closing mirror covers (sec)
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
 port_generator = salobj.index_generator(imin=3200)
@@ -206,33 +207,33 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             # Instead of waiting for the command to finish,
             # check the intermediate state and obtain the expected duration,
             # then wait for the command to finish.
-            ackcmd = await self.remote.cmd_openMirrorCovers.start(
-                timeout=STD_TIMEOUT, wait_done=False
-            )
-            await asyncio.sleep(0.1)  # Give the command a chance to start
-            duration = actuator.remaining_time + 0.1
-            print(f"mirror cover move duration={duration:0.2f} sec")
-            self.assertTrue(actuator.moving)
-            self.assertAlmostEqual(actuator.end_position, 100)
-            await self.remote.cmd_openMirrorCovers.next_ackcmd(
-                ackcmd=ackcmd, timeout=STD_TIMEOUT + duration
-            )
-            self.assertFalse(actuator.moving)
+            t0 = time.monotonic()
+            await self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
+            dt = time.monotonic() - t0
+            print(f"opening the mirror covers took {dt:0.2f} sec")
 
             # Open the mirror covers again; this should be quick.
+            t0 = time.monotonic()
             await self.remote.cmd_openMirrorCovers.start(timeout=STD_TIMEOUT)
+            dt = time.monotonic() - t0
+            print(f"opening the mirror covers again took {dt:0.2f} sec")
             self.assertAlmostEqual(actuator.current_position, 100)
             self.assertFalse(actuator.moving)
 
             # Close the mirror covers.
-            await self.remote.cmd_closeMirrorCovers.start(
-                timeout=STD_TIMEOUT + duration
-            )
+            t0 = time.monotonic()
+            await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
+            dt = time.monotonic() - t0
+            print(f"closing the mirror covers took {dt:0.2f} sec")
             self.assertAlmostEqual(actuator.current_position, 0)
             self.assertFalse(actuator.moving)
 
-            # Close the mirror covers again; should be quick.
-            await self.remote.cmd_closeMirrorCovers.start(timeout=STD_TIMEOUT)
+            # Close the mirror covers again;
+            # the locks are retracted and engaged so it takes some time.
+            t0 = time.monotonic()
+            await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
+            dt = time.monotonic() - t0
+            print(f"closing the mirror covers again took {dt:0.2f} sec")
             self.assertAlmostEqual(actuator.current_position, 0)
             self.assertFalse(actuator.moving)
 
@@ -278,7 +279,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             end_tai = max(mock_elevation.end_tai_unix, mock_azimuth.end_tai_unix)
             duration = 0.1 + end_tai - salobj.current_tai()
             print(f"axis move duration={duration:0.2f} sec")
-            await self.remote.cmd_openMirrorCovers.next_ackcmd(
+            await self.remote.cmd_moveToTarget.next_ackcmd(
                 ackcmd=ackcmd, timeout=STD_TIMEOUT + duration
             )
             tai_unix = salobj.current_tai()

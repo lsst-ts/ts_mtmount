@@ -80,6 +80,7 @@ Ack, NoAck and Done command replies have the following fields:
 * One additional parameter, if relevant:
 
   * Ack: command timeout value as an integer in milliseconds.
+    Add 2 seconds to this value if you wish to use this for a timeout timer.
   * NoAck: an explanation of why the command was rejected.
   * Done: no additional parameter
 
@@ -88,21 +89,27 @@ Warning and Error events have the following fields:
 * reply_code (int): 3=Error, 4=Warning.
 * on (int) (*only present for Errors*): 1 = error latched.
   When the error condition is first active this field is set to 1 and remains one until the error is reset.
-* active (int): 0 = condition is not present, 1 = condition is present
-* code (int): code number of event
-* source (int): event source
-* timestamp (str): timestamp in ISO format (UTC)
-* description (str): description of event
+* active (int): 0 = condition is not present, 1 = condition is present.
+* code (int): code number of event.
+  The code numbers consist of a `SubsystemId` plus a condition-specific value.
+* subsystem (str): subsystem with the problem, in the format f"{subsystem_id}. {component}", where:
+
+    * ``subsystem_id`` (int): subsystem ID: a `SubsystemId` value.
+    * ``component`` (str): the component of the subsystem.
+      Here are three examples provided by Alberto: "Azimuth", "Trajectory generator", "MyTopVI/MyNextVI/MyNextNextVI".
+* timestamp (str): timestamp in ISO format (UTC).
+* description (str): description of the problem.
+  Note: Tekniker's code includes all remaining message text in this field, but Tekniker assures me that the string will never include `\n`.
 
 OnStateInfo replies report the state of the TCS. They are the only replies initiated by the Operation Manager instead of the PXI:
 
-* reply_code (int): 5=OnStateInfo
-* timestamp (str): timestamp in ISO format (UTC)
+* reply_code (int): 5=OnStateInfo.
+* timestamp (str): timestamp in ISO format (UTC).
 * description (str): primary and secondary state, concatenated. For example "PublishOnlyWaitingForCommand".
   I do not know all possible values, but we don't plan to use the TCS so it doesn't matter.
 
 InPositionReply replies indicate if the Azimuth or Elevation axes are in position:
 
-* reply_code (int): 6=InPositionReply
-* timestamp (str): timestamp in ISO format (UTC)
-* in_position (int): ???
+* reply_code (int): 6=InPositionReply.
+* timestamp (str): timestamp in ISO format (UTC).
+* in_position (int): 0 for the azimuth axis, 1 for the elevation axis.

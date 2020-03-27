@@ -31,7 +31,11 @@ from .. import communicator
 
 # from . import device
 from .axis_device import AxisDevice
+from .main_power_supply_device import MainPowerSupplyDevice
 from .mirror_covers_device import MirrorCoversDevice
+from .mirror_cover_locks_device import MirrorCoverLocksDevice
+from .oil_supply_system_device import OilSupplySystemDevice
+from .top_end_chiller_device import TopEndChillerDevice
 
 
 class Controller:
@@ -69,15 +73,18 @@ class Controller:
         self.command_dict = {}
         # Dict of DeviceId: mock device
         self.device_dict = {}
-        self.add_axis_controllers()
+        self.add_all_devices()
+        self.command_dict[enums.CommandCode.BOTH_AXES_MOVE] = self.do_both_axes_move
+        self.command_dict[enums.CommandCode.BOTH_AXES_STOP] = self.do_both_axes_stop
+        self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
 
         self.read_loop_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.start())
 
-    def add_axis_controllers(self):
-        """Add axis controller devices.
+    def add_all_devices(self):
+        """Add all mock devices.
 
-        The axis controller is a new attribute ``device_id.name.lower()``.
+        The devices are added to self.device_dict.
 
         Parameters
         ----------
@@ -87,30 +94,29 @@ class Controller:
         for device_id in (
             enums.DeviceId.ELEVATION_AXIS,
             enums.DeviceId.AZIMUTH_AXIS,
-            enums.DeviceId.AZIMUTH_CABLE_WRAP,
             enums.DeviceId.CAMERA_CABLE_WRAP,
         ):
-            self.add_device(device_id=device_id, device_class=AxisDevice)
-        self.add_device(
-            device_id=enums.DeviceId.MIRROR_COVERS, device_class=MirrorCoversDevice
-        )
+            self.add_device(AxisDevice, device_id=device_id)
+        self.add_device(MainPowerSupplyDevice)
+        self.add_device(MirrorCoverLocksDevice)
+        self.add_device(MirrorCoversDevice)
+        self.add_device(OilSupplySystemDevice)
+        self.add_device(TopEndChillerDevice)
 
-    def add_device(self, device_id, device_class, **kwargs):
+    def add_device(self, device_class, **kwargs):
         """Add a mock device.
 
-        The device is a new attribute ``device_id.name.lower()``.
+        The device is added to self.device_dict.
 
         Parameters
         ----------
-        device_id : `Device`
-            Device identifier.
         device_class : `mock.Device`
             Mock device class.
         **kwargs : `dict`
             Additional arguments for ``device_class``.
         """
-        device = device_class(controller=self, device_id=device_id, **kwargs)
-        self.device_dict[device_id] = device
+        device = device_class(controller=self, **kwargs)
+        self.device_dict[device.device_id] = device
 
     def set_command_queue(self, maxsize=0):
         """Create the command queue.
@@ -195,6 +201,43 @@ class Controller:
     def connect_callback(self, server):
         state_str = "connected to" if server.connected else "disconnected from"
         self.log.info(f"Mock controller {state_str} the CSC")
+
+    def do_both_axes_move(self, command):
+        azimuth_command = commands.AzimuthAxisMove(
+            sequence_id=command.sequence_id, position=command.azimuth,
+        )
+        elevation_command = commands.ElevationAxisMove(
+            sequence_id=command.sequence_id, position=command.elevation,
+        )
+        azimuth_time = self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_move(
+            azimuth_command
+        )
+        elevation_time = self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_move(
+            elevation_command
+        )
+        return max(azimuth_time, elevation_time)
+
+    def do_both_axes_stop(self, command):
+        azimuth_command = commands.AzimuthAxisStop(sequence_id=command.sequence_id)
+        elevation_command = commands.ElevationAxisStop(sequence_id=command.sequence_id)
+        self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_stop(azimuth_command)
+        self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_stop(elevation_command)
+
+    def do_both_axes_track(self, command):
+        azimuth_command = commands.AzimuthAxisTrack(
+            sequence_id=command.sequence_id,
+            position=command.azimuth,
+            velocity=command.azimuth_velocity,
+            tai_time=command.tai_time,
+        )
+        elevation_command = commands.ElevationAxisTrack(
+            sequence_id=command.sequence_id,
+            position=command.elevation,
+            velocity=command.elevation_velocity,
+            tai_time=command.tai_time,
+        )
+        self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_track(azimuth_command)
+        self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_track(elevation_command)
 
     async def write_ack(self, command, timeout):
         """Report a command as acknowledged.

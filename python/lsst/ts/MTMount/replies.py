@@ -144,14 +144,12 @@ class WarningReply(Reply):
     field_infos = make_reply_field_infos(
         enums.ReplyCode.WARNING,
         (
-            field_info.BoolFieldInfo(
-                name="active",
-                doc="Is the error or warning active? (what does this mean?)",
-            ),
+            field_info.BoolFieldInfo(name="active", doc="Is the condition present?"),
             field_info.IntFieldInfo(
-                name="code", doc="The code number of the event. (what does this mean?)"
+                name="code",
+                doc="Warning/error code number; A SubsystemId plus a condition-specific code.",
             ),
-            field_info.SourceFieldInfo(what="warning"),
+            field_info.SubsystemFieldInfo(what="warning"),
             field_info.TimestampFieldInfo(),
         ),
     )
@@ -162,17 +160,15 @@ class ErrorReply(Reply):
     field_infos = make_reply_field_infos(
         enums.ReplyCode.ERROR,
         (
+            field_info.BoolFieldInfo(name="on", doc="Is the error latched?"),
             field_info.BoolFieldInfo(
-                name="on", doc="Is the error on? (what does this mean?)"
-            ),
-            field_info.BoolFieldInfo(
-                name="active",
-                doc="Is the error or warning active? (what does this mean?)",
+                name="active", doc="Is the condition still present?",
             ),
             field_info.IntFieldInfo(
-                name="code", doc="The code number of the event. (what does this mean?)"
+                name="code",
+                doc="Warning/error code number; A SubsystemId plus a condition-specific code.",
             ),
-            field_info.SourceFieldInfo(what="error"),
+            field_info.SubsystemFieldInfo(what="error"),
             field_info.TimestampFieldInfo(),
         ),
     )
@@ -198,16 +194,19 @@ class InPositionReply(Reply):
         Reply code. Must be ON_STATE_INFO.
     timestamp : `astropy.time.Time` or `None`
         Timestamp. If `None` use the current time.
-    in_position : `int`
-        Presumably what is in position, but not sure how it is encoded.
+    what : `int`
+        The subsystem: 0 for azimuth, 1 for elevation.
+    in_position : `bool`
+        True if in position, False if not.
     """
 
     field_infos = make_reply_field_infos(
         enums.ReplyCode.IN_POSITION,
         (
             field_info.TimestampFieldInfo(),
-            field_info.IntFieldInfo(
-                name="in_position", doc="I'm not sure what this is"
+            field_info.IntFieldInfo(name="what", doc="0 for azimuth, 1 for elevation"),
+            field_info.BoolFieldInfo(
+                name="in_position", doc="True if in position, False if not"
             ),
         ),
     )

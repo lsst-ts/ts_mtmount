@@ -65,9 +65,6 @@ LimitsDict = {
     enums.DeviceId.AZIMUTH_AXIS: Limits(
         min_position=-180, max_position=360, max_velocity=3, max_acceleration=1
     ),
-    enums.DeviceId.AZIMUTH_CABLE_WRAP: Limits(
-        min_position=-180, max_position=360, max_velocity=3, max_acceleration=1
-    ),
     enums.DeviceId.CAMERA_CABLE_WRAP: Limits(
         min_position=-100, max_position=100, max_velocity=3, max_acceleration=1
     ),

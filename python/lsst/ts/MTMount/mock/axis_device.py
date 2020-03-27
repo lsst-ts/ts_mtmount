@@ -27,10 +27,10 @@ from lsst.ts import salobj
 from lsst.ts import simactuators
 from .. import enums
 from .. import limits
-from . import base_device
+from .base_device import BaseDevice
 
 
-class AxisDevice(base_device.BaseDevice):
+class AxisDevice(BaseDevice):
     """Mock axis controller device.
 
     Suports all commands except MOVE_VELOCITY.
@@ -40,7 +40,17 @@ class AxisDevice(base_device.BaseDevice):
     controller : `MockController`
         Mock controller.
     device_id : `DeviceId`
-        Device ID
+        Device ID. Must be one of:
+
+        * enums.DeviceId.AZIMUTH_AXIS
+        * enums.DeviceId.ELEVATION_AXIS
+        * enums.DeviceId.CAMERA_CABLE_WRAP
+
+    Notes
+    -----
+    There is no mock azimuth cable wrap because in the real system
+    the azimuth axis takes care of that cable wrap, so `MTMountCsc`
+    has no need to send commands to it.
     """
 
     def __init__(self, controller, device_id):

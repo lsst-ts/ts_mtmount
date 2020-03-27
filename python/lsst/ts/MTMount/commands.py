@@ -31,14 +31,9 @@ __all__ = [
     "AzimuthAxisResetAlarm",
     "AzimuthAxisStop",
     "AzimuthAxisTrack",
-    "AzimuthCableWrapDriveEnable",
-    "AzimuthCableWrapDriveReset",
-    "AzimuthCableWrapEnableTracking",
-    "AzimuthCableWrapMove",
-    "AzimuthCableWrapPower",
-    "AzimuthCableWrapResetAlarm",
-    "AzimuthCableWrapStop",
-    "AzimuthCableWrapTrack",
+    "BothAxesMove",
+    "BothAxesStop",
+    "BothAxesTrack",
     "CameraCableWrapDriveEnable",
     "CameraCableWrapDriveReset",
     "CameraCableWrapEnableTracking",
@@ -58,11 +53,23 @@ __all__ = [
     "ElevationAxisStop",
     "ElevationAxisTrack",
     "MainPowerSupplyPower",
+    "MirrorCoverLocksMoveAll",
+    "MirrorCoverLocksPower",
+    "MirrorCoverLocksResetAlarm",
+    "MirrorCoverLocksStop",
     "MirrorCoversClose",
     "MirrorCoversOpen",
     "MirrorCoversPower",
     "MirrorCoversResetAlarm",
     "MirrorCoversStop",
+    "OilSupplySystemPower",
+    "OilSupplySystemPowerCooling",
+    "OilSupplySystemPowerMainPump",
+    "OilSupplySystemPowerOil",
+    "OilSupplySystemResetAlarm",
+    "TopEndChillerPower",
+    "TopEndChillerResetAlarm",
+    "TopEndChillerTrackAmbient",
     "Commands",
     "CommandDict",
     "parse_command",
@@ -166,11 +173,21 @@ _TrackingParameters = (
 
 _MoveParameters = (
     field_info.FloatFieldInfo(name="position", doc="Target position (deg)."),
-    field_info.FloatFieldInfo(name="velocity", doc="Maximum velocity (deg/second)."),
     field_info.FloatFieldInfo(
-        name="acceleration", doc="Maximum acceleration (deg/second2)."
+        name="velocity",
+        default=0,
+        doc="Maximum velocity; 0 for the default value (deg/second).",
     ),
-    field_info.FloatFieldInfo(name="jerk", doc="Maximum jerk (deg/second3)."),
+    field_info.FloatFieldInfo(
+        name="acceleration",
+        default=0,
+        doc="Maximum acceleration; 0 for the default value (deg/second2).",
+    ),
+    field_info.FloatFieldInfo(
+        name="jerk",
+        default=0,
+        doc="Maximum jerk; 0 for the default value (deg/second3).",
+    ),
 )
 
 _OnOffParameters = (
@@ -250,52 +267,70 @@ class AzimuthAxisTrack(Command):
     )
 
 
-class AzimuthCableWrapDriveEnable(Command):
+class BothAxesMove(Command):
+    """Move both axes to a specified position and stop."""
+
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_CABLE_WRAP_DRIVE_ENABLE,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),)
-        + _OnOffParameters,
+        enums.CommandCode.BOTH_AXES_MOVE,
+        (
+            field_info.FloatFieldInfo(name="azimuth", doc="Desired azimuth (deg)"),
+            field_info.FloatFieldInfo(name="elevation", doc="Desired elevation (deg)"),
+            field_info.FloatFieldInfo(
+                name="azimuth_velocity",
+                default=0,
+                doc="Maximum azimuth velocity (0 for the default value) (deg)",
+            ),
+            field_info.FloatFieldInfo(
+                name="elevation_velocity",
+                default=0,
+                doc="Maximum elevation velocity (0 for the default value) (deg)",
+            ),
+            field_info.IntFieldInfo(
+                name="negate_azimuth",
+                default=0,
+                doc="If 0 accept azimuth as is; if -1 multiply azimuth by -1",
+            ),
+        ),
     )
 
 
-class AzimuthCableWrapDriveReset(Command):
+class BothAxesStop(Command):
+    """Stop both axes."""
+
+    field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_STOP)
+
+
+class BothAxesTrack(Command):
+    """Specify the tracking target for both axes."""
+
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_CABLE_WRAP_DRIVE_RESET,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),),
-    )
-
-
-class AzimuthCableWrapEnableTracking(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_CABLE_WRAP_ENABLE_TRACKING, _OnOffParameters
-    )
-
-
-class AzimuthCableWrapMove(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_CABLE_WRAP_MOVE, _MoveParameters
-    )
-
-
-class AzimuthCableWrapPower(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_CABLE_WRAP_POWER, _OnOffParameters
-    )
-
-
-class AzimuthCableWrapResetAlarm(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_CABLE_WRAP_RESET_ALARM,
-    )
-
-
-class AzimuthCableWrapStop(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_CABLE_WRAP_STOP)
-
-
-class AzimuthCableWrapTrack(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_CABLE_WRAP_TRACK, _TrackingParameters
+        enums.CommandCode.BOTH_AXES_TRACK,
+        (
+            field_info.FloatFieldInfo(
+                name="azimuth", doc="Target azimuth at tai_time (deg)"
+            ),
+            field_info.FloatFieldInfo(
+                name="elevation", doc="Target elevation at tai_time (deg)"
+            ),
+            field_info.FloatFieldInfo(
+                name="azimuth_velocity",
+                doc="Target azimuth velocity at tai_time (deg)",
+            ),
+            field_info.FloatFieldInfo(
+                name="elevation_velocity",
+                doc="Target elevation velocity at tai_time (deg)",
+            ),
+            field_info.IntFieldInfo(
+                name="negate_azimuth",
+                default=0,
+                doc="If 0 accept azimuth as is; if -1 multiply azimuth by -1",
+            ),
+            field_info.TimeFieldInfo(
+                name="tai_time",
+                doc="Target TAI time for position and velocity",
+                scale="tai",
+            ),
+        ),
     )
 
 
@@ -418,6 +453,55 @@ class MainPowerSupplyPower(Command):
 
 
 """
+Unsupported mirror cover locks commands:
+
+* MIRROR_COVER_LOCKS_MOVE = 903
+* MIRROR_COVER_LOCKS_MOVE_VELOCITY = 904
+"""
+
+
+class MirrorCoverLocksMoveAll(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVER_LOCKS_MOVE_ALL,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+            ),
+            field_info.BoolFieldInfo(name="lock", doc="Lock (True) or unlock (False)?"),
+        ),
+    )
+
+
+class MirrorCoverLocksPower(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVER_LOCKS_POWER,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+            ),
+        )
+        + _OnOffParameters,
+    )
+
+
+class MirrorCoverLocksResetAlarm(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVER_LOCKS_RESET_ALARM,
+    )
+
+
+class MirrorCoverLocksStop(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVER_LOCKS_STOP,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+            ),
+        ),
+    )
+
+
+"""
 Unsupported mirror cover commands:
 
 * MIRROR_COVERS_MOVE = 903
@@ -474,6 +558,55 @@ class MirrorCoversStop(Command):
     )
 
 
+class OilSupplySystemPower(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER, _OnOffParameters,
+    )
+
+
+class OilSupplySystemPowerCooling(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_COOLING, _OnOffParameters,
+    )
+
+
+class OilSupplySystemPowerMainPump(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_MAIN_PUMP, _OnOffParameters,
+    )
+
+
+class OilSupplySystemPowerOil(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_OIL, _OnOffParameters,
+    )
+
+
+class OilSupplySystemResetAlarm(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_RESET_ALARM,
+    )
+
+
+class TopEndChillerPower(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.TOP_END_CHILLER_POWER, _OnOffParameters,
+    )
+
+
+class TopEndChillerResetAlarm(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.TOP_END_CHILLER_RESET_ALARM,
+    )
+
+
+class TopEndChillerTrackAmbient(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.TOP_END_CHILLER_TRACK_AMBIENT,
+        _OnOffParameters + (field_info.FloatFieldInfo(name="temperature", doc="???"),),
+    )
+
+
 Commands = (
     AzimuthAxisDriveEnable,
     AzimuthAxisDriveReset,
@@ -484,14 +617,9 @@ Commands = (
     AzimuthAxisResetAlarm,
     AzimuthAxisStop,
     AzimuthAxisTrack,
-    AzimuthCableWrapDriveEnable,
-    AzimuthCableWrapDriveReset,
-    AzimuthCableWrapEnableTracking,
-    AzimuthCableWrapMove,
-    AzimuthCableWrapPower,
-    AzimuthCableWrapResetAlarm,
-    AzimuthCableWrapStop,
-    AzimuthCableWrapTrack,
+    BothAxesMove,
+    BothAxesStop,
+    BothAxesTrack,
     CameraCableWrapDriveEnable,
     CameraCableWrapDriveReset,
     CameraCableWrapEnableTracking,
@@ -511,11 +639,23 @@ Commands = (
     ElevationAxisStop,
     ElevationAxisTrack,
     MainPowerSupplyPower,
+    MirrorCoverLocksMoveAll,
+    MirrorCoverLocksPower,
+    MirrorCoverLocksResetAlarm,
+    MirrorCoverLocksStop,
     MirrorCoversClose,
     MirrorCoversOpen,
     MirrorCoversPower,
     MirrorCoversResetAlarm,
     MirrorCoversStop,
+    OilSupplySystemPower,
+    OilSupplySystemPowerCooling,
+    OilSupplySystemPowerMainPump,
+    OilSupplySystemPowerOil,
+    OilSupplySystemResetAlarm,
+    TopEndChillerPower,
+    TopEndChillerResetAlarm,
+    TopEndChillerTrackAmbient,
 )
 
 for command in Commands:
