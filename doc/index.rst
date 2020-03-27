@@ -6,7 +6,7 @@ lsst.ts.MTMount
 
 A CSC that controls the Simonyi Survey Telescope main axes and related components.
 
-It communicates with a low level controller written by Tekniker. For more information see `lsst.ts.MTMount-tekniker_info`_.
+It communicates with a low level controller written by Tekniker. For more information see :ref:`lsst.ts.MTMount-tekniker_info`.
 
 .. .. _lsst.ts.MTMount-using:
 

@@ -108,8 +108,10 @@ OnStateInfo replies report the state of the TCS. They are the only replies initi
 * description (str): primary and secondary state, concatenated. For example "PublishOnlyWaitingForCommand".
   I do not know all possible values, but we don't plan to use the TCS so it doesn't matter.
 
-InPositionReply replies indicate if the Azimuth or Elevation axes are in position:
+InPositionReply replies indicate if the Azimuth or Elevation axes are in position.
+Tekniker is still working on the details.
+The current format (which is not adequate) is as follows:
 
 * reply_code (int): 6=InPositionReply.
 * timestamp (str): timestamp in ISO format (UTC).
-* in_position (int): 0 for the azimuth axis, 1 for the elevation axis.
+* in_position (bool): in position?
