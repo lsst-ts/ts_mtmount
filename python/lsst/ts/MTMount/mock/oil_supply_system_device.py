@@ -73,8 +73,8 @@ class OilSupplySystemDevice(BaseDevice):
         asyncio.create_task(self.controller.write_done(command))
         return timeout
 
+    def do_power_main_pump(self, command):
+        self.main_pump_on = command.on
+
     def do_power_oil(self, command):
         self.oil_on = command.on
-
-    def do_power_main_pump(self, command):
-        self.do_power_main_pump = command.on
