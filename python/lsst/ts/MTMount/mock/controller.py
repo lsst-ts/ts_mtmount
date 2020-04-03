@@ -253,7 +253,6 @@ class Controller:
             timeout = 0
         reply = replies.AckReply(
             sequence_id=command.sequence_id,
-            sal_sequence_id=command.sal_sequence_id,
             source=command.source,
             timeout_ms=int(timeout * 1000),
         )
@@ -268,9 +267,7 @@ class Controller:
             Command to report as done.
         """
         reply = replies.DoneReply(
-            sequence_id=command.sequence_id,
-            sal_sequence_id=command.sal_sequence_id,
-            source=command.source,
+            sequence_id=command.sequence_id, source=command.source,
         )
         await self.communicator.write(reply)
 
@@ -286,7 +283,6 @@ class Controller:
         """
         reply = replies.NoAckReply(
             sequence_id=command.sequence_id,
-            sal_sequence_id=command.sal_sequence_id,
             source=command.source,
             explanation=explanation,
         )
