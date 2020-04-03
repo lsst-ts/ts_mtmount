@@ -127,10 +127,10 @@ class MockDevicesTestCase(asynctest.TestCase):
             device=device,
             power_on_command=MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
             goto_min_command=MTMount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, lock=False
+                drive=-1, deploy=False
             ),
             goto_max_command=MTMount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, lock=True
+                drive=-1, deploy=True
             ),
             stop_command=MTMount.commands.MirrorCoverLocksStop(drive=-1),
             start_at_min=True,

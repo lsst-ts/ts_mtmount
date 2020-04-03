@@ -529,24 +529,31 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_closeMirrorCovers(self, data):
         self.assert_enabled()
+        # Deploy the mirror cover locks/guides.
         await self.send_commands(
             commands.MirrorCoverLocksPower(drive=-1, on=True),
-            commands.MirrorCoversPower(drive=-1, on=True),
-            commands.MirrorCoverLocksMoveAll(drive=-1, lock=False),
-            commands.MirrorCoversClose(drive=-1),
-            commands.MirrorCoverLocksMoveAll(drive=-1, lock=True),
-            commands.MirrorCoversPower(drive=-1, on=False),
+            commands.MirrorCoverLocksMoveAll(drive=-1, deploy=True),
             commands.MirrorCoverLocksPower(drive=-1, on=False),
+        )
+        # Deploy the mirror covers.
+        await self.send_commands(
+            commands.MirrorCoversPower(drive=-1, on=True),
+            commands.MirrorCoversClose(drive=-1),
+            commands.MirrorCoversPower(drive=-1, on=False),
         )
 
     async def do_openMirrorCovers(self, data):
         self.assert_enabled()
+        # Retract the mirror covers.
         await self.send_commands(
-            commands.MirrorCoverLocksPower(drive=-1, on=True),
             commands.MirrorCoversPower(drive=-1, on=True),
-            commands.MirrorCoverLocksMoveAll(drive=-1, lock=False),
             commands.MirrorCoversOpen(drive=-1),
             commands.MirrorCoversPower(drive=-1, on=False),
+        )
+        # Retract the mirror cover locks/guides.
+        await self.send_commands(
+            commands.MirrorCoverLocksPower(drive=-1, on=True),
+            commands.MirrorCoverLocksMoveAll(drive=-1, deploy=False),
             commands.MirrorCoverLocksPower(drive=-1, on=False),
         )
 

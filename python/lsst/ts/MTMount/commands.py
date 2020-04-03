@@ -474,7 +474,9 @@ class MirrorCoverLocksMoveAll(Command):
             field_info.IntFieldInfo(
                 name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
             ),
-            field_info.BoolFieldInfo(name="lock", doc="Lock (True) or unlock (False)?"),
+            field_info.BoolFieldInfo(
+                name="deploy", doc="Deploy (True) or retract (False)?"
+            ),
         ),
     )
 
