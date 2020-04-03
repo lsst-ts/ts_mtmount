@@ -56,18 +56,19 @@ class ClientServerPair:
         Synchronous function to call when a connection is made or dropped.
         It receives one argument: this ClientServerPair.
 
-    Notes
-    -----
-    **Attributes**
-
-    * ``client_host``: client host name, a `str`.
-    * ``client_port``:  client port, an `int`.
-    * ``client_writer``: client socket writer, an `asyncio.StreamWriter`,
-      or `None` if not connected.
-    * ``client_reader``: client socket reader, an `asyncio.StreamReader`
-      or `None` if not connected.
-    * ``connect_task`` (only available if ``connect_client`` true):
-      an `asyncio.Task` that is set done when connected.
+    Attributes
+    ----------
+    client_host : `str`
+        Client host name.
+    client_port : `int`
+        Client port.
+    client_writer : `asyncio.StreamWriter` or `None`
+      Client socket writer, or `None` if not connected.
+    client_reader : `asyncio.StreamReader` or `None`
+        Client socket reader,  or `None` if not connected.
+    connect_task : `asyncio.Task`
+        An `asyncio.Task` that is set done when connected.
+        This attribute is only available if ``connect_client`` true.
     """
 
     connect_retry_interval = 0.1
