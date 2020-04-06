@@ -40,6 +40,7 @@ import enum
 import astropy.time
 
 from . import enums
+from . import utils
 
 
 class BaseFieldInfo(metaclass=abc.ABCMeta):
@@ -268,7 +269,8 @@ class TimeFieldInfo(BaseFieldInfo):
     """Date and time field.
 
     The str representation is ISO-8601, with "T" between the date and time.
-    For example: "2020-02-27T14:48:27.469".
+    For example: "2020-02-27T14:48:27.469". It will never have leap seconds
+    (see notes).
 
     Parameters
     ----------
@@ -277,12 +279,20 @@ class TimeFieldInfo(BaseFieldInfo):
     doc : `str` (optional)
         Description of the field.
     scale : `str`
-        One of "tai" or "utc". Support for other values supported by
-        `astropy.time` can easily be added, if needed. But Tekniker's
-        code only uses UTC and TAI.
+        One of "tai" or "utc", where "utc" is an approximation
+        without leap seconds (see notes).
     default : `True` or `None`
         If `True` then the current date is used as a default.
         If `None` then the date must be specified.
+
+    Notes
+    -----
+    ``scale="utc"`` is the unix time approximation to UTC, which has
+    no leap seconds. Instead the time is uniformly stretched on the day of
+    a leap second so there are the usual number of seconds in the day.
+    Tekniker's code only uses UTC time for *unimportant* message timestamps,
+    and this avoids the risk of passing Tekniker's code a timestamp value
+    that it cannot handle.
     """
 
     def __init__(self, name, doc, scale, default=None):
@@ -300,7 +310,12 @@ class TimeFieldInfo(BaseFieldInfo):
     def default(self):
         if self._default is None:
             return None
-        return astropy.time.Time(astropy.time.Time.now(), scale=self.scale)
+        if self.scale == "utc":
+            return astropy.time.Time.now()
+        elif self.scale == "tai":
+            return utils.get_tai_time()
+        else:
+            raise RuntimeError(f"Unsupported scale {self.scale}")
 
     def assert_value_ok(self, value):
         if not isinstance(value, astropy.time.Time):

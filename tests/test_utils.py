@@ -31,20 +31,14 @@ from lsst.ts.MTMount.utils import MAX_DOC_LENGTH
 class UtilsTestCase(unittest.TestCase):
     """Test the utils subpackage."""
 
-    def test_get_tai_time(self):
-        self.check_get_time(time_function=MTMount.get_tai_time, scale="tai")
-
-    def test_get_utc_time(self):
-        self.check_get_time(time_function=MTMount.get_utc_time, scale="utc")
-
-    def check_get_time(self, time_function, scale):
+    def check_get_tai(self):
         t0 = time.monotonic()
-        tai_time = MTMount.get_tai_time()
-        now = astropy.time.Time.now()
+        curr_tai = MTMount.get_tai_time()
+        curr_unix = time.time()
         dt = time.monotonic() - t0
-        self.assertIsInstance(tai_time, astropy.time.Time)
-        self.assertEqual(tai_time.scale, "tai")
-        time_diff_sec = (now - tai_time).sec
+        self.assertIsInstance(curr_tai, astropy.time.Time)
+        self.assertEqual(curr_tai.scale, "tai")
+        time_diff_sec = curr_unix - curr_tai.unix
         self.assertLessEqual(abs(time_diff_sec), dt)
 
     def test_wrap_parameter_doc(self):
