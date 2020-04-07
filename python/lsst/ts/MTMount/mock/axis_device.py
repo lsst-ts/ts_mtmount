@@ -51,6 +51,10 @@ class AxisDevice(BaseDevice):
     There is no mock azimuth cable wrap because in the real system
     the azimuth axis takes care of that cable wrap, so `MTMountCsc`
     has no need to send commands to it.
+
+    Enabling the device also turns it on,
+    but disabling the device does not turn it off.
+    I have no idea what the real system does.
     """
 
     def __init__(self, controller, device_id):
@@ -77,8 +81,12 @@ class AxisDevice(BaseDevice):
         return self.actuator.path[-1].tai
 
     def assert_enabled(self):
-        """Raise `RuntimeError` if the drive is not enabled.
+        """Raise `RuntimeError` if device is not fully enabled.
+
+        To be fully enabled, the device must be on, no alarm present,
+        and the drive enabled.
         """
+        self.assert_on()
         if not self.enabled:
             raise RuntimeError("Not enabled")
 
@@ -129,20 +137,37 @@ class AxisDevice(BaseDevice):
 
     def do_drive_enable(self, command):
         """Enable or disable the drive.
+
+        If enabling then turn power on.
+        If disabling then leave the power alone.
+        Always abort motion and disable tracking.
         """
         self.supersede_move_command()
+        self.actuator.abort()
+        self.tracking_enabled = False
+        if command.on:
+            self.power_on = True
         self.enabled = command.on
 
     def do_drive_reset(self, command):
         """Reset the drive.
+
+        The power must be on.
+
+        Abort motion, disable tracking, disable the drive.
         """
+        self.assert_on()
         self.supersede_move_command()
         self.actuator.abort()
+        self.tracking_enabled = False
         self.enabled = False
 
     def do_enable_tracking(self, command):
         """Enable or disable tracking mode.
+
+        The drive must be enabled.
         """
+        self.assert_enabled()
         self.supersede_move_command()
         self.actuator.abort()
         self.tracking_enabled = command.on
@@ -150,35 +175,50 @@ class AxisDevice(BaseDevice):
     def do_home(self, command):
         """Home the actuator.
 
+        The drive must be enabled and tracking must be disabled.
+
         For sake of doing something vaguely plausible,
         move to the mid-point of the position limits.
         """
-        position = (self.limits.min_position + self.limits.max_position) / 2
-        return self._move_point_to_point(position=position, command=command)
+        self.assert_enabled()
+        position = (self.actuator.min_position + self.actuator.max_position) / 2
+        return self.move_point_to_point(position=position, command=command)
 
     def do_move(self, command):
         """Set target position.
+
+        The drive must be enabled and tracking must be disabled.
 
         Velocity and acceleration limits are not applied,
         because it is tricky to make sure the values are
         correctly restored when the move finishes,
         and the CSC doesn't support these parameters anyway.
         """
-
-        return self._move_point_to_point(position=command.position, command=command)
+        self.assert_enabled()
+        return self.move_point_to_point(position=command.position, command=command)
 
     def do_move_velocity(self, command):
         raise NotImplementedError("Not implemented")
 
+    def do_power(self, command):
+        if not command.on:
+            self.supersede_move_command()
+            self.tracking_enabled = False
+            self.actuator.stop()
+        super().do_power(command)
+
     def do_stop(self, command):
         """Stop the actuator.
         """
+        self.assert_enabled()
         self.supersede_move_command()
         self.tracking_enabled = False
         self.actuator.stop()
 
     def do_track(self, command):
         """Specify a tracking target tai_time, position, velocity.
+
+        The drive must be enabled and tracking must be enabled.
         """
         self.assert_enabled()
         self.assert_tracking_enabled(True)
@@ -189,8 +229,10 @@ class AxisDevice(BaseDevice):
             tai=tai_unix, position=command.position, velocity=command.velocity
         )
 
-    def _move_point_to_point(self, position, command):
+    def move_point_to_point(self, position, command):
         """Move to the specified position.
+
+        The drive must be enabled and tracking must be disabled.
 
         Parameters
         ----------

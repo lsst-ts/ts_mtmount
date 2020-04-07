@@ -44,6 +44,9 @@ class OilSupplySystemDevice(BaseDevice):
     There must be rules about which oil subsystem must be on or off
     in other to turn the others on or off. But I don't know the rules,
     so I have not tried to enfoce anything.
+
+    This class ignores the _power_on attribute;
+    instead it keeps track with cooling_on, main_pump_on, oil_on.
     """
 
     def __init__(self, controller):
@@ -54,11 +57,20 @@ class OilSupplySystemDevice(BaseDevice):
             controller=controller, device_id=enums.DeviceId.OIL_SUPPLY_SYSTEM
         )
 
+    @property
+    def power_on(self):
+        """Return True if all three subsystems are powered on.
+        """
+        return self.cooling_on and self.main_pump_on and self.oil_on
+
+    @power_on.setter
+    def power_on(self, on):
+        self.cooling_on = on
+        self.main_pump_on = on
+        self.oil_on = on
+
     def do_power(self, command):
         super().do_power(command)
-        self.cooling_on = command.on
-        self.main_pump_on = command.on
-        self.oil_on = command.on
         # The real system can take roughly 15 minutes
         # to bring the oil to an acceptable temperature.
         timeout = 15 * 60 if command.on else 1
@@ -73,8 +85,8 @@ class OilSupplySystemDevice(BaseDevice):
         asyncio.create_task(self.controller.write_done(command))
         return timeout
 
+    def do_power_main_pump(self, command):
+        self.main_pump_on = command.on
+
     def do_power_oil(self, command):
         self.oil_on = command.on
-
-    def do_power_main_pump(self, command):
-        self.do_power_main_pump = command.on

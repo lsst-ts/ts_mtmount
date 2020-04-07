@@ -35,6 +35,8 @@ class TopEndChillerDevice(BaseDevice):
     """
 
     def __init__(self, controller):
+        # I am guessing that the top end chiller will track ambient
+        # when turned on, but I don't know.
         self.track_ambient = True
         self.temperature = 0
         super().__init__(
@@ -42,5 +44,7 @@ class TopEndChillerDevice(BaseDevice):
         )
 
     def do_track_ambient(self, command):
+        if not self.power_on:
+            raise RuntimeError("Device not powered on.")
         self.track_ambient = command.on
         self.temperature = command.temperature

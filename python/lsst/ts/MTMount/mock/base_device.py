@@ -68,10 +68,33 @@ class BaseDevice:
         self._device_prefix = self.device_id.name
         self.log = controller.log.getChild(self._device_prefix)
 
-        self.power_on = False
+        self._power_on = False
         self.alarm_on = False
 
         self.add_methods()
+
+    @property
+    def power_on(self):
+        """Return true if the device is powered on.
+
+        Notes
+        -----
+        Override this implementation if the device has multiple
+        subsystems that can individually be powered on.
+        """
+        return self._power_on
+
+    @power_on.setter
+    def power_on(self, on):
+        self._power_on = on
+
+    def assert_on(self):
+        """Raise `RuntimeError` if device off or in an alarm state.
+        """
+        if not self.power_on:
+            raise RuntimeError(f"{self.device_id!r} off")
+        if self.alarm_on:
+            raise RuntimeError(f"{self.device_id!r} in alarm state")
 
     def add_methods(self):
         """Add do_methods to the command dict

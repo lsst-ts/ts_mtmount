@@ -184,7 +184,7 @@ class FieldInfoTestCase(unittest.TestCase):
                     name=self.name, doc=self.doc, scale=scale
                 )
                 self.check_name_doc(field_info)
-                valid_date_str = astropy.time.Time.now().isot
+                valid_date_str = "2020-04-06T22:33:57.335"
                 valid_times = (
                     astropy.time.Time(valid_date_str, format="isot", scale=scale),
                     astropy.time.Time(2000, format="jyear", scale=scale),

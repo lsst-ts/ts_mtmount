@@ -47,12 +47,14 @@ __all__ = [
     "ElevationAxisDriveEnable",
     "ElevationAxisDriveReset",
     "ElevationAxisEnableTracking",
+    "ElevationAxisHome",
     "ElevationAxisMove",
     "ElevationAxisPower",
     "ElevationAxisResetAlarm",
     "ElevationAxisStop",
     "ElevationAxisTrack",
     "MainPowerSupplyPower",
+    "MainPowerSupplyResetAlarm",
     "MirrorCoverLocksMoveAll",
     "MirrorCoverLocksPower",
     "MirrorCoverLocksResetAlarm",
@@ -418,6 +420,10 @@ class ElevationAxisEnableTracking(Command):
     )
 
 
+class ElevationAxisHome(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_HOME,)
+
+
 class ElevationAxisMove(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_AXIS_MOVE, _MoveParameters
@@ -449,6 +455,12 @@ class ElevationAxisTrack(Command):
 class MainPowerSupplyPower(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.MAIN_POWER_SUPPLY_POWER, _OnOffParameters
+    )
+
+
+class MainPowerSupplyResetAlarm(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MAIN_POWER_SUPPLY_RESET_ALARM
     )
 
 
@@ -633,12 +645,14 @@ Commands = (
     ElevationAxisDriveEnable,
     ElevationAxisDriveReset,
     ElevationAxisEnableTracking,
+    ElevationAxisHome,
     ElevationAxisMove,
     ElevationAxisPower,
     ElevationAxisResetAlarm,
     ElevationAxisStop,
     ElevationAxisTrack,
     MainPowerSupplyPower,
+    MainPowerSupplyResetAlarm,
     MirrorCoverLocksMoveAll,
     MirrorCoverLocksPower,
     MirrorCoverLocksResetAlarm,

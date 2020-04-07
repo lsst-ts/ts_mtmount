@@ -256,6 +256,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         try:
             enable_commands = [
                 commands.TopEndChillerPower(on=True),
+                # I have asked Tekniker why there is a temperature argument
+                # for the top end chiller track ambient command.
+                commands.TopEndChillerTrackAmbient(on=True, temperature=0),
                 commands.MainPowerSupplyPower(on=True),
                 commands.OilSupplySystemPower(on=True),
             ] + [command(drive=-1, on=True) for command in AxisEnableCommands]
