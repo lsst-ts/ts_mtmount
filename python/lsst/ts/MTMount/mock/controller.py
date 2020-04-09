@@ -119,7 +119,7 @@ class Controller:
         self.device_dict[device.device_id] = device
 
     def set_command_queue(self, maxsize=0):
-        """Create the command queue.
+        """Create or replace the command queue.
 
         This sets attribute ``self.command_queue`` to an `asyncio.Queue`
         and uses it to record commands as they are received.
@@ -138,7 +138,7 @@ class Controller:
 
         This sets ``self.command_queue=None``.
         """
-        self.command_code = None
+        self.command_queue = None
 
     async def start(self):
         self.log.debug("start: connecting")
@@ -159,6 +159,7 @@ class Controller:
             await self.write_noack(
                 command=command, explanation="This command is not yet supported"
             )
+            return
 
         try:
             timeout = command_func(command)
