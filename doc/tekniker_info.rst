@@ -61,7 +61,6 @@ Commands
 Commands have the following fields:
 
 * sequence_id (int): an incrementing value supplied by the commander (e.g. EUI or CSC) used to identify the command in replies.
-* sal_command_id (int): the SAL command sequence number, or 0 if the commander is not the CSC.
 * command_code (int): the command code
 * source (int): who initiated the command
 * timestamp (str): timestamp in ISO format (UTC)
@@ -74,7 +73,6 @@ Ack, NoAck and Done command replies have the following fields:
 
 * reply_code (int): 0=Ack, 1=NoAck, 2=Done.
 * sequence_id (int): the value specified in the command.
-* sal_command_id (int): the value specified in the command
 * source (int): who initiated the command
 * timestamp (str): timestamp in ISO format (UTC)
 * One additional parameter, if relevant:

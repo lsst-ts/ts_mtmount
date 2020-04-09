@@ -29,21 +29,21 @@ from lsst.ts import salobj
 class CommandFutures:
     """asyncio futures to track the progress of an Operation Manager command.
 
-    Notes
-    -----
-    **Attributes**
+    Attributes
+    ----------
+    ack : `asyncio.Future`
+        Future which ends as follows:
 
-    * ack: an `asyncio.Future` which is set to:
+        * result = timeout (in sec) when the command is acknowledged
+          (an Ack reply is read).
+        * exception = `lsst.ts.salobj.ExpectedError` if the command fails
+          (a NoAck reply is read) before the command is acknowledged.
+    done : `asyncio.Future`
+        Future which ends as follows:
 
-      * result=timeout (in sec) when the command is acknowledged
-        (an Ack reply is read).
-      * exception=`lsst.ts.salobj.ExpectedError` if the command fails
-        (a NoAck reply is read) before the command is acknowledged.
-    * done: an `asyncio.Future` which is set to:
-
-      * result=`None` when the command finishes successfully
-        (a Done reply is read).
-      * exception=`lsst.ts.salobj.ExpectedError` if the command fails.
+        * result = `None` when the command finishes successfully
+          (a Done reply is read).
+        * exception = `lsst.ts.salobj.ExpectedError` if the command fails.
     """
 
     def __init__(self):

@@ -152,11 +152,6 @@ def make_command_field_infos(command_code, parameters=()):
             name="sequence_id",
             doc="Sequence number; used to identify replies to this command.",
         ),
-        field_info.IntFieldInfo(
-            name="sal_sequence_id",
-            doc="SAL command sequence number. Probably not used.",
-            default=0,
-        ),
         field_info.CommandCodeFieldInfo(command_code),
         field_info.SourceFieldInfo(what="command"),
         field_info.TimestampFieldInfo(),
@@ -479,7 +474,9 @@ class MirrorCoverLocksMoveAll(Command):
             field_info.IntFieldInfo(
                 name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
             ),
-            field_info.BoolFieldInfo(name="lock", doc="Lock (True) or unlock (False)?"),
+            field_info.BoolFieldInfo(
+                name="deploy", doc="Deploy (True) or retract (False)?"
+            ),
         ),
     )
 
@@ -683,7 +680,7 @@ def _make_command_dict():
     """
     command_dict = {}
     for command in Commands:
-        command_code = command.field_infos[2].default
+        command_code = command.field_infos[1].default
         if command_code in command_dict:
             raise RuntimeError(
                 "The command code appears twice: "
@@ -712,9 +709,9 @@ def parse_command(fields):
     ValueError
         If the data cannot be parsed.
     """
-    if len(fields) < 5:
-        raise ValueError(f"A command has at least 5 fields; only got {len(fields)}")
-    command_code = enums.CommandCode(int(fields[2]))
+    if len(fields) < 4:
+        raise ValueError(f"A command has at least 4 fields; only got {len(fields)}")
+    command_code = enums.CommandCode(int(fields[1]))
     try:
         CommandClass = CommandDict[command_code]
     except ValueError:

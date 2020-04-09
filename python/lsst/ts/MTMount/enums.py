@@ -150,6 +150,7 @@ class CommandCode(enum.IntEnum):
     LOCKING_PINS_MOVE_VELOCITY = 1404
     LOCKING_PINS_RESET_ALARM = 1405
     LOCKING_PINS_MOVE_ALL = 1406
+    # These are more guides or supports than actual locks
     MIRROR_COVER_LOCKS_POWER = 1501
     MIRROR_COVER_LOCKS_STOP = 1502
     MIRROR_COVER_LOCKS_MOVE = 1503

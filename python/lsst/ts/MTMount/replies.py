@@ -96,11 +96,6 @@ _ResponseFieldInfos = (
     field_info.IntFieldInfo(
         name="sequence_id", doc="sequence_id of command being acknowledged."
     ),
-    field_info.IntFieldInfo(
-        name="sal_sequence_id",
-        doc="sal_sequence_id of command being acknowledged.",
-        default=0,
-    ),
     field_info.SourceFieldInfo(what="command being replied to"),
     field_info.TimestampFieldInfo(),
 )

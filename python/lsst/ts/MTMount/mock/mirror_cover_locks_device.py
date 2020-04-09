@@ -57,7 +57,7 @@ class MirrorCoverLocksDevice(PointToPointDevice):
         raise NotImplementedError("Not implemented")
 
     def do_move_all(self, command):
-        position = 100 if command.lock else 0
+        position = 100 if command.deploy else 0
         return self.move(position=position, command=command)
 
     def do_stop(self, command):
