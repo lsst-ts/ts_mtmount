@@ -457,7 +457,7 @@ class MockDevicesTestCase(asynctest.TestCase):
             await self.run_command(track_command)
             self.assertAlmostEqual(device.actuator.target.position, position)
             self.assertAlmostEqual(device.actuator.target.velocity, velocity)
-            self.assertAlmostEqual(device.actuator.target.tai, tai)
+            self.assertAlmostEqual(device.actuator.target.tai, tai, delta=1e-5)
             await asyncio.sleep(0.1)
 
         # Disable tracking and check state
