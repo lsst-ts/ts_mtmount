@@ -301,7 +301,11 @@ class TrivialSimulator:
                 active=False, code=1, subsystem="sample", extra_data=["Example warning"]
             ),
             MTMount.replies.ErrorReply(
-                on=False, active=False, code=2, subsystem="sample", extra_data=["Example error"]
+                on=False,
+                active=False,
+                code=2,
+                subsystem="sample",
+                extra_data=["Example error"],
             ),
         ):
             await self.communicator.write(reply)
