@@ -21,8 +21,8 @@
 
 __all__ = ["MainPowerSupplyDevice"]
 
-import asyncio
 
+from lsst.ts import salobj
 from .. import enums
 from .base_device import BaseDevice
 
@@ -50,5 +50,4 @@ class MainPowerSupplyDevice(BaseDevice):
         super().do_power(command)
         # The real system takes about 2 minutes to turn on.
         timeout = 120 if command.on else 0
-        asyncio.create_task(self.controller.write_done(command))
-        return timeout
+        return timeout, salobj.make_done_future()

@@ -70,7 +70,6 @@ class AxisDevice(BaseDevice):
             max_acceleration=device_limits.max_acceleration,
             dtmax_track=0.2,
         )
-        self._current_move_command = None
         self._monitor_move_task = asyncio.Future()
         super().__init__(controller=controller, device_id=device_id)
 
@@ -105,30 +104,27 @@ class AxisDevice(BaseDevice):
         self._monitor_move_task.cancel()
 
     def monitor_move_command(self, command):
-        """Monitor motion and report a move command as done.
+        """Return a task that is set done when the move is done.
+
+        Parameters
+        ----------
+        command : `Command`
+            Move command.
+
+        Returns
+        -------
+        task : `asyncio.Task`
+            A task that is set done when the move is done.
         """
         self._monitor_move_task.cancel()
         self._monitor_move_task = asyncio.create_task(self._monitor_move(command))
+        return self._monitor_move_task
 
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command.
         """
-        self._current_move_command = command
-        try:
-            # Give a little margin to make sure the actuator is truly done
-            duration = 0.1 + self.end_tai_unix - salobj.current_tai()
-            await asyncio.sleep(duration)
-            await self.controller.write_done(self._current_move_command)
-        except asyncio.CancelledError:
-            await self.controller.write_noack(
-                self._current_move_command, explanation="Superseded"
-            )
-        except Exception as e:
-            await self.controller.write_noack(
-                self._current_move_command, explanation=str(e)
-            )
-        finally:
-            self._current_move_command = None
+        duration = 0.1 + self.end_tai_unix - salobj.current_tai()
+        await asyncio.sleep(duration)
 
     def supersede_move_command(self):
         """Report the current move command (if any) as superseded.
@@ -253,4 +249,5 @@ class AxisDevice(BaseDevice):
         tai_unix = salobj.current_tai()
         self.actuator.set_target(tai=tai_unix, position=position, velocity=0)
         self.monitor_move_command(command)
-        return self.end_tai_unix - tai_unix
+        timeout = self.end_tai_unix - tai_unix
+        return timeout, self._monitor_move_task
