@@ -21,8 +21,7 @@
 
 __all__ = ["OilSupplySystemDevice"]
 
-import asyncio
-
+from lsst.ts import salobj
 from .. import enums
 from .base_device import BaseDevice
 
@@ -39,7 +38,8 @@ class OilSupplySystemDevice(BaseDevice):
     -----
     The real oil supply system can take 1/4 hour to turn on,
     as the oil is brought to the correct temperature.
-    This mock does not implement that delay.
+    This mock uses no actual delay, to simplify the code,
+    but it reports semi-normal timeouts.
 
     There must be rules about which oil subsystem must be on or off
     in other to turn the others on or off. But I don't know the rules,
@@ -74,16 +74,14 @@ class OilSupplySystemDevice(BaseDevice):
         # The real system can take roughly 15 minutes
         # to bring the oil to an acceptable temperature.
         timeout = 15 * 60 if command.on else 1
-        asyncio.create_task(self.controller.write_done(command))
-        return timeout
+        return timeout, salobj.make_done_future()
 
     def do_power_cooling(self, command):
         self.cooling_on = command.on
         # The real system can take roughly 15 minutes
         # to bring the oil to an acceptable temperature.
         timeout = 15 * 60 if command.on else 1
-        asyncio.create_task(self.controller.write_done(command))
-        return timeout
+        return timeout, salobj.make_done_future()
 
     def do_power_main_pump(self, command):
         self.main_pump_on = command.on

@@ -38,6 +38,19 @@ from .oil_supply_system_device import OilSupplySystemDevice
 from .top_end_chiller_device import TopEndChillerDevice
 
 
+async def wait_tasks(*tasks):
+    """Wait for one or more tasks to finish; if one fails cancel the others.
+
+    Like asyncio.gather but cancels the remaining tasks if one fails.
+    """
+    try:
+        await asyncio.gather(*tasks)
+    except Exception:
+        for task in tasks:
+            task.cancel()
+        raise
+
+
 class Controller:
     """Simulate the most basic responses from the Operation Manager.
 
@@ -152,6 +165,8 @@ class Controller:
     async def close(self):
         self.read_loop_task.cancel()
         await self.communicator.close()
+        for device in self.device_dict.values():
+            await device.close()
 
     async def handle_command(self, command):
         command_func = self.command_dict.get(command.command_code)
@@ -162,13 +177,21 @@ class Controller:
             return
 
         try:
-            timeout = command_func(command)
+            timeout_task = command_func(command)
         except Exception as e:
             await self.write_noack(command=command, explanation=repr(e))
             return
-        await self.write_ack(command, timeout=timeout)
-        if timeout is None and command.command_code not in commands.AckOnlyCommandCodes:
-            await self.write_done(command)
+        if timeout_task is None:
+            await self.write_ack(command, timeout=None)
+            if command.command_code not in commands.AckOnlyCommandCodes:
+                await self.write_done(command)
+        else:
+            timeout, task = timeout_task
+            await self.write_ack(command, timeout=timeout)
+            # Do not bother to save the task because `Controller.close` calls
+            # `BaseDevice.close` on each mock device, which cancels the task
+            # that `Controller.monitor_command` is awaiting.
+            asyncio.create_task(self.monitor_command(command=command, task=task))
 
     async def read_loop(self):
         self.log.debug("read_loop begins")
@@ -210,13 +233,15 @@ class Controller:
         elevation_command = commands.ElevationAxisMove(
             sequence_id=command.sequence_id, position=command.elevation,
         )
-        azimuth_time = self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_move(
-            azimuth_command
-        )
-        elevation_time = self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_move(
-            elevation_command
-        )
-        return max(azimuth_time, elevation_time)
+        azimuth_time, azimuth_task = self.device_dict[
+            enums.DeviceId.AZIMUTH_AXIS
+        ].do_move(azimuth_command)
+        elevation_time, elevation_task = self.device_dict[
+            enums.DeviceId.ELEVATION_AXIS
+        ].do_move(elevation_command)
+        timeout = max(azimuth_time, elevation_time)
+        task = asyncio.create_task(wait_tasks(azimuth_task, elevation_task))
+        return timeout, task
 
     def do_both_axes_stop(self, command):
         azimuth_command = commands.AzimuthAxisStop(sequence_id=command.sequence_id)
@@ -239,6 +264,18 @@ class Controller:
         )
         self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_track(azimuth_command)
         self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_track(elevation_command)
+
+    async def monitor_command(self, command, task):
+        try:
+            await task
+            if self.communicator.connected:
+                await self.write_done(command)
+        except asyncio.CancelledError:
+            if self.communicator.connected:
+                await self.write_noack(command, explanation="Superseded")
+        except Exception as e:
+            if self.communicator.connected:
+                await self.controller.write_noack(command, explanation=str(e))
 
     async def write_ack(self, command, timeout):
         """Report a command as acknowledged.

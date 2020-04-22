@@ -37,14 +37,6 @@ class TrivialMockController:
     def __init__(self):
         self.command_dict = {}
         self.log = logging.getLogger()
-        self.done_queue = asyncio.Queue()
-        self.noack_queue = asyncio.Queue()
-
-    async def write_done(self, command):
-        await self.done_queue.put(command)
-
-    async def write_noack(self, command, explanation):
-        await self.noack_queue.put((command, explanation))
 
 
 class MockDevicesTestCase(asynctest.TestCase):
@@ -84,29 +76,31 @@ class MockDevicesTestCase(asynctest.TestCase):
         print(f"run_command({command})")
         do_method = self.controller.command_dict[command.command_code]
         try:
-            timeout = do_method(command)
+            timeout_task = do_method(command)
         except Exception as e:
             print(f"command failed: {e}")
             raise
 
-        print(f"command returned: {timeout}")
-        if min_timeout is None:
-            self.assertIsNone(timeout)
+        if timeout_task is None:
+            timeout = None
+            task = None
+            self.assertIsNone(
+                min_timeout, f"min_timeout={min_timeout} but no timeout seen"
+            )
             return
 
+        timeout, task = timeout_task
+        if min_timeout is None:
+            self.fail(f"min_timeout=None but timeout={timeout}")
         self.assertGreaterEqual(timeout, min_timeout)
-        if should_noack:
-            noack_command, explanation = await asyncio.wait_for(
-                self.controller.noack_queue.get(), timeout=timeout + TIMEOUT_PADDING
-            )
-            self.assertIs(noack_command, command)
-            self.assertIsInstance(explanation, str)
-            self.assertNotEqual(explanation, "")
-        else:
-            done_command = await asyncio.wait_for(
-                self.controller.done_queue.get(), timeout=timeout + TIMEOUT_PADDING
-            )
-            self.assertIs(done_command, command)
+
+        try:
+            await task
+            if should_noack:
+                self.fail(f"Command {command} succeeded but should_noack true")
+        except Exception as e:
+            if not should_noack:
+                self.fail(f"Command {command} failed but should_noack false: {e}")
 
     async def test_base_commands(self):
         for device_id, device in self.device_dict.items():
