@@ -130,8 +130,7 @@ class Commander:
             ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
             ccw_enable_tracking=MTMount.commands.CameraCableWrapEnableTracking,
             ccw_track=MTMount.commands.CameraCableWrapTrack,
-            disable=MTMount.commands.Disable,
-            enable=MTMount.commands.Enable,
+            ccw_reset_alarm=MTMount.commands.CameraCableWrapResetAlarm,
         )
         self.help_text = f"""Send commands to the telescope mount assemply.
 
@@ -163,7 +162,7 @@ help  # Print this help
 
     def get_argument_names(self, cmd_name):
         CommandClass = self.command_dict[cmd_name]
-        arg_infos = CommandClass.field_infos[5:]
+        arg_infos = CommandClass.field_infos[4:]
         return " ".join(arg.name for arg in arg_infos)
 
     async def handle_command(self, cmd_name, args):
@@ -185,8 +184,10 @@ help  # Print this help
             CommandClass = self.command_dict[cmd_name]
         except KeyError:
             raise ValueError(f"Unrecognized command {cmd_name}")
-        arg_infos = CommandClass.field_infos[5:]
-        has_tai_time_argument = isinstance(
+        arg_infos = CommandClass.field_infos[4:]
+        # If the final argument for the command is TAI time,
+        # then set it to the current time.
+        has_tai_time_argument = arg_infos and isinstance(
             arg_infos[-1], MTMount.field_info.TimeFieldInfo
         )
         if has_tai_time_argument:
@@ -214,8 +215,6 @@ help  # Print this help
 
     def connect_callback(self, communicator):
         print_connected(descr="TMA commander", communicator=communicator)
-        if communicator.connected:
-            asyncio.create_task(self.send_sample_replies())
 
     async def command_loop(self):
         try:
@@ -299,13 +298,11 @@ class TrivialSimulator:
             MTMount.replies.NoAckReply(sequence_id=99998, explanation="Example NoAck"),
             MTMount.replies.DoneReply(sequence_id=99999),
             MTMount.replies.WarningReply(
-                active=False, code=1, extra_data=["Example warning"]
+                active=False, code=1, subsystem="sample", extra_data=["Example warning"]
             ),
             MTMount.replies.ErrorReply(
-                on=False, active=False, code=2, extra_data=["Example error"]
+                on=False, active=False, code=2, subsystem="sample", extra_data=["Example error"]
             ),
-            MTMount.replies.OnStateInfoReply(description="Example onStateInfo"),
-            MTMount.replies.InPositionReply(in_position=0),
         ):
             await self.communicator.write(reply)
 
