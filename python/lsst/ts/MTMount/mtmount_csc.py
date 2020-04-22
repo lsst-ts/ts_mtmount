@@ -607,7 +607,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stop(self, data):
         self.assert_enabled()
         await self.send_commands(
-            commands.BothAxesStop(), commands.CameraCableWrapStop(), lock=False,
+            commands.BothAxesStop(), commands.CameraCableWrapStop(), dolock=False,
         )
 
     async def do_stopTracking(self, data):
