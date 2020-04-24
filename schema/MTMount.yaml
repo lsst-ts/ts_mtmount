@@ -9,7 +9,7 @@ properties:
     description: IP address of the Operation Manager.
     type: string
     format: hostname
-    default: "192.168.223.14"
+    default: "127.0.0.1"
   command_port:
     description: >-
       Port number of the socket for issuing commands.
