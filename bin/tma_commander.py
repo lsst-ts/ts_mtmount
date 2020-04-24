@@ -88,8 +88,6 @@ class Commander:
         IP address of the operation manager.
     command_port : `int`
         IP port of the operation manager.
-    reply_port : `int`
-        IP port for this end (the commander).
     log_level : `int`
         Logging level.
     simulate : `bool`
@@ -97,7 +95,7 @@ class Commander:
         If True then ``host`` is ignored.
     """
 
-    def __init__(self, host, command_port, reply_port, log_level, simulate):
+    def __init__(self, host, command_port, log_level, simulate):
         self.log = logging.getLogger()
         self.log.setLevel(log_level)
 
@@ -106,8 +104,8 @@ class Commander:
         self.simulator = None
         if simulate:
             host = salobj.LOCAL_HOST
-            self.simulator = TrivialSimulator(
-                command_port=command_port, reply_port=reply_port, log=self.log
+            self.simulator = MTMount.mock.Controller(
+                command_port=command_port, log=self.log
             )
 
         self.communicator = MTMount.Communicator(
@@ -115,7 +113,7 @@ class Commander:
             client_host=host,
             client_port=command_port,
             server_host=None,
-            server_port=reply_port,
+            server_port=command_port + 1,
             log=self.log,
             read_replies=True,
             connect_client=True,
@@ -125,9 +123,9 @@ class Commander:
         self.command_loop_task = asyncio.create_task(self.command_loop())
         self.command_dict = dict(
             ccw_power=MTMount.commands.CameraCableWrapPower,
+            ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
             ccw_stop=MTMount.commands.CameraCableWrapStop,
             ccw_move=MTMount.commands.CameraCableWrapMove,
-            ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
             ccw_enable_tracking=MTMount.commands.CameraCableWrapEnableTracking,
             ccw_track=MTMount.commands.CameraCableWrapTrack,
             ccw_reset_alarm=MTMount.commands.CameraCableWrapResetAlarm,
@@ -245,82 +243,10 @@ help  # Print this help
             await self.close()
 
 
-class TrivialSimulator:
-    """Simulate the most basic responses from the Operation Manager.
-
-    Acknowledge all commands and mark as done.
-    Also output a few other replies, to exercise the code.
-    """
-
-    def __init__(self, command_port, reply_port, log):
-        self.log = log.getChild("simulator")
-        self.communicator = MTMount.Communicator(
-            name="trivial_simulator",
-            client_host=salobj.LOCAL_HOST,
-            client_port=reply_port,
-            server_host=salobj.LOCAL_HOST,
-            server_port=command_port,
-            log=self.log,
-            read_replies=False,
-            connect_client=True,
-            connect_callback=self.connect_callback,
-        )
-        self.read_loop_task = asyncio.create_task(self.read_loop())
-
-    async def close(self):
-        self.read_loop_task.cancel()
-        await self.communicator.close()
-
-    async def read_loop(self):
-        print("trivial simulator: waiting for connection")
-        await self.communicator.connect_task
-        print("trivial simulator: connected")
-        while True:
-            read_command = await self.communicator.read()
-            self.log.debug(f"read {read_command}")
-            reply = MTMount.replies.AckReply(
-                sequence_id=read_command.sequence_id, timeout_ms=100
-            )
-            await self.communicator.write(reply)
-            reply = MTMount.replies.DoneReply(sequence_id=read_command.sequence_id)
-            await self.communicator.write(reply)
-
-    def connect_callback(self, communicator):
-        print_connected(descr="Trivial simulator", communicator=communicator)
-        if communicator.connected:
-            asyncio.create_task(self.send_sample_replies())
-
-    async def send_sample_replies(self):
-        """Send one of each kind of reply to the TMA commander.
-        """
-        for reply in (
-            MTMount.replies.AckReply(sequence_id=99997, timeout_ms=1234),
-            MTMount.replies.NoAckReply(sequence_id=99998, explanation="Example NoAck"),
-            MTMount.replies.DoneReply(sequence_id=99999),
-            MTMount.replies.WarningReply(
-                active=False, code=1, subsystem="sample", extra_data=["Example warning"]
-            ),
-            MTMount.replies.ErrorReply(
-                on=False,
-                active=False,
-                code=2,
-                subsystem="sample",
-                extra_data=["Example error"],
-            ),
-        ):
-            await self.communicator.write(reply)
-
-
 async def amain():
     parser = argparse.ArgumentParser(f"Send commands to Tekniker's TMA")
     parser.add_argument(
         "--host", default="192.168.0.1", help="TMA operation manager IP address."
-    )
-    parser.add_argument(
-        "--reply-port",
-        type=int,
-        default=MTMount.CSC_REPLY_PORT,
-        help="TCP port for replies.",
     )
     parser.add_argument(
         "--command-port",
@@ -340,7 +266,6 @@ async def amain():
     namespace = parser.parse_args()
     commander = Commander(
         host=namespace.host,
-        reply_port=namespace.reply_port,
         command_port=namespace.command_port,
         log_level=namespace.log_level,
         simulate=namespace.simulate,
