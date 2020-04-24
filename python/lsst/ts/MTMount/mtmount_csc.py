@@ -60,7 +60,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         the default.
     simulation_mode : `int` (optional)
         Simulation mode.
-    mock_reply_port : `int` (optional)
+    mock_command_port : `int` (optional)
         Port for mock controller TCP/IP interface. If `None` then use the
         port specified by the configuration. Only used in simulation mode.
 
@@ -88,12 +88,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         config_dir=None,
         initial_state=salobj.State.STANDBY,
         simulation_mode=0,
-        mock_reply_port=None,
+        mock_command_port=None,
     ):
         schema_path = (
             pathlib.Path(__file__).resolve().parents[4] / "schema" / "MTMount.yaml"
         )
-        self.mock_reply_port = mock_reply_port
+        self.mock_command_port = mock_command_port
         self.communicator = None
         self.mock_controller = None  # mock controller, or None of not constructed
         # Dict of command sequence-id: (ack_task, done_task).
@@ -172,19 +172,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             return salobj.LOCAL_HOST
         return self.config.host
 
-    def get_reply_port(self):
-        """Get the desired reply port.
-
-        This will be self.config.reply_port unless in simulation mode
-        and mock_reply_port specified.
-        """
-        if self.config is None:
-            raise RuntimeError("Not yet configured")
-        if self.simulation_mode != 0 and self.mock_reply_port is not None:
-            return self.mock_reply_port
-        else:
-            return self.config.reply_port
-
     async def connect(self):
         """Connect to the Operation Manager.
 
@@ -197,12 +184,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise RuntimeError("Already connected")
         client_host = self.config.host
         server_host = None
-        reply_port = self.config.reply_port
+        command_port = self.config.command_port
         if self.simulation_mode:
             client_host = salobj.LOCAL_HOST
             server_host = salobj.LOCAL_HOST
-            if self.mock_reply_port is not None:
-                reply_port = self.mock_reply_port
+            if self.mock_command_port is not None:
+                command_port = self.mock_command_port
         connect_tasks = []
         if self.simulation_mode:
             connect_tasks.append(self.start_mock_ctrl())
@@ -210,9 +197,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.communicator = communicator.Communicator(
                 name="communicator",
                 client_host=client_host,
-                client_port=reply_port + 1,
+                client_port=command_port,
                 server_host=server_host,
-                server_port=reply_port,
+                server_port=command_port + 1,
                 log=self.log,
                 read_replies=True,
                 connect_client=False,
@@ -232,7 +219,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.debug("connected")
         except Exception as e:
             err_msg = f"Could not connection to client_host={client_host}, "
-            f"reply_port={self.config.reply_port}"
+            f"command_port={self.config.command_port}"
             self.log.exception(err_msg)
             self.fault(
                 code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e}"
@@ -510,11 +497,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         try:
             assert self.simulation_mode == 1
-            if self.mock_reply_port is not None:
-                reply_port = self.mock_reply_port
+            if self.mock_command_port is not None:
+                command_port = self.mock_command_port
             else:
-                reply_port = self.config.reply_port
-            self.mock_controller = mock.Controller(reply_port=reply_port, log=self.log)
+                command_port = self.config.command_port
+            self.mock_controller = mock.Controller(
+                command_port=command_port, log=self.log
+            )
             await asyncio.wait_for(self.mock_controller.start_task, timeout=2)
         except Exception as e:
             err_msg = "Could not start mock controller"

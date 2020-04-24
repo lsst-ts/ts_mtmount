@@ -44,7 +44,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             initial_state=initial_state,
             config_dir=config_dir,
             simulation_mode=simulation_mode,
-            mock_reply_port=next(port_generator),
+            mock_command_port=next(port_generator),
         )
         # the next port is used for commands
         next(port_generator)

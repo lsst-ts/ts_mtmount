@@ -10,11 +10,11 @@ properties:
     type: string
     format: hostname
     default: "192.168.223.14"
-  reply_port:
+  command_port:
     description: >-
-      Port number of the socket for writing replies.
-      This is the CSC's server socket port.
-      The port for writing commands is one larger.
+      Port number of the socket for issuing commands.
+      This is the CSC's client socket port.
+      The port for reading replies is one larger.
     type: integer
     default: 40005  # HHD port; change this when Tekniker provides a dedicated port for the CSC.
   connection_timeout:
@@ -29,7 +29,7 @@ properties:
     default: 10
 required:
   - host
-  - reply_port
+  - command_port
   - connection_timeout
   - ack_timeout
 additionalProperties: false

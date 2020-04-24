@@ -23,8 +23,8 @@
 # CSC TCP/IP default configuration
 # These values are for the HHD.
 # Update this when Tekniker adds a dedicated pair of ports for the CSC.
-CSC_REPLY_PORT = 40005
-CSC_COMMAND_PORT = 40006
+CSC_COMMAND_PORT = 40005
+CSC_REPLY_PORT = 40006
 
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
