@@ -64,21 +64,18 @@ class Controller:
         The reply port is one greater than the command port.
     log : `logging.Logger`
         Logger.
+    reconnect : `bool` (optional)
+        Try to reconnect if the connection is lost?
+        Defaults to False for unit tests.
     """
 
-    def __init__(self, command_port, log):
+    def __init__(self, command_port, log, reconnect=False):
+        self.command_port = command_port
         self.log = log.getChild("Controller")
-        self.communicator = communicator.Communicator(
-            name="Controller",
-            client_host=salobj.LOCAL_HOST,
-            client_port=command_port + 1,
-            server_host=salobj.LOCAL_HOST,
-            server_port=command_port,
-            log=self.log,
-            read_replies=False,
-            connect_client=False,
-            connect_callback=self.connect_callback,
-        )
+        self.reconnect = reconnect
+
+        self.communicator = None
+
         # Queue of commands, for unit testing
         self.command_queue = None
 
@@ -92,7 +89,7 @@ class Controller:
         self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
 
         self.read_loop_task = asyncio.Future()
-        self.start_task = asyncio.create_task(self.start())
+        self.start_task = asyncio.create_task(self.connect())
 
     def add_all_devices(self):
         """Add all mock devices.
@@ -153,20 +150,31 @@ class Controller:
         """
         self.command_queue = None
 
-    async def start(self):
+    async def connect(self):
+        self.read_loop_task.cancel()
+        self.communicator = communicator.Communicator(
+            name="Controller",
+            client_host=salobj.LOCAL_HOST,
+            client_port=self.command_port + 1,
+            server_host=salobj.LOCAL_HOST,
+            server_port=self.command_port,
+            log=self.log,
+            read_replies=False,
+            connect_client=False,
+            connect_callback=self.connect_callback,
+        )
+
         self.log.debug("start: connecting")
         await self.communicator.connect()
         self.log.debug("start: connected")
         self.read_loop_task = asyncio.create_task(self.read_loop())
-
-    async def disconnect(self):
-        await self.communicator.disconnect()
 
     async def close(self):
         self.read_loop_task.cancel()
         await self.communicator.close()
         for device in self.device_dict.values():
             await device.close()
+        self.communicator = None
 
     async def handle_command(self, command):
         command_func = self.command_dict.get(command.command_code)
@@ -204,8 +212,10 @@ class Controller:
         except asyncio.CancelledError:
             return
         except asyncio.streams.IncompleteReadError:
-            self.log.error("Connection lost")
-            self.close()
+            self.log.warning("Connection lost")
+            await self.close()
+            if self.reconnect:
+                asyncio.create_task(self.connect())
         self.log.debug("read_loop ends")
 
     async def reply_to_command(self, command):
