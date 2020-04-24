@@ -116,7 +116,7 @@ class Commander:
             server_port=command_port + 1,
             log=self.log,
             read_replies=True,
-            connect_client=True,
+            connect=True,
             connect_callback=self.connect_callback,
         )
         self.read_loop_task = asyncio.create_task(self.read_loop())

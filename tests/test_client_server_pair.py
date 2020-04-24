@@ -50,14 +50,14 @@ class ClientServerPairTestCase(asynctest.TestCase):
         self.connect_callback_data = []
 
     @contextlib.asynccontextmanager
-    async def make_pairs(self, connect_clients=True, use_connect_callback=True):
+    async def make_pairs(self, connect=True, use_connect_callback=True):
         """Make two ``lsst.ts.MTMount.ClientServerPairs``, ``self.pair1`` and
         ``self.pair2``, that talk to each other.
 
         Parameters
         ----------
-        connect_clients : `bool` (optional)
-            Connect the clients to the servers?
+        connect : `bool` (optional)
+            Connect the pairs to each other?
         use_connect_callback : `bool` (optional)
             Specify a connect_callback?
             If True then use self.connect_callback.
@@ -71,14 +71,14 @@ class ClientServerPairTestCase(asynctest.TestCase):
             server_host=salobj.LOCAL_HOST,
             server_port=0,  # Pick random
             log=self.log,
-            connect_client=False,
+            connect=False,
             connect_callback=connect_callback,
         )
         self.assertFalse(self.pair1.server_connected)
         self.assertFalse(self.pair1.client_connected)
         self.assertFalse(self.pair1.connected)
         # Wait for pair1 server to start, so its port is assigned
-        await self.pair1.wait_server_port()
+        await asyncio.wait_for(self.pair1.wait_server_port(), timeout=STD_TIMEOUT)
         self.assertNotEqual(self.pair1.server_port, 0)
         self.assertFalse(self.pair1.server_connected)
         self.assertFalse(self.pair1.client_connected)
@@ -91,23 +91,26 @@ class ClientServerPairTestCase(asynctest.TestCase):
             server_host=salobj.LOCAL_HOST,
             server_port=0,
             log=self.log,
-            connect_client=False,
+            connect=False,
             connect_callback=connect_callback,
         )
         # Wait for pair2 server to start
         self.assertFalse(self.pair2.server_connected)
         self.assertFalse(self.pair2.client_connected)
         self.assertFalse(self.pair2.connected)
-        await self.pair2.wait_server_port()
+        await asyncio.wait_for(self.pair2.wait_server_port(), timeout=STD_TIMEOUT)
         self.assertNotEqual(self.pair2.server_port, 0)
         self.assertFalse(self.pair2.server_connected)
         self.assertFalse(self.pair2.client_connected)
         self.assertFalse(self.pair2.connected)
 
-        if connect_clients:
+        if connect:
             print("connect pair1 client to pair2 server")
+            task1 = asyncio.create_task(
+                self.pair1.connect(port=self.pair2.server_port),
+            )
             await asyncio.wait_for(
-                self.pair1.connect(port=self.pair2.server_port), timeout=CONNECT_TIMEOUT
+                self.pair1.client_connected_task, timeout=CONNECT_TIMEOUT
             )
             self.assertFalse(self.pair1.server_connected)
             self.assertTrue(self.pair1.client_connected)
@@ -115,6 +118,7 @@ class ClientServerPairTestCase(asynctest.TestCase):
 
             print("connect pair2 client to pair1 server")
             await asyncio.wait_for(self.pair2.connect(), timeout=CONNECT_TIMEOUT)
+            self.assertTrue(task1.done())
             print("all connected")
             self.assertTrue(self.pair1.server_connected)
             self.assertTrue(self.pair1.client_connected)
