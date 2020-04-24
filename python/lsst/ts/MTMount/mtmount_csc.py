@@ -202,7 +202,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 server_port=command_port + 1,
                 log=self.log,
                 read_replies=True,
-                connect_client=False,
+                connect=False,
                 connect_callback=self.connect_callback,
             )
         try:

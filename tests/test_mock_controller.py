@@ -67,7 +67,7 @@ class MockControllerTestCase(asynctest.TestCase):
             server_port=command_port + 1,
             log=log,
             read_replies=True,
-            connect_client=False,
+            connect=False,
             connect_callback=None,
         )
         self.controller = MTMount.mock.Controller(command_port=command_port, log=log)

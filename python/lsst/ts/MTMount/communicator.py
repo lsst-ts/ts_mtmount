@@ -54,8 +54,9 @@ class Communicator(client_server_pair.ClientServerPair):
     read_replies : `bool`
         If True then read replies, else read commands,
         on the server port.
-    connect_client : `bool` (optional)
+    connect : `bool` (optional)
         Connect the client at construction time?
+        (The server automatically tries to connect.)
     connect_callback : callable (optional)
         Synchronous function to call when a connection is made or dropped.
 
@@ -81,7 +82,7 @@ class Communicator(client_server_pair.ClientServerPair):
         server_port,
         log,
         read_replies,
-        connect_client=True,
+        connect=True,
         connect_callback=None,
     ):
         super().__init__(
@@ -91,7 +92,7 @@ class Communicator(client_server_pair.ClientServerPair):
             server_host=server_host,
             server_port=server_port,
             log=log,
-            connect_client=connect_client,
+            connect=connect,
             connect_callback=connect_callback,
         )
         self.monitor_client_writer_task = asyncio.Future()

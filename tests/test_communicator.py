@@ -76,14 +76,14 @@ class CommunicatorTestCase(asynctest.TestCase):
             server_port=0,  # Pick random
             log=self.log,
             read_replies=True,
-            connect_client=False,
+            connect=False,
             connect_callback=connect_callback,
         )
         self.assertFalse(self.comm1.server_connected)
         self.assertFalse(self.comm1.client_connected)
         self.assertFalse(self.comm1.connected)
         # Wait for comm1 server to start, so its port is assigned
-        await self.comm1.wait_server_port()
+        await asyncio.wait_for(self.comm1.wait_server_port(), timeout=CONNECT_TIMEOUT)
         self.assertNotEqual(self.comm1.server_port, 0)
         self.assertFalse(self.comm1.server_connected)
         self.assertFalse(self.comm1.client_connected)
@@ -97,14 +97,14 @@ class CommunicatorTestCase(asynctest.TestCase):
             server_port=0,
             log=self.log,
             read_replies=False,
-            connect_client=False,
+            connect=False,
             connect_callback=connect_callback,
         )
         # Wait for comm2 server to start
         self.assertFalse(self.comm2.server_connected)
         self.assertFalse(self.comm2.client_connected)
         self.assertFalse(self.comm2.connected)
-        await self.comm2.wait_server_port()
+        await asyncio.wait_for(self.comm2.wait_server_port(), timeout=CONNECT_TIMEOUT)
         self.assertNotEqual(self.comm2.server_port, 0)
         self.assertFalse(self.comm2.server_connected)
         self.assertFalse(self.comm2.client_connected)
@@ -112,8 +112,11 @@ class CommunicatorTestCase(asynctest.TestCase):
 
         if connect_clients:
             print("connect comm1 client to comm2 server")
+            task1 = asyncio.create_task(
+                self.comm1.connect(port=self.comm2.server_port),
+            )
             await asyncio.wait_for(
-                self.comm1.connect(port=self.comm2.server_port), timeout=CONNECT_TIMEOUT
+                self.comm1.client_connected_task, timeout=CONNECT_TIMEOUT
             )
             self.assertFalse(self.comm1.server_connected)
             self.assertTrue(self.comm1.client_connected)
@@ -121,6 +124,7 @@ class CommunicatorTestCase(asynctest.TestCase):
 
             print("connect comm2 client to comm1 server")
             await asyncio.wait_for(self.comm2.connect(), timeout=CONNECT_TIMEOUT)
+            self.assertTrue(task1.done())
             print("all connected")
             self.assertTrue(self.comm1.server_connected)
             self.assertTrue(self.comm1.client_connected)

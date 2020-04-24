@@ -160,7 +160,7 @@ class Controller:
             server_port=self.command_port,
             log=self.log,
             read_replies=False,
-            connect_client=False,
+            connect=False,
             connect_callback=self.connect_callback,
         )
 
