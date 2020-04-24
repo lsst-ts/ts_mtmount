@@ -59,21 +59,21 @@ class Controller:
 
     Parameters
     ----------
-    reply_port : `int`
-        Port for writing replies (that the CSC reads).
-        The command port is one greater than the reply port.
+    command_port : `int`
+        Port for reading commands (that the CSC writes).
+        The reply port is one greater than the command port.
     log : `logging.Logger`
         Logger.
     """
 
-    def __init__(self, reply_port, log):
+    def __init__(self, command_port, log):
         self.log = log.getChild("Controller")
         self.communicator = communicator.Communicator(
             name="Controller",
             client_host=salobj.LOCAL_HOST,
-            client_port=reply_port,
+            client_port=command_port + 1,
             server_host=salobj.LOCAL_HOST,
-            server_port=reply_port + 1,
+            server_port=command_port,
             log=self.log,
             read_replies=False,
             connect_client=False,

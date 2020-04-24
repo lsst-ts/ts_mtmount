@@ -58,19 +58,19 @@ class MockControllerTestCase(asynctest.TestCase):
     @contextlib.asynccontextmanager
     async def make_controller(self):
         log = logging.getLogger()
-        reply_port = next(port_generator)
+        command_port = next(port_generator)
         self.communicator = MTMount.Communicator(
             name="communicator",
             client_host=salobj.LOCAL_HOST,
-            client_port=reply_port + 1,
+            client_port=command_port,
             server_host=salobj.LOCAL_HOST,
-            server_port=reply_port,
+            server_port=command_port + 1,
             log=log,
             read_replies=True,
             connect_client=False,
             connect_callback=None,
         )
-        self.controller = MTMount.mock.Controller(reply_port=reply_port, log=log)
+        self.controller = MTMount.mock.Controller(command_port=command_port, log=log)
         connect_task = asyncio.create_task(self.communicator.connect())
         t0 = time.monotonic()
         await asyncio.wait_for(

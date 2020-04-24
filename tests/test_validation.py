@@ -41,7 +41,7 @@ class ValidationTestCase(unittest.TestCase):
         self.validator = salobj.DefaultingValidator(schema=self.schema)
         self.default = dict(
             host="192.168.223.14",
-            reply_port=40005,
+            command_port=40005,
             connection_timeout=10,
             ack_timeout=10,
         )
@@ -53,7 +53,7 @@ class ValidationTestCase(unittest.TestCase):
 
     def test_some_specified(self):
         data = dict(
-            host="1.2.3.4", reply_port=2345, connection_timeout=3.4, ack_timeout=4.5
+            host="1.2.3.4", command_port=2345, connection_timeout=3.4, ack_timeout=4.5
         )
         for field, value in data.items():
             one_field_data = {field: value}
@@ -67,7 +67,7 @@ class ValidationTestCase(unittest.TestCase):
 
     def test_all_specified(self):
         data = dict(
-            host="1.2.3.4", reply_port=2345, connection_timeout=3.4, ack_timeout=4.5
+            host="1.2.3.4", command_port=2345, connection_timeout=3.4, ack_timeout=4.5
         )
         data_copy = data.copy()
         result = self.validator.validate(data)
@@ -79,7 +79,7 @@ class ValidationTestCase(unittest.TestCase):
         for name, badval in (
             #  ("host", "invalid hostname"),  # jsonschema 3.0.1 doesn't raise
             ("host", 5),  # wrong type
-            ("reply_port", "1234"),  # wrong type
+            ("command_port", "1234"),  # wrong type
             ("connection_timeout", 0),  # not positive
             ("ack_timeout", 0),  # not positive
             ("connection_timeout", "1"),  # wrong type
