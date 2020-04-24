@@ -249,7 +249,7 @@ help  # Print this help
 async def amain():
     parser = argparse.ArgumentParser(f"Send commands to Tekniker's TMA")
     parser.add_argument(
-        "--host", default="192.168.0.1", help="TMA operation manager IP address."
+        "--host", default="127.0.0.1", help="TMA operation manager IP address."
     )
     parser.add_argument(
         "--command-port",

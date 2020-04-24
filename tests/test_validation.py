@@ -40,10 +40,7 @@ class ValidationTestCase(unittest.TestCase):
         self.schema = yaml.safe_load(rawschema)
         self.validator = salobj.DefaultingValidator(schema=self.schema)
         self.default = dict(
-            host="192.168.223.14",
-            command_port=40005,
-            connection_timeout=10,
-            ack_timeout=10,
+            host="127.0.0.1", command_port=40005, connection_timeout=10, ack_timeout=10,
         )
 
     def test_default(self):
