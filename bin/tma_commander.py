@@ -119,7 +119,6 @@ class Commander:
             connect=True,
             connect_callback=self.connect_callback,
         )
-        self.read_loop_task = asyncio.create_task(self.read_loop())
         self.command_loop_task = asyncio.create_task(self.command_loop())
         self.command_dict = dict(
             ccw_power=MTMount.commands.CameraCableWrapPower,
@@ -143,7 +142,6 @@ help  # Print this help
     async def close(self):
         try:
             self.read_loop_task.cancel()
-            self.command_loop_task.cancel()
             if self.simulator is not None:
                 await self.simulator.close()
             await self.communicator.close()
@@ -204,15 +202,20 @@ help  # Print this help
         await self.communicator.write(cmd)
 
     async def read_loop(self):
-        print("tma_commander waiting to connect")
-        await self.communicator.connect_task
-        print("tma_commander connected")
-        while True:
-            read_message = await self.communicator.read()
-            print(f"read {read_message}")
+        try:
+            await self.communicator.connect_task
+            while True:
+                read_message = await self.communicator.read()
+                print(f"read {read_message}")
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"tma_commander read loop failed with {e!r}")
 
     def connect_callback(self, communicator):
         print_connected(descr="TMA commander", communicator=communicator)
+        if communicator.connected:
+            self.read_loop_task = asyncio.create_task(self.read_loop())
 
     async def command_loop(self):
         try:
