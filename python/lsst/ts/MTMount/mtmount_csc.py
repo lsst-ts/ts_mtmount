@@ -110,7 +110,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task to track enabling and disabling
         self.enable_task = salobj.make_done_future()
         self.disable_task = salobj.make_done_future()
-        self.enable_state = enums.EnabledState.DISABLED
+        self.enabled_state = enums.EnabledState.DISABLED
 
         # Task for self.camera_cable_wrap_loop
         self.camera_cable_wrap_task = salobj.make_done_future()
@@ -238,6 +238,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def enable_devices(self):
+        self.log.info("enable devices")
         self.disable_task.cancel()
         self.enabled_state = enums.EnabledState.ENABLING
         try:
@@ -260,6 +261,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def disable_devices(self):
+        self.log.info("disable devices")
         self.enable_task.cancel()
         self.enabled_state = enums.EnabledState.DISABLING
         try:
@@ -281,12 +283,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if self.disabled_or_enabled:
             if not self.connected and self.connect_task.done():
                 await self.connect()
-            if self.enable_state is not enums.EnabledState.ENABLED:
+
+            if self.enabled_state is not enums.EnabledState.ENABLED:
                 self.enable_task.cancel()
                 self.enable_task = asyncio.create_task(self.enable_devices())
                 await self.enable_task
         else:
-            if self.enable_state is not enums.EnabledState.DISABLED:
+            if self.enabled_state is not enums.EnabledState.DISABLED:
                 self.disable_task.cancel()
                 self.disable_task = asyncio.create_task(self.disable_devices())
                 await self.disable_task
