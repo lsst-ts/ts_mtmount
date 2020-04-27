@@ -320,6 +320,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         command_futures : `command_futures.CommandFutures`
             Futures that monitor the command.
         """
+        print(f"send_command(command={command}, dolock={dolock}")
         try:
             if dolock:
                 async with self.command_lock:
