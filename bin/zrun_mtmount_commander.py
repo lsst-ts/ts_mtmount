@@ -35,6 +35,6 @@ tma_commander.py --help
 
 import asyncio
 
-from lsst.ts import salobj
+from lsst.ts import MTMount
 
-asyncio.run(salobj.CscCommander.amain(name="NewMTMount", index=0))
+asyncio.run(MTMount.MTMountCommander.amain(index=0))
