@@ -22,6 +22,10 @@
 __all__ = ["Controller"]
 
 import asyncio
+import json
+import time
+
+import numpy as np
 
 from lsst.ts import salobj
 from .. import commands
@@ -67,12 +71,20 @@ class Controller:
     reconnect : `bool` (optional)
         Try to reconnect if the connection is lost?
         Defaults to False for unit tests.
+    telemetry_dict : `dict`
+        Dict of telemetry topic name: data dict
+        where data dict is a dict of key: value
+        for the public fields of a telemetry topic.
     """
 
-    def __init__(self, command_port, log, reconnect=False):
+    def __init__(self, command_port, log, reconnect=False, telemetry_dict=None):
         self.command_port = command_port
         self.log = log.getChild("Controller")
         self.reconnect = reconnect
+
+        self.telemetry_dict = telemetry_dict
+        self.telemetry_interval = 0.05  # Seconds between telemetry output
+        self.telemetry_margins = []
 
         self.communicator = None
 
@@ -89,7 +101,55 @@ class Controller:
         self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
 
         self.read_loop_task = asyncio.Future()
+        self.telemetry_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.connect())
+
+    async def telemetry_loop(self):
+        # For now set fake data in all fields so the telemetry topics have
+        # semi-realistic lengths; if we decide that the MCS will publish
+        # telemetry then obviously the data will have to be properly set
+        # to match the state of the mock devices.
+        print("telemetry_loop: setting arbitrary telemetry values")
+        for tel_name, data_dict in self.telemetry_dict.items():
+            for name, data in data_dict.items():
+                if type(data) is str:
+                    data = "idle"
+                elif type(data) is float:
+                    data = 123.456789
+                elif type(data) is int:
+                    data = 123456789
+                elif type(data) is bool:
+                    data = True
+                else:
+                    raise RuntimeError(
+                        f"Unsupported field type for {tel_name}.{name}: "
+                        f"{type(data).__name__}"
+                    )
+                data_dict[name] = data
+
+        try:
+            while True:
+                t0 = time.monotonic()
+                for name, data_dict in self.telemetry_dict.items():
+                    data = json.dumps(data_dict)
+                    reply = replies.TelemetryReply(name=name, data=data)
+                    await self.communicator.write(reply)
+
+                margin = self.telemetry_interval - (time.monotonic() - t0)
+                self.telemetry_margins.append(margin)
+                if margin > 0:
+                    await asyncio.sleep(margin)
+                if len(self.telemetry_margins) >= 10 // self.telemetry_interval:
+                    margin_arr = np.array(self.telemetry_margins)
+                    self.log.info(
+                        f"margin min={margin_arr.min():0.3f}; "
+                        f"max={margin_arr.max():0.3f}; "
+                        f"mean={margin_arr.mean():0.3f}; "
+                        f"std={margin_arr.std():0.3f}"
+                    )
+                    self.telemetry_margins = []
+        except Exception:
+            self.log.exception("telemetry_loop failed")
 
     def add_all_devices(self):
         """Add all mock devices.
@@ -152,6 +212,7 @@ class Controller:
 
     async def connect(self):
         self.read_loop_task.cancel()
+        self.telemetry_task.cancel()
         self.communicator = communicator.Communicator(
             name="Controller",
             client_host=salobj.LOCAL_HOST,
@@ -168,9 +229,12 @@ class Controller:
         await self.communicator.connect()
         self.log.debug("start: connected")
         self.read_loop_task = asyncio.create_task(self.read_loop())
+        if self.telemetry_dict is not None:
+            self.telemetry_task = asyncio.create_task(self.telemetry_loop())
 
     async def close(self):
         self.read_loop_task.cancel()
+        self.telemetry_task.cancel()
         await self.communicator.close()
         for device in self.device_dict.values():
             await device.close()

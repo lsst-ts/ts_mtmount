@@ -22,6 +22,7 @@
 __all__ = ["MTMountCsc"]
 
 import asyncio
+import json
 import pathlib
 
 from lsst.ts import salobj
@@ -140,6 +141,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.rotator = salobj.Remote(
             domain=self.domain, name="Rotator", include=["Application"]
         )
+
+        telemetry_dict = dict()
+        for name in self.salinfo.telemetry_names:
+            topic = getattr(self, f"tel_{name}")
+            full_data_dict = topic.DataType().get_vars()
+            public_data_dict = {
+                name: val
+                for name, val in full_data_dict.items()
+                if not name.startswith("private_")
+            }
+            telemetry_dict[name] = public_data_dict
+        self.telemetry_dict = telemetry_dict
 
     @property
     def connected(self):
@@ -477,6 +490,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 elif isinstance(reply, replies.InPositionReply):
                     # TODO: Handle InPosition
                     self.log.info(f"Read InPosition reply: {reply}")
+                elif isinstance(reply, replies.TelemetryReply):
+                    try:
+                        topic = getattr(self, f"tel_{reply.name}")
+                        data_dict = json.loads(reply.data)
+                        topic.set_put(**data_dict)
+
+                    except Exception:
+                        print(
+                            f"failed to handle telemetry reply for {reply.name}; "
+                            f"data={reply.data}; "
+                            f"data_dict={data_dict}"
+                        )
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
@@ -515,7 +540,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             else:
                 command_port = self.config.command_port
             self.mock_controller = mock.Controller(
-                command_port=command_port, log=self.log
+                command_port=command_port,
+                log=self.log,
+                telemetry_dict=self.telemetry_dict,
             )
             await asyncio.wait_for(self.mock_controller.start_task, timeout=2)
         except Exception as e:

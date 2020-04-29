@@ -28,6 +28,7 @@ __all__ = [
     "ErrorReply",
     "OnStateInfoReply",
     "InPositionReply",
+    "TelemetryReply",
     "Replies",
     "ReplyDict",
     "parse_reply",
@@ -187,6 +188,31 @@ class InPositionReply(Reply):
     )
 
 
+class TelemetryReply(Reply):
+    """Telemetry information
+
+    Parameters
+    ----------
+    reply_code : `ReplyCode`
+        Reply code. Must be TELEMETRY.
+    timestamp : `astropy.time.Time` or `None`
+        Timestamp. If `None` use the current time.
+    topic : `int`
+        The subsystem: 0 for azimuth, 1 for elevation.
+    data : `str`
+        The data, encoded as comman-separated values
+    """
+
+    field_infos = make_reply_field_infos(
+        enums.ReplyCode.TELEMETRY,
+        (
+            field_info.TimestampFieldInfo(),
+            field_info.StrFieldInfo(name="name", doc="telemetry topic name"),
+            field_info.StrFieldInfo(name="data", doc="telemetry data, encoded as json"),
+        ),
+    )
+
+
 Replies = (
     AckReply,
     NoAckReply,
@@ -195,6 +221,7 @@ Replies = (
     ErrorReply,
     OnStateInfoReply,
     InPositionReply,
+    TelemetryReply,
 )
 
 for reply in Replies:
