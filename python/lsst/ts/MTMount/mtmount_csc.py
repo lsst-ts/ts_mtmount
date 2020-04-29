@@ -263,21 +263,30 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def disable_devices(self):
         self.log.info("disable devices")
         self.enable_task.cancel()
-        self.enabled_state = enums.EnabledState.DISABLING
-        try:
-            disable_commands = [commands.BothAxesStop()] + [
-                command(drive=-1, on=False) for command in AxisEnableCommands
-            ]
-            await self.send_commands(*disable_commands)
+        if self.enabled_state in (
+            enums.EnabledState.DISABLING,
+            enums.EnabledState.DISABLED,
+            enums.EnabledState.DISABLE_FAILED,
+        ):
+            return
+        if not self.communicator.connected:
             self.enabled_state = enums.EnabledState.DISABLED
-        except Exception as e:
-            self.enabled_state = enums.EnabledState.DISABLE_FAILED
-            err_msg = "Failed to disable one or more devices"
-            self.log.exception(err_msg)
-            self.fault(
-                code=enums.CscErrorCode.ACTUATOR_DISABLE_ERROR,
-                report=f"{err_msg}: {e}",
-            )
+        else:
+            self.enabled_state = enums.EnabledState.DISABLING
+            try:
+                disable_commands = [commands.BothAxesStop()] + [
+                    command(drive=-1, on=False) for command in AxisEnableCommands
+                ]
+                await self.send_commands(*disable_commands)
+                self.enabled_state = enums.EnabledState.DISABLED
+            except Exception as e:
+                self.enabled_state = enums.EnabledState.DISABLE_FAILED
+                err_msg = "Failed to disable one or more devices"
+                self.log.exception(err_msg)
+                self.fault(
+                    code=enums.CscErrorCode.ACTUATOR_DISABLE_ERROR,
+                    report=f"{err_msg}: {e}",
+                )
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
