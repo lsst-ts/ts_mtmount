@@ -265,6 +265,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.enable_task.cancel()
         if self.enabled_state in (
             enums.EnabledState.DISABLING,
+            enums.EnabledState.DISABLED,
             enums.EnabledState.DISABLE_FAILED,
         ):
             return
