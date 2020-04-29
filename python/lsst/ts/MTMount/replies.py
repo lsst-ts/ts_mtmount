@@ -102,8 +102,6 @@ _ResponseFieldInfos = (
 
 
 class AckReply(Reply):
-    """Command ACK (started) reply."""
-
     field_infos = make_reply_field_infos(
         enums.ReplyCode.ACK,
         _ResponseFieldInfos
@@ -116,8 +114,6 @@ class AckReply(Reply):
 
 
 class NoAckReply(Reply):
-    """Command NOACK (rejected or failed) reply."""
-
     field_infos = make_reply_field_infos(
         enums.ReplyCode.NOACK,
         _ResponseFieldInfos
@@ -130,8 +126,6 @@ class NoAckReply(Reply):
 
 
 class DoneReply(Reply):
-    """Command DONE reply."""
-
     field_infos = make_reply_field_infos(enums.ReplyCode.DONE, _ResponseFieldInfos)
 
 
@@ -181,20 +175,6 @@ class OnStateInfoReply(Reply):
 
 
 class InPositionReply(Reply):
-    """InPositionReply information
-
-    Parameters
-    ----------
-    reply_code : `ReplyCode`
-        Reply code. Must be ON_STATE_INFO.
-    timestamp : `astropy.time.Time` or `None`
-        Timestamp. If `None` use the current time.
-    what : `int`
-        The subsystem: 0 for azimuth, 1 for elevation.
-    in_position : `bool`
-        True if in position, False if not.
-    """
-
     field_infos = make_reply_field_infos(
         enums.ReplyCode.IN_POSITION,
         (
