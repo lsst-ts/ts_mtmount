@@ -101,6 +101,9 @@ class Communicator(client_server_pair.ClientServerPair):
         else:
             self.parse_read_fields = commands.parse_command
 
+        # Lock write/drain to prevent calling drain while draining (an error).
+        self.write_lock = asyncio.Lock()
+
     async def close(self):
         self.monitor_client_writer_task.cancel()
         await super().close()
@@ -152,8 +155,9 @@ class Communicator(client_server_pair.ClientServerPair):
             raise RuntimeError("Client not connected")
         try:
             self.log.debug("Write %s", message)
-            self.client_writer.write(message.encode())
-            await self.client_writer.drain()
+            async with self.write_lock:
+                self.client_writer.write(message.encode())
+                await self.client_writer.drain()
         except Exception:
             self.log.exception(f"Failed to write {message}")
             raise
