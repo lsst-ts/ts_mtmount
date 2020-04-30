@@ -269,7 +269,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             enums.EnabledState.DISABLE_FAILED,
         ):
             return
-        if not self.communicator.connected:
+        if not self.connected:
             self.enabled_state = enums.EnabledState.DISABLED
         else:
             self.enabled_state = enums.EnabledState.DISABLING
@@ -426,7 +426,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Read and process replies from the Operation Manager.
         """
         self.log.debug("read loop begins")
-        while self.should_be_connected and self.communicator.connected:
+        while self.should_be_connected and self.connected:
             try:
                 reply = await self.communicator.read()
                 if isinstance(reply, replies.AckReply):
@@ -483,7 +483,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 return
             except Exception as e:
                 if self.should_be_connected:
-                    if self.communicator.connected:
+                    if self.connected:
                         err_msg = "read_loop failed; possibly a bug"
                         self.log.exception(err_msg)
                         self.fault(
