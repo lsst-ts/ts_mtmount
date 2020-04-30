@@ -23,6 +23,7 @@ __all__ = ["MTMountCommander"]
 
 import asyncio
 import dataclasses
+import sys
 
 from lsst.ts import salobj
 
@@ -46,9 +47,12 @@ class MTMountCommander(salobj.CscCommander):
         self.help_dict["ramp"] = " ".join(ramp_arg_names) + " # track a ramp"
         self.ramp_count = 0
 
-        print("Telemetry topic names")
+        print("Telemetry topic names, # fields, size")
         for telname in self.remote.salinfo.telemetry_names:
-            print(telname)
+            data = getattr(self.remote, f"tel_{telname}").DataType()
+            data_dict = data.get_vars()
+            size = sys.getsizeof(data_dict)
+            print(f"{telname}   {len(data_dict)}   {size}")
 
     @property
     def ramp_arg_names(self):

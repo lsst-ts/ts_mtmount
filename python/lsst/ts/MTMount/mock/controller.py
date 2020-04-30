@@ -22,7 +22,6 @@
 __all__ = ["Controller"]
 
 import asyncio
-import json
 import time
 
 import numpy as np
@@ -139,8 +138,10 @@ class Controller:
             while True:
                 t0 = time.monotonic()
                 for name, data_dict in self.telemetry_dict.items():
-                    data = json.dumps(data_dict)
-                    reply = replies.TelemetryReply(name=name, data=data)
+                    # data = json.dumps(data_dict)
+                    # reply = replies.TelemetryReply(name=name, data=data)
+                    # await self.communicator.write(reply)
+                    reply = replies.TelemetryOSS5Reply(**self.telemetry_dict["OSS5"])
                     await self.communicator.write(reply)
                 t1 = time.monotonic()
                 margin = self.telemetry_interval - (t1 - t0)
@@ -286,7 +287,7 @@ class Controller:
                 asyncio.create_task(self.handle_command(command))
         except asyncio.CancelledError:
             return
-        except asyncio.streams.IncompleteReadError:
+        except asyncio.IncompleteReadError:
             self.log.warning("Connection lost")
             await self.close()
             if self.reconnect:

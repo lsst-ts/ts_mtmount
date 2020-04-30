@@ -29,6 +29,7 @@ __all__ = [
     "OnStateInfoReply",
     "InPositionReply",
     "TelemetryReply",
+    "TelemetryOSS5Reply",
     "Replies",
     "ReplyDict",
     "parse_reply",
@@ -213,6 +214,85 @@ class TelemetryReply(Reply):
     )
 
 
+class TelemetryOSS5Reply(Reply):
+    """OSS5 telemetry data"""
+
+    field_infos = make_reply_field_infos(
+        enums.ReplyCode.TELEMETRY_OSS5,
+        (
+            field_info.TimestampFieldInfo(),
+            field_info.FloatFieldInfo(name="CFM_5011", doc="data"),
+            field_info.FloatFieldInfo(name="CFM_5012", doc="data"),
+            field_info.FloatFieldInfo(name="CFM_5013", doc="data"),
+            field_info.FloatFieldInfo(name="CFM_5041", doc="data"),
+            field_info.FloatFieldInfo(name="CFM_5042", doc="data"),
+            field_info.FloatFieldInfo(name="CFM_5043", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5011", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5012", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5013", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5014", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5015", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5016", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5041", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5042", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5043", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5044", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5045", doc="data"),
+            field_info.FloatFieldInfo(name="CPM_5046", doc="data"),
+            field_info.FloatFieldInfo(name="CTM_5011", doc="data"),
+            field_info.FloatFieldInfo(name="CTM_5041", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M1_left_Bearing_1", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M1_left_Bearing_2", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M1_left_Bearing_3", doc="data"),
+            field_info.FloatFieldInfo(
+                name="EL_XPos_M1_left_Bearing_calculated", doc="data"
+            ),
+            field_info.FloatFieldInfo(name="EL_XPos_M1_right_Bearing_1", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M1_right_Bearing_2", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M1_right_Bearing_3", doc="data"),
+            field_info.FloatFieldInfo(
+                name="EL_XPos_M1_right_Bearing_calculated", doc="data"
+            ),
+            field_info.FloatFieldInfo(name="EL_XPos_M2_left_Bearing_1", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M2_left_Bearing_2", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M2_left_Bearing_3", doc="data"),
+            field_info.FloatFieldInfo(
+                name="EL_XPos_M2_left_Bearing_calculated", doc="data"
+            ),
+            field_info.FloatFieldInfo(name="EL_XPos_M2_right_Bearing_1", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M2_right_Bearing_2", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XPos_M2_right_Bearing_3", doc="data"),
+            field_info.FloatFieldInfo(
+                name="El_XPos_M2_right_Bearing_calculated", doc="data"
+            ),
+            field_info.FloatFieldInfo(name="EL_XNeg_M1_left_Bearing_1", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XNeg_M1_left_Bearing_2", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XNeg_M1_left_Bearing_3", doc="data"),
+            field_info.FloatFieldInfo(
+                name="EL_XNeg_M1_left_Bearing_calculated", doc="data"
+            ),
+            field_info.FloatFieldInfo(name="EL_XNeg_M1_right_Bearing_1", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XNeg_M1_right_Bearing_2", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XNeg_M1_right_Bearing_3", doc="data"),
+            field_info.FloatFieldInfo(
+                name="EL_XNeg_M1_right_Bearing_calculated", doc="data"
+            ),
+            field_info.FloatFieldInfo(name="EL_XNeg_M2_left_Bearing_1", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XNeg_M2_left_Bearing_2", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XNeg_M2_left_Bearing_3", doc="data"),
+            field_info.FloatFieldInfo(
+                name="EL_XNeg_M2_left_Bearing_calculated", doc="data"
+            ),
+            field_info.FloatFieldInfo(name="EL_XNeg_M2_right_Bearing_1", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XNeg_M2_right_Bearing_2", doc="data"),
+            field_info.FloatFieldInfo(name="EL_XNeg_M2_right_Bearing_3", doc="data"),
+            field_info.FloatFieldInfo(
+                name="El_XNeg_M2_right_Bearing_calculated", doc="data"
+            ),
+        ),
+    )
+
+
 Replies = (
     AckReply,
     NoAckReply,
@@ -222,6 +302,7 @@ Replies = (
     OnStateInfoReply,
     InPositionReply,
     TelemetryReply,
+    TelemetryOSS5Reply,
 )
 
 for reply in Replies:

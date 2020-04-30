@@ -243,6 +243,7 @@ class ReplyCode(enum.IntEnum):
     ON_STATE_INFO = 5
     IN_POSITION = 6
     TELEMETRY = 47
+    TELEMETRY_OSS5 = 50
 
 
 class Source(enum.IntEnum):

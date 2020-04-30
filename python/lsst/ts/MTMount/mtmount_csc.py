@@ -491,17 +491,67 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     # TODO: Handle InPosition
                     self.log.info(f"Read InPosition reply: {reply}")
                 elif isinstance(reply, replies.TelemetryReply):
-                    try:
-                        topic = getattr(self, f"tel_{reply.name}")
-                        data_dict = json.loads(reply.data)
-                        topic.set_put(**data_dict)
+                    topic = getattr(self, f"tel_{reply.name}")
+                    data_dict = json.loads(reply.data)
+                    topic.set_put(**data_dict)
+                elif isinstance(reply, replies.TelemetryOSS5Reply):
+                    field_names = [
+                        "CFM_5011",
+                        "CFM_5012",
+                        "CFM_5013",
+                        "CFM_5041",
+                        "CFM_5042",
+                        "CFM_5043",
+                        "CPM_5011",
+                        "CPM_5012",
+                        "CPM_5013",
+                        "CPM_5014",
+                        "CPM_5015",
+                        "CPM_5016",
+                        "CPM_5041",
+                        "CPM_5042",
+                        "CPM_5043",
+                        "CPM_5044",
+                        "CPM_5045",
+                        "CPM_5046",
+                        "CTM_5011",
+                        "CTM_5041",
+                        "EL_XPos_M1_left_Bearing_1",
+                        "EL_XPos_M1_left_Bearing_2",
+                        "EL_XPos_M1_left_Bearing_3",
+                        "EL_XPos_M1_left_Bearing_calculated",
+                        "EL_XPos_M1_right_Bearing_1",
+                        "EL_XPos_M1_right_Bearing_2",
+                        "EL_XPos_M1_right_Bearing_3",
+                        "EL_XPos_M1_right_Bearing_calculated",
+                        "EL_XPos_M2_left_Bearing_1",
+                        "EL_XPos_M2_left_Bearing_2",
+                        "EL_XPos_M2_left_Bearing_3",
+                        "EL_XPos_M2_left_Bearing_calculated",
+                        "EL_XPos_M2_right_Bearing_1",
+                        "EL_XPos_M2_right_Bearing_2",
+                        "EL_XPos_M2_right_Bearing_3",
+                        "El_XPos_M2_right_Bearing_calculated",
+                        "EL_XNeg_M1_left_Bearing_1",
+                        "EL_XNeg_M1_left_Bearing_2",
+                        "EL_XNeg_M1_left_Bearing_3",
+                        "EL_XNeg_M1_left_Bearing_calculated",
+                        "EL_XNeg_M1_right_Bearing_1",
+                        "EL_XNeg_M1_right_Bearing_2",
+                        "EL_XNeg_M1_right_Bearing_3",
+                        "EL_XNeg_M1_right_Bearing_calculated",
+                        "EL_XNeg_M2_left_Bearing_1",
+                        "EL_XNeg_M2_left_Bearing_2",
+                        "EL_XNeg_M2_left_Bearing_3",
+                        "EL_XNeg_M2_left_Bearing_calculated",
+                        "EL_XNeg_M2_right_Bearing_1",
+                        "EL_XNeg_M2_right_Bearing_2",
+                        "EL_XNeg_M2_right_Bearing_3",
+                        "El_XNeg_M2_right_Bearing_calculated",
+                    ]
+                    data_dict = {name: getattr(reply, name) for name in field_names}
+                    self.tel_OSS5.set_put(**data_dict)
 
-                    except Exception:
-                        print(
-                            f"failed to handle telemetry reply for {reply.name}; "
-                            f"data={reply.data}; "
-                            f"data_dict={data_dict}"
-                        )
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
