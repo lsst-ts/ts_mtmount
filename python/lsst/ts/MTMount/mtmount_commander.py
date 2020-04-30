@@ -27,7 +27,7 @@ import dataclasses
 from lsst.ts import salobj
 
 STD_TIMEOUT = 2
-TRACK_INTERVAL = 0.1
+TRACK_INTERVAL = 0.01
 
 
 @dataclasses.dataclass
@@ -46,9 +46,18 @@ class MTMountCommander(salobj.CscCommander):
         self.help_dict["ramp"] = " ".join(ramp_arg_names) + " # track a ramp"
         self.ramp_count = 0
 
+        print("Telemetry topic names")
+        for telname in self.remote.salinfo.telemetry_names:
+            print(telname)
+
     @property
     def ramp_arg_names(self):
         return
+
+    # Uncomment to prevent printing target events
+    # (this seems to have negligible effect on speed).
+    # def evt_target_callback(self, data):
+    #     pass
 
     async def do_ramp(self, args):
         ramp_arg_info = RampArgs.__dataclass_fields__
@@ -73,8 +82,16 @@ class MTMountCommander(salobj.CscCommander):
         try:
             print("Start the ramp")
             tai0 = salobj.current_tai()
+            dt = tai0
+            ntargets = 0
+            prev_tai = 0
             while True:
                 curr_tai = salobj.current_tai()
+                if curr_tai <= prev_tai:
+                    # Work around an issue where time.time()
+                    # can return a slightly earlier value.
+                    curr_tai = prev_tai + TRACK_INTERVAL * 0.1
+                prev_tai = curr_tai
                 dt = curr_tai - tai0
                 if dt > args.duration:
                     break
@@ -91,8 +108,10 @@ class MTMountCommander(salobj.CscCommander):
                     radesys="ICRS",
                     timeout=STD_TIMEOUT,
                 )
+                ntargets += 1
                 await asyncio.sleep(TRACK_INTERVAL)
         except asyncio.CancelledError:
             pass
         print("Disable tracking")
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
+        print(f"Tracking rate={ntargets/dt:0.1f}")

@@ -82,6 +82,13 @@ class Controller:
         self.log = log.getChild("Controller")
         self.reconnect = reconnect
 
+        if telemetry_dict is None:
+            import yaml
+
+            with open("telemetry_dict.yaml", "r") as f:
+                data = f.read()
+            telemetry_dict = yaml.safe_load(data)
+
         self.telemetry_dict = telemetry_dict
         self.telemetry_interval = 0.05  # Seconds between telemetry output
         self.telemetry_margins = []
@@ -128,24 +135,28 @@ class Controller:
                 data_dict[name] = data
 
         try:
+            t0margin = time.monotonic()
             while True:
                 t0 = time.monotonic()
                 for name, data_dict in self.telemetry_dict.items():
                     data = json.dumps(data_dict)
                     reply = replies.TelemetryReply(name=name, data=data)
                     await self.communicator.write(reply)
-
-                margin = self.telemetry_interval - (time.monotonic() - t0)
+                t1 = time.monotonic()
+                margin = self.telemetry_interval - (t1 - t0)
                 self.telemetry_margins.append(margin)
                 if margin > 0:
                     await asyncio.sleep(margin)
-                if len(self.telemetry_margins) >= 10 // self.telemetry_interval:
+                if t1 - t0margin > 10:
+                    dt = t1 - t0margin
+                    t0margin = t1
                     margin_arr = np.array(self.telemetry_margins)
-                    self.log.info(
+                    print(
                         f"margin min={margin_arr.min():0.3f}; "
                         f"max={margin_arr.max():0.3f}; "
                         f"mean={margin_arr.mean():0.3f}; "
-                        f"std={margin_arr.std():0.3f}"
+                        f"std={margin_arr.std():0.3f}; "
+                        f"rate={len(margin_arr)/dt:0.1f}"
                     )
                     self.telemetry_margins = []
         except Exception:
