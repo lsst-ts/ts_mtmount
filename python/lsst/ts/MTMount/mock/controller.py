@@ -74,6 +74,7 @@ class Controller:
         self.log = log.getChild("Controller")
         self.reconnect = reconnect
         self.telemetry_interval = 0.2  # Seconds
+        self.in_position_error = 0.01  # Degrees
 
         self.communicator = None
         self.sal_controller = None
@@ -93,24 +94,30 @@ class Controller:
         self.read_loop_task = asyncio.Future()
         self.telemetry_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.connect())
+        self.in_position_dict = {
+            enums.DeviceId.AZIMUTH_AXIS: None,
+            enums.DeviceId.ELEVATION_AXIS: None,
+        }
 
-    def put_axis_telemetry(self, device_id, tai):
+    async def put_axis_telemetry(self, device_id, tai):
         """Warning: this minimal and simplistic.
         """
         prefix = {
             enums.DeviceId.AZIMUTH_AXIS: "Azimuth",
             enums.DeviceId.ELEVATION_AXIS: "Elevation",
         }[device_id]
-        topic = getattr(self.sal_controller, f"tel_{prefix}")
         device = self.device_dict[device_id]
+        actuator = device.actuator
+        target = actuator.target.at(tai)
+        actual = actuator.path.at(tai)
+
+        # Write the SAL telemetry topic
+        topic = getattr(self.sal_controller, f"tel_{prefix}")
         state_strs = [
             "On" if device.power_on else "Off",
             "DriveEnabled" if device.enabled else "DriveDisabled",
             "TrackingEnabled" if device.tracking_enabled else "TrackingDisabled",
         ]
-        actuator = device.actuator
-        target = actuator.target.at(tai)
-        actual = actuator.path.at(tai)
         kwargs = {
             f"{prefix}_Status": "/".join(state_strs),
             f"{prefix}_Angle_Set": target.position,
@@ -121,19 +128,37 @@ class Controller:
         }
         topic.set_put(**kwargs)
 
+        # Write the InPosition TCP/IP message
+        in_position = (
+            device.has_target
+            and abs(target.position - actual.position) < self.in_position_error
+        )
+        if in_position != self.in_position_dict[device_id]:
+            self.in_position_dict[device_id] = in_position
+            what = {enums.DeviceId.AZIMUTH_AXIS: 0, enums.DeviceId.ELEVATION_AXIS: 1}[
+                device_id
+            ]
+            reply = replies.InPositionReply(what=what, in_position=in_position)
+            await self.communicator.write(reply)
+
     async def telemetry_loop(self):
         """Warning: this minimal and simplistic.
         """
         try:
             while True:
                 tai = salobj.current_tai()
-                self.put_axis_telemetry(device_id=enums.DeviceId.AZIMUTH_AXIS, tai=tai)
-                self.put_axis_telemetry(
+                await self.put_axis_telemetry(
+                    device_id=enums.DeviceId.AZIMUTH_AXIS, tai=tai
+                )
+                await self.put_axis_telemetry(
                     device_id=enums.DeviceId.ELEVATION_AXIS, tai=tai
                 )
                 await asyncio.sleep(self.telemetry_interval)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             self.log.exception("telemetry_loop failed")
+            raise
 
     def add_all_devices(self):
         """Add all mock devices.
