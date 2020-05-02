@@ -108,6 +108,15 @@ class MockControllerTestCase(asynctest.TestCase):
         else:
             await self.controller.handle_command(command)
         reply = await asyncio.wait_for(self.communicator.read(), timeout=STD_TIMEOUT)
+        while type(reply) not in (
+            MTMount.replies.AckReply,
+            MTMount.replies.DoneReply,
+            MTMount.replies.NoAckReply,
+        ):
+            print(f"read {type(reply)}; trying again")
+            reply = await asyncio.wait_for(
+                self.communicator.read(), timeout=STD_TIMEOUT
+            )
         if should_fail:
             self.assertIsInstance(reply, MTMount.replies.NoAckReply)
             self.assertEqual(reply.sequence_id, command.sequence_id)
