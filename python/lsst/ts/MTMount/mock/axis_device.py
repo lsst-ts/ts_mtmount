@@ -140,6 +140,7 @@ class AxisDevice(BaseDevice):
         """
         self.supersede_move_command()
         self.actuator.abort()
+        self.actuator.stop()
         self.tracking_enabled = False
         if command.on:
             self.power_on = True
@@ -155,6 +156,7 @@ class AxisDevice(BaseDevice):
         self.assert_on()
         self.supersede_move_command()
         self.actuator.abort()
+        self.actuator.stop()
         self.tracking_enabled = False
         self.enabled = False
 
@@ -165,7 +167,7 @@ class AxisDevice(BaseDevice):
         """
         self.assert_enabled()
         self.supersede_move_command()
-        self.actuator.abort()
+        self.actuator.stop()
         self.tracking_enabled = command.on
 
     def do_home(self, command):
