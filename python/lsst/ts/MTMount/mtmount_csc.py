@@ -298,6 +298,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.enable_task = asyncio.create_task(self.enable_devices())
                 await self.enable_task
         else:
+            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
             if self.enabled_state is not enums.EnabledState.DISABLED:
                 self.disable_task.cancel()
                 self.disable_task = asyncio.create_task(self.disable_devices())
@@ -474,8 +475,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 elif isinstance(reply, replies.OnStateInfoReply):
                     self.log.info(f"Ignoring OnStateInfo reply: {reply}")
                 elif isinstance(reply, replies.InPositionReply):
-                    # TODO: Handle InPosition
-                    self.log.info(f"Read InPosition reply: {reply}")
+                    if reply.what == 0:
+                        self.evt_axesInPosition.set_put(azimuth=reply.in_position)
+                    elif reply.what == 1:
+                        self.evt_axesInPosition.set_put(elevation=reply.in_position)
+                    else:
+                        self.log.warning(
+                            f"Unrecognized what={reply.what} in InPositionReply"
+                        )
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
