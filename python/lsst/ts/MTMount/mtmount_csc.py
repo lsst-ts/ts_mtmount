@@ -516,7 +516,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.mock_controller = mock.Controller(
                 command_port=command_port, log=self.log
             )
-            await asyncio.wait_for(self.mock_controller.start_task, timeout=2)
+            await asyncio.wait_for(self.mock_controller.start_task, timeout=60)
         except Exception as e:
             err_msg = "Could not start mock controller"
             self.log.exception(e)
