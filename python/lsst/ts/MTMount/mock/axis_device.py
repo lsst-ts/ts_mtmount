@@ -63,6 +63,9 @@ class AxisDevice(BaseDevice):
         device_limits.scale(factor=1.01)
         self.enabled = False
         self.tracking_enabled = False
+        # Has a target position been specified?
+        # Set True when tracking or moving point to point and False otherwise.
+        self.has_target = False
         self.actuator = simactuators.TrackingActuator(
             min_position=device_limits.min_position,
             max_position=device_limits.max_position,
@@ -123,13 +126,19 @@ class AxisDevice(BaseDevice):
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command.
         """
-        duration = 0.1 + self.end_tai_unix - salobj.current_tai()
+        # Provide some slop for non-monotonic clocks in Docker on macOS
+        duration = 0.2 + self.end_tai_unix - salobj.current_tai()
         await asyncio.sleep(duration)
 
     def supersede_move_command(self):
         """Report the current move command (if any) as superseded.
         """
         self._monitor_move_task.cancel()
+
+    def abort(self):
+        self.actuator.abort()
+        self.actuator.stop()
+        self.has_target = False
 
     def do_drive_enable(self, command):
         """Enable or disable the drive.
@@ -139,8 +148,7 @@ class AxisDevice(BaseDevice):
         Always abort motion and disable tracking.
         """
         self.supersede_move_command()
-        self.actuator.abort()
-        self.actuator.stop()
+        self.abort()
         self.tracking_enabled = False
         if command.on:
             self.power_on = True
@@ -155,8 +163,7 @@ class AxisDevice(BaseDevice):
         """
         self.assert_on()
         self.supersede_move_command()
-        self.actuator.abort()
-        self.actuator.stop()
+        self.abort()
         self.tracking_enabled = False
         self.enabled = False
 
@@ -168,6 +175,7 @@ class AxisDevice(BaseDevice):
         self.assert_enabled()
         self.supersede_move_command()
         self.actuator.stop()
+        self.has_target = False
         self.tracking_enabled = command.on
 
     def do_home(self, command):
@@ -193,6 +201,7 @@ class AxisDevice(BaseDevice):
         and the CSC doesn't support these parameters anyway.
         """
         self.assert_enabled()
+        self.has_target = True
         return self.move_point_to_point(position=command.position, command=command)
 
     def do_move_velocity(self, command):
@@ -212,6 +221,10 @@ class AxisDevice(BaseDevice):
         self.supersede_move_command()
         self.tracking_enabled = False
         self.actuator.stop()
+        # I am not sure if this should clear the target.
+        # It depends what the real controller reports for the "in position"
+        # event when an axis is stopped.
+        self.has_target = False
 
     def do_track(self, command):
         """Specify a tracking target tai_time, position, velocity.
@@ -226,6 +239,7 @@ class AxisDevice(BaseDevice):
         self.actuator.set_target(
             tai=tai_unix, position=command.position, velocity=command.velocity
         )
+        self.has_target = True
 
     def move_point_to_point(self, position, command):
         """Move to the specified position.
@@ -250,6 +264,7 @@ class AxisDevice(BaseDevice):
         # Despite the name, tai_from_utc works with any astropy.time.Time
         tai_unix = salobj.current_tai()
         self.actuator.set_target(tai=tai_unix, position=position, velocity=0)
+        self.has_target = True
         self.monitor_move_command(command)
         timeout = self.end_tai_unix - tai_unix
         return timeout, self._monitor_move_task
