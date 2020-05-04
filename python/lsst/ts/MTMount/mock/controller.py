@@ -99,6 +99,10 @@ class Controller:
             enums.DeviceId.ELEVATION_AXIS: None,
         }
 
+    @property
+    def connected(self):
+        return self.communicator is not None and self.communicator.connected
+
     async def put_axis_telemetry(self, device_id, tai):
         """Warning: this minimal and simplistic.
         """
@@ -281,7 +285,7 @@ class Controller:
     async def read_loop(self):
         self.log.debug("read_loop begins")
         try:
-            while self.communicator.connected:
+            while self.connected:
                 command = await self.communicator.read()
                 if self.command_queue and not self.command_queue.full():
                     self.command_queue.put_nowait(command)
@@ -355,13 +359,13 @@ class Controller:
     async def monitor_command(self, command, task):
         try:
             await task
-            if self.communicator.connected:
+            if self.connected:
                 await self.write_done(command)
         except asyncio.CancelledError:
-            if self.communicator.connected:
+            if self.connected:
                 await self.write_noack(command, explanation="Superseded")
         except Exception as e:
-            if self.communicator.connected:
+            if self.connected:
                 await self.write_noack(command, explanation=str(e))
 
     async def write_ack(self, command, timeout):
