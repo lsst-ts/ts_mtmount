@@ -80,7 +80,14 @@ def print_connected(descr, communicator):
 
 
 class Commander:
-    """Communicate via TCP/IP with a Tekniker Operations Manager
+    """Command a Tekniker Operations Manager.
+
+    Read commands from a user on the command line
+    and send them to the Operations Manager.
+
+    Warning: this is only intended as a short-term hack.
+    It will be deleted once MTMountCsc has been shown to work
+    with the Operation Manager.
 
     Parameters
     ----------
@@ -140,6 +147,7 @@ help  # Print this help
 """
 
     async def close(self):
+        """Shut down this TMA commander."""
         try:
             self.read_loop_task.cancel()
             if self.simulator is not None:
@@ -150,6 +158,8 @@ help  # Print this help
             self.done_task.set_exception(e)
 
     def get_command_help(self):
+        """Get help for all commands in self.command_dict, as a single string.
+        """
         help_strs = [
             f"{cmd_name} {self.get_argument_names(cmd_name)}"
             for cmd_name in self.command_dict
@@ -157,6 +167,13 @@ help  # Print this help
         return "\n".join(help_strs)
 
     def get_argument_names(self, cmd_name):
+        """Get the argument names from a command, for printing help.
+
+        Parameters
+        ----------
+        cmd_name : `str`
+            The command name, as the key in self.command_dict.
+        """
         CommandClass = self.command_dict[cmd_name]
         arg_infos = CommandClass.field_infos[4:]
         return " ".join(arg.name for arg in arg_infos)
@@ -202,6 +219,8 @@ help  # Print this help
         await self.communicator.write(cmd)
 
     async def read_loop(self):
+        """Read replies from the operations manager.
+        """
         try:
             await self.communicator.connect_task
             while True:
@@ -213,11 +232,20 @@ help  # Print this help
             print(f"tma_commander read loop failed with {e!r}")
 
     def connect_callback(self, communicator):
+        """Callback function for changes in communicator connection state.
+
+        Parameters
+        ----------
+        communicator : `MTMount.Communicator`
+            The communicator whose connection state has changed.
+        """
         print_connected(descr="TMA commander", communicator=communicator)
         if communicator.connected:
             self.read_loop_task = asyncio.create_task(self.read_loop())
 
     async def command_loop(self):
+        """Read commands from the user and send them to the operations manager.
+        """
         try:
             print(f"Waiting to connect to the operation manager")
             await self.communicator.connect_task
@@ -247,6 +275,8 @@ help  # Print this help
 
 
 async def amain():
+    """Parse command-line arguments and run the TMA commander.
+    """
     parser = argparse.ArgumentParser(f"Send commands to Tekniker's TMA")
     parser.add_argument(
         "--host", default="127.0.0.1", help="TMA operation manager IP address."
