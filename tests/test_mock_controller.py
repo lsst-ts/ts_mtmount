@@ -64,6 +64,7 @@ class MockControllerTestCase(asynctest.TestCase):
             client_host=salobj.LOCAL_HOST,
             client_port=command_port,
             server_host=salobj.LOCAL_HOST,
+            # Tekniker uses repy port = command port + 1
             server_port=command_port + 1,
             log=log,
             read_replies=True,

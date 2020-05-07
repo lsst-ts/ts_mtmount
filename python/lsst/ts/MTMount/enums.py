@@ -246,10 +246,13 @@ class ReplyCode(enum.IntEnum):
 
 class Source(enum.IntEnum):
     """Values for the ``source`` field of a message.
+
+    Note: EUI is called MCS in Tekniker's communication protocol
+    documentation.
     """
 
     TCS = 1
-    MCS = 2
+    EUI = 2
     HHD = 3
     PXI = 100
 

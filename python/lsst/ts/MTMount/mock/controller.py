@@ -230,6 +230,7 @@ class Controller:
         self.communicator = communicator.Communicator(
             name="Controller",
             client_host=salobj.LOCAL_HOST,
+            # Tekniker uses repy port = command port + 1
             client_port=self.command_port + 1,
             server_host=salobj.LOCAL_HOST,
             server_port=self.command_port,

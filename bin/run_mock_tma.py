@@ -27,12 +27,6 @@ from lsst.ts import MTMount
 async def amain():
     parser = argparse.ArgumentParser(f"Simulate Tekniker's TMA")
     parser.add_argument(
-        "--command-port",
-        type=int,
-        default=MTMount.CSC_COMMAND_PORT,
-        help="TCP port for commands.",
-    )
-    parser.add_argument(
         "--log-level",
         type=int,
         default=logging.INFO,
@@ -44,9 +38,9 @@ async def amain():
     namespace = parser.parse_args()
     log = logging.getLogger("TMASimulator")
     log.setLevel(namespace.log_level)
-    print(f"Mock TMA controller: command_port={namespace.command_port}")
+    print(f"Mock TMA controller: command_port={MTMount.CSC_COMMAND_PORT}")
     mock_controller = MTMount.mock.Controller(
-        command_port=namespace.command_port, log=log, reconnect=True,
+        command_port=MTMount.CSC_COMMAND_PORT, log=log, reconnect=True,
     )
     print("Mock TMA controller starting")
     await mock_controller.start_task

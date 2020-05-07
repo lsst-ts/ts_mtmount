@@ -27,6 +27,7 @@ import pathlib
 from lsst.ts import salobj
 from . import command_futures
 from . import commands
+from . import constants
 from . import enums
 from . import replies
 from . import communicator
@@ -184,7 +185,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise RuntimeError("Already connected")
         client_host = self.config.host
         server_host = None
-        command_port = self.config.command_port
+        command_port = constants.CSC_COMMAND_PORT
         if self.simulation_mode:
             client_host = salobj.LOCAL_HOST
             server_host = salobj.LOCAL_HOST
@@ -199,6 +200,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 client_host=client_host,
                 client_port=command_port,
                 server_host=server_host,
+                # Tekniker uses repy port = command port + 1
                 server_port=command_port + 1,
                 log=self.log,
                 read_replies=True,
@@ -219,7 +221,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.debug("connected")
         except Exception as e:
             err_msg = f"Could not connection to client_host={client_host}, "
-            f"command_port={self.config.command_port}"
+            f"command_port={command_port}"
             self.log.exception(err_msg)
             self.fault(
                 code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e}"
@@ -519,7 +521,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             if self.mock_command_port is not None:
                 command_port = self.mock_command_port
             else:
-                command_port = self.config.command_port
+                command_port = constants.CSC_COMMAND_PORT
             self.mock_controller = mock.Controller(
                 command_port=command_port, log=self.log
             )

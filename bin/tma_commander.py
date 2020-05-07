@@ -93,8 +93,6 @@ class Commander:
     ----------
     host : `str`
         IP address of the operation manager.
-    command_port : `int`
-        IP port of the operation manager.
     log_level : `int`
         Logging level.
     simulate : `bool`
@@ -102,7 +100,7 @@ class Commander:
         If True then ``host`` is ignored.
     """
 
-    def __init__(self, host, command_port, log_level, simulate):
+    def __init__(self, host, log_level, simulate):
         self.log = logging.getLogger()
         self.log.setLevel(log_level)
 
@@ -112,15 +110,15 @@ class Commander:
         if simulate:
             host = salobj.LOCAL_HOST
             self.simulator = MTMount.mock.Controller(
-                command_port=command_port, log=self.log
+                command_port=MTMount.CSC_COMMAND_PORT, log=self.log
             )
 
         self.communicator = MTMount.Communicator(
             name="tma_commander",
             client_host=host,
-            client_port=command_port,
+            client_port=MTMount.CSC_COMMAND_PORT,
             server_host=None,
-            server_port=command_port + 1,
+            server_port=MTMount.CSC_COMMAND_PORT + 1,
             log=self.log,
             read_replies=True,
             connect=True,
@@ -282,12 +280,6 @@ async def amain():
         "--host", default="127.0.0.1", help="TMA operation manager IP address."
     )
     parser.add_argument(
-        "--command-port",
-        type=int,
-        default=MTMount.CSC_COMMAND_PORT,
-        help="TCP port for commands.",
-    )
-    parser.add_argument(
         "--log-level",
         type=int,
         default=logging.INFO,
@@ -298,10 +290,7 @@ async def amain():
     )
     namespace = parser.parse_args()
     commander = Commander(
-        host=namespace.host,
-        command_port=namespace.command_port,
-        log_level=namespace.log_level,
-        simulate=namespace.simulate,
+        host=namespace.host, log_level=namespace.log_level, simulate=namespace.simulate,
     )
     await commander.done_task
 

@@ -20,11 +20,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
+# For reference and testing against Tekniker simulators.
+# Reply ports are one larger.
+EUI_COMMAND_PORT = 60005
+HHD_COMMAND_PORT = 40005
 # CSC TCP/IP default configuration
-# These values are for the HHD.
 # Update this when Tekniker adds a dedicated pair of ports for the CSC.
-CSC_COMMAND_PORT = 40005
-CSC_REPLY_PORT = 40006
+CSC_COMMAND_PORT = EUI_COMMAND_PORT
 
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
