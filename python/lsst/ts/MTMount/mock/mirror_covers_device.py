@@ -56,10 +56,10 @@ class MirrorCoversDevice(PointToPointDevice):
     def do_move_velocity(self, command):
         raise NotImplementedError("Not implemented")
 
-    def do_close(self, command):
+    def do_deploy(self, command):
         return self.move(position=0, command=command)
 
-    def do_open(self, command):
+    def do_retract(self, command):
         return self.move(position=100, command=command)
 
     def do_stop(self, command):

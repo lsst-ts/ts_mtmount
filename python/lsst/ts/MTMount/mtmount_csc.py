@@ -549,7 +549,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Deploy the mirror covers.
         await self.send_commands(
             commands.MirrorCoversPower(drive=-1, on=True),
-            commands.MirrorCoversClose(drive=-1),
+            commands.MirrorCoversDeploy(drive=-1),
             commands.MirrorCoversPower(drive=-1, on=False),
         )
 
@@ -558,7 +558,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Retract the mirror covers.
         await self.send_commands(
             commands.MirrorCoversPower(drive=-1, on=True),
-            commands.MirrorCoversOpen(drive=-1),
+            commands.MirrorCoversRetract(drive=-1),
             commands.MirrorCoversPower(drive=-1, on=False),
         )
         # Retract the mirror cover locks/guides.

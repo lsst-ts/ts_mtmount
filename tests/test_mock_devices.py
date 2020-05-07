@@ -138,8 +138,8 @@ class MockDevicesTestCase(asynctest.TestCase):
         await self.check_point_to_point_device(
             device=device,
             power_on_command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
-            goto_min_command=MTMount.commands.MirrorCoversClose(drive=-1),
-            goto_max_command=MTMount.commands.MirrorCoversOpen(drive=-1),
+            goto_min_command=MTMount.commands.MirrorCoversDeploy(drive=-1),
+            goto_max_command=MTMount.commands.MirrorCoversRetract(drive=-1),
             stop_command=MTMount.commands.MirrorCoversStop(drive=-1),
             start_at_min=True,
             move_min_timeout=0.5,
