@@ -216,8 +216,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await asyncio.wait_for(
                 asyncio.gather(*connect_tasks), timeout=self.config.connection_timeout
             )
-            self.read_loop_task = asyncio.create_task(self.read_loop())
             self.should_be_connected = True
+            self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("connected")
         except Exception as e:
             err_msg = f"Could not connection to client_host={client_host}, "
@@ -292,8 +292,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
-            if not self.connected and self.connect_task.done():
-                await self.connect()
+            if not self.connected:
+                self.connect_task.cancel()
+                self.connect_task = asyncio.create_task(self.connect())
+                await self.connect_task
 
             if self.enabled_state is not enums.EnabledState.ENABLED:
                 self.enable_task.cancel()
@@ -353,7 +355,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         futures = command_futures.CommandFutures()
         self.command_dict[command.sequence_id] = futures
-        self.log.debug(f"write command: %s", command)
         await self.communicator.write(command)
         await asyncio.wait_for(futures.ack, self.config.ack_timeout)
         if command.command_code in commands.AckOnlyCommandCodes:
