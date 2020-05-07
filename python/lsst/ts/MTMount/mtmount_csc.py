@@ -612,6 +612,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_startTracking(self, data):
         self.assert_enabled()
+        # TODO DM-24783 remove this if block once Tekniker's TMA code
+        # supports the xAxisEnableTracking commands.
+        if self.simulation_mode == 0:
+            self.log.info(
+                "Ignoring the startTracking command "
+                "because Tekniker's code does not yet support it"
+            )
+            return
         await self.send_commands(
             commands.ElevationAxisEnableTracking(on=True),
             commands.AzimuthAxisEnableTracking(on=True),
@@ -625,6 +633,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_stopTracking(self, data):
         self.assert_enabled()
+        # TODO DM-24783 remove this if block once Tekniker's TMA code
+        # supports the xAxisEnableTracking commands.
+        if self.simulation_mode == 0:
+            self.log.info(
+                "Ignoring the stopTracking command "
+                "because Tekniker's code does not yet support it"
+            )
+            return
         await self.send_commands(
             commands.ElevationAxisEnableTracking(on=False),
             commands.AzimuthAxisEnableTracking(on=False),
