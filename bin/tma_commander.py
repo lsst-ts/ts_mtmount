@@ -118,6 +118,7 @@ class Commander:
             client_host=host,
             client_port=MTMount.CSC_COMMAND_PORT,
             server_host=None,
+            # Tekniker uses repy port = command port + 1
             server_port=MTMount.CSC_COMMAND_PORT + 1,
             log=self.log,
             read_replies=True,
@@ -126,13 +127,30 @@ class Commander:
         )
         self.command_loop_task = asyncio.create_task(self.command_loop())
         self.command_dict = dict(
-            ccw_power=MTMount.commands.CameraCableWrapPower,
+            az_power=MTMount.commands.AzimuthAxisPower,
+            az_reset_alarm=MTMount.commands.AzimuthAxisResetAlarm,
             ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
-            ccw_stop=MTMount.commands.CameraCableWrapStop,
-            ccw_move=MTMount.commands.CameraCableWrapMove,
             ccw_enable_tracking=MTMount.commands.CameraCableWrapEnableTracking,
-            ccw_track=MTMount.commands.CameraCableWrapTrack,
+            ccw_move=MTMount.commands.CameraCableWrapMove,
+            ccw_power=MTMount.commands.CameraCableWrapPower,
             ccw_reset_alarm=MTMount.commands.CameraCableWrapResetAlarm,
+            ccw_stop=MTMount.commands.CameraCableWrapStop,
+            ccw_track=MTMount.commands.CameraCableWrapTrack,
+            el_power=MTMount.commands.ElevationAxisPower,
+            el_reset_alarm=MTMount.commands.ElevationAxisResetAlarm,
+            mc_deploy=MTMount.commands.MirrorCoversDeploy,
+            mc_power=MTMount.commands.MirrorCoversPower,
+            mc_reset_alarm=MTMount.commands.MirrorCoversResetAlarm,
+            mc_retract=MTMount.commands.MirrorCoversRetract,
+            mcl_move_all=MTMount.commands.MirrorCoverLocksMoveAll,
+            mcl_power=MTMount.commands.MirrorCoverLocksPower,
+            mcl_reset_alarm=MTMount.commands.MirrorCoverLocksResetAlarm,
+            mps_power=MTMount.commands.MainPowerSupplyPower,
+            mps_reset_alarm=MTMount.commands.MainPowerSupplyResetAlarm,
+            oss_power=MTMount.commands.OilSupplySystemPower,
+            oss_reset_alarm=MTMount.commands.OilSupplySystemResetAlarm,
+            tec_power=MTMount.commands.TopEndChillerPower,
+            tec_reset_alarm=MTMount.commands.TopEndChillerResetAlarm,
         )
         self.help_text = f"""Send commands to the telescope mount assemply.
 
@@ -172,9 +190,11 @@ help  # Print this help
         cmd_name : `str`
             The command name, as the key in self.command_dict.
         """
+        # Get FieldInfos for the command arguments (if any) from the
+        # command class, and use that to generate a list of argument names.
         CommandClass = self.command_dict[cmd_name]
-        arg_infos = CommandClass.field_infos[4:]
-        return " ".join(arg.name for arg in arg_infos)
+        arg_infos = CommandClass.field_infos[MTMount.commands.NUM_HEADER_FIELDS :]
+        return " ".join(arg_info.name for arg_info in arg_infos)
 
     async def handle_command(self, cmd_name, args):
         """Parse arguments and issue a command.
@@ -195,7 +215,9 @@ help  # Print this help
             CommandClass = self.command_dict[cmd_name]
         except KeyError:
             raise ValueError(f"Unrecognized command {cmd_name}")
-        arg_infos = CommandClass.field_infos[4:]
+        # Get FieldInfos for the command arguments (if any) from the
+        # command class, and use them to cast and validate the arguments.
+        arg_infos = CommandClass.field_infos[MTMount.commands.NUM_HEADER_FIELDS :]
         # If the final argument for the command is TAI time,
         # then set it to the current time.
         has_tai_time_argument = arg_infos and isinstance(
