@@ -43,13 +43,6 @@ TIMEOUT_BUFFER = 5
 MAX_ROTATOR_APPLICATION_GAP = 1
 
 
-AxisEnableCommands = (
-    commands.AzimuthAxisDriveEnable,
-    commands.ElevationAxisDriveEnable,
-    commands.CameraCableWrapDriveEnable,
-)
-
-
 class MTMountCsc(salobj.ConfigurableCsc):
     """MTMount CSC
 
@@ -178,7 +171,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         Start the mock controller, if simulating.
         """
-        self.log.debug("connect")
+        self.log.debug(f"Connect to the low-level controller")
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
@@ -208,20 +201,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 connect_callback=self.connect_callback,
             )
         try:
-            if self.simulation_mode:
-                self.log.info("Connecting the CSC and mock controller to each other.")
-            else:
-                self.log.info("Connecting a client to the Operation Manager.")
+            self.log.info(f"Connecting to the low-level controller")
             connect_tasks.append(self.communicator.connect())
             await asyncio.wait_for(
                 asyncio.gather(*connect_tasks), timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
             self.read_loop_task = asyncio.create_task(self.read_loop())
-            self.log.debug("connected")
+            self.log.debug(f"Connected to the low-level controller")
         except Exception as e:
-            err_msg = f"Could not connection to client_host={client_host}, "
-            f"command_port={command_port}"
+            err_msg = f"Could not connect to the low-level controller "
+            f"at client_host={client_host}, command_port={command_port}"
             self.log.exception(err_msg)
             self.fault(
                 code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e}"
@@ -236,22 +226,30 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.should_be_connected = False
             self.fault(
                 code=enums.CscErrorCode.CONNECTION_LOST,
-                report="connection lost to low-level controller (noticed in connect_callback)",
+                report="Connection lost to low-level controller (noticed in connect_callback)",
             )
 
     async def enable_devices(self):
-        self.log.info("enable devices")
+        self.log.info("Enable devices")
         self.disable_task.cancel()
         self.enabled_state = enums.EnabledState.ENABLING
         try:
             enable_commands = [
+                commands.TopEndChillerResetAlarm(),
+                commands.MainPowerSupplyResetAlarm(),
+                commands.MirrorCoverLocksResetAlarm(),
+                commands.MirrorCoversResetAlarm(),
+                commands.AzimuthAxisResetAlarm(),
+                commands.ElevationAxisResetAlarm(),
+                commands.CameraCableWrapResetAlarm(),
                 commands.TopEndChillerPower(on=True),
-                # I have asked Tekniker why there is a temperature argument
-                # for the top end chiller track ambient command.
                 commands.TopEndChillerTrackAmbient(on=True, temperature=0),
                 commands.MainPowerSupplyPower(on=True),
                 commands.OilSupplySystemPower(on=True),
-            ] + [command(drive=-1, on=True) for command in AxisEnableCommands]
+                commands.AzimuthAxisPower(on=True),
+                commands.ElevationAxisPower(on=True),
+                commands.CameraCableWrapPower(on=True),
+            ]
             await self.send_commands(*enable_commands)
             self.enabled_state = enums.EnabledState.ENABLED
         except Exception as e:
@@ -263,7 +261,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def disable_devices(self):
-        self.log.info("disable devices")
+        self.log.info("Disable devices")
         self.enable_task.cancel()
         if self.enabled_state in (
             enums.EnabledState.DISABLING,
@@ -276,8 +274,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             self.enabled_state = enums.EnabledState.DISABLING
             try:
-                disable_commands = [commands.BothAxesStop()] + [
-                    command(drive=-1, on=False) for command in AxisEnableCommands
+                disable_commands = [
+                    commands.BothAxesStop(),
+                    commands.CameraCableWrapStop(),
+                    commands.AzimuthAxisPower(on=False),
+                    commands.ElevationAxisPower(on=False),
+                    commands.CameraCableWrapPower(on=False),
                 ]
                 await self.send_commands(*disable_commands)
                 self.enabled_state = enums.EnabledState.DISABLED
@@ -341,7 +343,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             else:
                 return await self._basic_send_command(command=command)
         except Exception:
-            self.log.exception(f"send_command({command}) failed")
+            self.log.exception(f"Failed to send command {command}")
             raise
 
     async def _basic_send_command(self, command):
@@ -393,7 +395,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         return futures_list
 
     async def camera_cable_wrap_loop(self):
-        self.log.info("camera_cable_wrap_loop begins")
+        self.log.info("Camera cable wrap control begins")
         try:
             self.prev_rot_application = None
             while True:
@@ -418,17 +420,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.send_command(command)
                 self.prev_rot_application = rot_application
         except asyncio.CancelledError:
-            self.log.info("camera_cable_wrap_loop ends")
+            self.log.info("Camera cable wrap control ends")
         except Exception:
-            self.log.exception("camera_cable_wrap failed")
+            self.log.exception("Camera cable wrap control failed")
 
     async def configure(self, config):
         self.config = config
 
     async def read_loop(self):
-        """Read and process replies from the Operation Manager.
+        """Read and process replies from the low-level controller.
         """
-        self.log.debug("read loop begins")
+        self.log.debug("Read loop begins")
         while self.should_be_connected and self.connected:
             try:
                 reply = await self.communicator.read()
@@ -493,7 +495,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except Exception as e:
                 if self.should_be_connected:
                     if self.connected:
-                        err_msg = "read_loop failed; possibly a bug"
+                        err_msg = "Read loop failed; possibly a bug"
                         self.log.exception(err_msg)
                         self.fault(
                             code=enums.CscErrorCode.INTERNAL_ERROR,
@@ -502,9 +504,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     else:
                         self.fault(
                             code=enums.CscErrorCode.CONNECTION_LOST,
-                            report="connection lost to low-level controller (noticed in read_loop)",
+                            report="Connection lost to low-level controller (noticed in read_loop)",
                         )
-        self.log.debug("read loop ends")
+        self.log.debug("Read loop ends")
 
     async def start(self):
         await super().start()
@@ -542,30 +544,30 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.assert_enabled()
         # Deploy the mirror cover locks/guides.
         await self.send_commands(
-            commands.MirrorCoverLocksPower(drive=-1, on=True),
-            commands.MirrorCoverLocksMoveAll(drive=-1, deploy=True),
-            commands.MirrorCoverLocksPower(drive=-1, on=False),
+            commands.MirrorCoverLocksPower(on=True),
+            commands.MirrorCoverLocksMoveAll(deploy=True),
+            commands.MirrorCoverLocksPower(on=False),
         )
         # Deploy the mirror covers.
         await self.send_commands(
-            commands.MirrorCoversPower(drive=-1, on=True),
-            commands.MirrorCoversDeploy(drive=-1),
-            commands.MirrorCoversPower(drive=-1, on=False),
+            commands.MirrorCoversPower(on=True),
+            commands.MirrorCoversDeploy(),
+            commands.MirrorCoversPower(on=False),
         )
 
     async def do_openMirrorCovers(self, data):
         self.assert_enabled()
         # Retract the mirror covers.
         await self.send_commands(
-            commands.MirrorCoversPower(drive=-1, on=True),
-            commands.MirrorCoversRetract(drive=-1),
-            commands.MirrorCoversPower(drive=-1, on=False),
+            commands.MirrorCoversPower(on=True),
+            commands.MirrorCoversRetract(),
+            commands.MirrorCoversPower(on=False),
         )
         # Retract the mirror cover locks/guides.
         await self.send_commands(
-            commands.MirrorCoverLocksPower(drive=-1, on=True),
-            commands.MirrorCoverLocksMoveAll(drive=-1, deploy=False),
-            commands.MirrorCoverLocksPower(drive=-1, on=False),
+            commands.MirrorCoverLocksPower(on=True),
+            commands.MirrorCoverLocksMoveAll(deploy=False),
+            commands.MirrorCoverLocksPower(on=False),
         )
 
     async def do_disableCameraCableWrapTracking(self, data):
