@@ -234,12 +234,23 @@ class IntFieldInfo(BaseFieldInfo):
         Default value (using the native type of this FieldInfo).
         If `None` then this field must be specified
         when constructing a command or reply.
+    empty_is_default : `bool`
+        If True then an empty value is treated as a default value
+        (and the default must not be None).
+        If False then an empty value is rejected as invalid.
     """
 
-    def __init__(self, name, doc, default=None):
+    def __init__(self, name, doc, default=None, empty_is_default=False):
+        if empty_is_default and default is None:
+            raise ValueError("Must specify a default if empty_is_default is True")
+        self.empty_is_default = empty_is_default
         super().__init__(name=name, doc=doc, dtype=int, default=default)
 
     def value_from_str(self, strval):
+        if strval == "":
+            if self.empty_is_default:
+                return self.default
+            raise ValueError("Blank string and empty_is_default False")
         return int(strval)
 
 

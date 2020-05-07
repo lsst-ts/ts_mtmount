@@ -107,7 +107,10 @@ class AckReply(Reply):
         _ResponseFieldInfos
         + (
             field_info.IntFieldInfo(
-                name="timeout_ms", doc="Expected duration of command (msec)."
+                name="timeout_ms",
+                doc="Expected duration of command (msec); 0 if empty.",
+                default=0,
+                empty_is_default=True,
             ),
         ),
     )
