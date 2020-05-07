@@ -329,6 +329,13 @@ class MockDevicesTestCase(asynctest.TestCase):
         # Power on the device; this should not enable the drive.
         await self.run_command(power_on_command)
         self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertFalse(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
+        # Disable the drive
+        await self.run_command(drive_enable_off_command)
+        self.assertTrue(device.power_on)
         self.assertFalse(device.enabled)
         self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)
@@ -357,13 +364,6 @@ class MockDevicesTestCase(asynctest.TestCase):
                 self.assertFalse(device.enabled)
                 self.assertFalse(device.tracking_enabled)
                 self.assertFalse(device.has_target)
-
-        # Power off the device so we can check that drive_enable powers it on.
-        await self.run_command(power_off_command)
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
 
         # Enable the drives
         await self.run_command(drive_enable_on_command)
@@ -513,6 +513,25 @@ class MockDevicesTestCase(asynctest.TestCase):
 
         await self.run_command(drive_reset_command)
         self.assertTrue(device.power_on)
+        self.assertFalse(device.enabled)
+        self.assertFalse(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
+        # Check that power off disables everything
+        await self.run_command(power_on_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertFalse(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
+        await self.run_command(enable_tracking_on_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertTrue(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
+        await self.run_command(power_off_command)
+        self.assertFalse(device.power_on)
         self.assertFalse(device.enabled)
         self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)

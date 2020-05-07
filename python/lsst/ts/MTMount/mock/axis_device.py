@@ -52,9 +52,7 @@ class AxisDevice(BaseDevice):
     the azimuth axis takes care of that cable wrap, so `MTMountCsc`
     has no need to send commands to it.
 
-    Enabling the device also turns it on,
-    but disabling the device does not turn it off.
-    I have no idea what the real system does.
+    Turning on the device also enables it.
     """
 
     def __init__(self, controller, device_id):
@@ -143,15 +141,11 @@ class AxisDevice(BaseDevice):
     def do_drive_enable(self, command):
         """Enable or disable the drive.
 
-        If enabling then turn power on.
-        If disabling then leave the power alone.
-        Always abort motion and disable tracking.
+        Abort motion and disable tracking.
         """
         self.supersede_move_command()
         self.abort()
         self.tracking_enabled = False
-        if command.on:
-            self.power_on = True
         self.enabled = command.on
 
     def do_drive_reset(self, command):
@@ -213,6 +207,7 @@ class AxisDevice(BaseDevice):
             self.tracking_enabled = False
             self.actuator.stop()
         super().do_power(command)
+        self.enabled = command.on
 
     def do_stop(self, command):
         """Stop the actuator.

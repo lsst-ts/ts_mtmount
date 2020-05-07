@@ -264,8 +264,8 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertFalse(device.power_on)
             self.assertFalse(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_command = MTMount.commands.AzimuthAxisDriveEnable(drive=-1, on=True)
-            await self.run_command(enable_command, use_read_loop=use_read_loop)
+            power_on_command = MTMount.commands.AzimuthAxisPower(on=True)
+            await self.run_command(power_on_command, use_read_loop=use_read_loop)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
@@ -361,8 +361,8 @@ class MockControllerTestCase(asynctest.TestCase):
                 self.assertIn(reply.what, (0, 1))
 
             device = self.controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
-            enable_command = MTMount.commands.AzimuthAxisDriveEnable(drive=-1, on=True)
-            await self.run_command(enable_command, use_read_loop=True)
+            power_on_command = MTMount.commands.AzimuthAxisPower(on=True)
+            await self.run_command(power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
@@ -440,10 +440,8 @@ class MockControllerTestCase(asynctest.TestCase):
                 self.assertIn(reply.what, (0, 1))
 
             device = self.controller.device_dict[MTMount.DeviceId.ELEVATION_AXIS]
-            enable_command = MTMount.commands.ElevationAxisDriveEnable(
-                drive=-1, on=True
-            )
-            await self.run_command(enable_command, use_read_loop=True)
+            power_on_command = MTMount.commands.ElevationAxisPower(on=True)
+            await self.run_command(power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
