@@ -140,7 +140,7 @@ class Communicator(client_server_pair.ClientServerPair):
             self.log.debug("Read %s", message)
             return message
         except Exception:
-            self.log.exception(f"Could not parse read data: {read_str!r}")
+            self.log.exception(f"Could not parse read data: {read_bytes}")
             raise
 
     async def write(self, message):
@@ -153,13 +153,15 @@ class Communicator(client_server_pair.ClientServerPair):
         """
         if not self.client_connected:
             raise RuntimeError("Client not connected")
+        self.log.debug("Write message %s", message)
+        message_bytes = message.encode()
+        self.log.debug("Write bytes %s", message_bytes)
         try:
-            self.log.debug("Write %s", message)
             async with self.write_lock:
                 self.client_writer.write(message.encode())
                 await self.client_writer.drain()
         except Exception:
-            self.log.exception(f"Failed to write {message}")
+            self.log.exception(f"Failed to write {message_bytes}")
             raise
 
     async def monitor_client_reader(self):
