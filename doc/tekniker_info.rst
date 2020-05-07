@@ -77,10 +77,12 @@ Ack, NoAck and Done command replies have the following fields:
 * timestamp (str): timestamp in ISO format (UTC)
 * One additional parameter, if relevant:
 
-  * Ack: command timeout value as an integer in milliseconds.
+  * Ack: command timeout value as an integer in milliseconds; this field may be empty.
     Add 2 seconds to this value if you wish to use this for a timeout timer.
   * NoAck: an explanation of why the command was rejected.
-  * Done: no additional parameter
+  * Done: no additional parameters.
+    Warning: a command that fails after being acknowledged will still return Done.
+    The only hint that the command failed will be a Warning or Error message.
 
 Warning and Error events have the following fields:
 
