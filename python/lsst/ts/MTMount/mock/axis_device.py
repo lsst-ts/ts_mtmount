@@ -124,7 +124,8 @@ class AxisDevice(BaseDevice):
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command.
         """
-        # Provide some slop for non-monotonic clocks in Docker on macOS
+        # Provide some slop for non-monotonic clocks, which are
+        # sometimes seen when running Docker on macOS.
         duration = 0.2 + self.end_tai_unix - salobj.current_tai()
         await asyncio.sleep(duration)
 

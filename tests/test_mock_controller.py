@@ -380,7 +380,8 @@ class MockControllerTestCase(asynctest.TestCase):
             # Send tracking updates until an InPosition reply is seen.
             while True:
                 tai_unix = salobj.current_tai()
-                # Work around clock jitter in Docker on macOS
+                # Provide some slop for non-monotonic clocks, which are
+                # sometimes seen when running Docker on macOS.
                 if tai_unix <= prev_tai_unix:
                     tai_unix = prev_tai_unix + 0.001
                 prev_tai_unix = tai_unix
