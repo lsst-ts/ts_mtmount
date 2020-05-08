@@ -52,7 +52,8 @@ async def wait_tasks(*tasks):
 
 
 class Controller:
-    """Simulate the most basic responses from the Operation Manager.
+    """Simulate the most basic responses from the low-level controller
+    (Operation Manager).
 
     Acknowledge all commands and mark as done.
     Also output a few other replies, to exercise the code.
@@ -161,7 +162,7 @@ class Controller:
         except asyncio.CancelledError:
             raise
         except Exception:
-            self.log.exception("telemetry_loop failed")
+            self.log.exception("Telemetry loop failed")
             raise
 
     def add_all_devices(self):
@@ -240,9 +241,9 @@ class Controller:
         self.sal_controller = salobj.Controller(name="MTMount")
         await self.sal_controller.start_task
 
-        self.log.debug("start: connecting")
+        self.log.debug("Connecting to the CSC")
         await self.communicator.connect()
-        self.log.debug("start: connected")
+        self.log.debug("Connected")
         self.read_loop_task = asyncio.create_task(self.read_loop())
         self.telemetry_task = asyncio.create_task(self.telemetry_loop())
 
@@ -283,7 +284,7 @@ class Controller:
             asyncio.create_task(self.monitor_command(command=command, task=task))
 
     async def read_loop(self):
-        self.log.debug("read_loop begins")
+        self.log.debug("Read loop begins")
         try:
             while self.connected:
                 command = await self.communicator.read()
@@ -297,7 +298,7 @@ class Controller:
             await self.close()
             if self.reconnect:
                 asyncio.create_task(self.connect())
-        self.log.debug("read_loop ends")
+        self.log.debug("Read loop ends")
 
     async def reply_to_command(self, command):
         try:
