@@ -25,7 +25,7 @@ from lsst.ts import MTMount
 
 
 async def amain():
-    parser = argparse.ArgumentParser(f"Simulate Tekniker's TMA")
+    parser = argparse.ArgumentParser("Simulate Tekniker's TMA")
     parser.add_argument(
         "--log-level",
         type=int,
