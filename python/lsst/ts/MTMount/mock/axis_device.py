@@ -52,9 +52,7 @@ class AxisDevice(BaseDevice):
     the azimuth axis takes care of that cable wrap, so `MTMountCsc`
     has no need to send commands to it.
 
-    Enabling the device also turns it on,
-    but disabling the device does not turn it off.
-    I have no idea what the real system does.
+    Turning on the device also enables it.
     """
 
     def __init__(self, controller, device_id):
@@ -63,6 +61,9 @@ class AxisDevice(BaseDevice):
         device_limits.scale(factor=1.01)
         self.enabled = False
         self.tracking_enabled = False
+        # Has a target position been specified?
+        # Set True when tracking or moving point to point and False otherwise.
+        self.has_target = False
         self.actuator = simactuators.TrackingActuator(
             min_position=device_limits.min_position,
             max_position=device_limits.max_position,
@@ -70,7 +71,6 @@ class AxisDevice(BaseDevice):
             max_acceleration=device_limits.max_acceleration,
             dtmax_track=0.2,
         )
-        self._current_move_command = None
         self._monitor_move_task = asyncio.Future()
         super().__init__(controller=controller, device_id=device_id)
 
@@ -105,48 +105,48 @@ class AxisDevice(BaseDevice):
         self._monitor_move_task.cancel()
 
     def monitor_move_command(self, command):
-        """Monitor motion and report a move command as done.
+        """Return a task that is set done when the move is done.
+
+        Parameters
+        ----------
+        command : `Command`
+            Move command.
+
+        Returns
+        -------
+        task : `asyncio.Task`
+            A task that is set done when the move is done.
         """
         self._monitor_move_task.cancel()
         self._monitor_move_task = asyncio.create_task(self._monitor_move(command))
+        return self._monitor_move_task
 
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command.
         """
-        self._current_move_command = command
-        try:
-            # Give a little margin to make sure the actuator is truly done
-            duration = 0.1 + self.end_tai_unix - salobj.current_tai()
-            await asyncio.sleep(duration)
-            await self.controller.write_done(self._current_move_command)
-        except asyncio.CancelledError:
-            await self.controller.write_noack(
-                self._current_move_command, explanation="Superseded"
-            )
-        except Exception as e:
-            await self.controller.write_noack(
-                self._current_move_command, explanation=str(e)
-            )
-        finally:
-            self._current_move_command = None
+        # Provide some slop for non-monotonic clocks, which are
+        # sometimes seen when running Docker on macOS.
+        duration = 0.2 + self.end_tai_unix - salobj.current_tai()
+        await asyncio.sleep(duration)
 
     def supersede_move_command(self):
         """Report the current move command (if any) as superseded.
         """
         self._monitor_move_task.cancel()
 
+    def abort(self):
+        self.actuator.abort()
+        self.actuator.stop()
+        self.has_target = False
+
     def do_drive_enable(self, command):
         """Enable or disable the drive.
 
-        If enabling then turn power on.
-        If disabling then leave the power alone.
-        Always abort motion and disable tracking.
+        Abort motion and disable tracking.
         """
         self.supersede_move_command()
-        self.actuator.abort()
+        self.abort()
         self.tracking_enabled = False
-        if command.on:
-            self.power_on = True
         self.enabled = command.on
 
     def do_drive_reset(self, command):
@@ -158,7 +158,7 @@ class AxisDevice(BaseDevice):
         """
         self.assert_on()
         self.supersede_move_command()
-        self.actuator.abort()
+        self.abort()
         self.tracking_enabled = False
         self.enabled = False
 
@@ -169,7 +169,8 @@ class AxisDevice(BaseDevice):
         """
         self.assert_enabled()
         self.supersede_move_command()
-        self.actuator.abort()
+        self.actuator.stop()
+        self.has_target = False
         self.tracking_enabled = command.on
 
     def do_home(self, command):
@@ -195,6 +196,7 @@ class AxisDevice(BaseDevice):
         and the CSC doesn't support these parameters anyway.
         """
         self.assert_enabled()
+        self.has_target = True
         return self.move_point_to_point(position=command.position, command=command)
 
     def do_move_velocity(self, command):
@@ -206,6 +208,7 @@ class AxisDevice(BaseDevice):
             self.tracking_enabled = False
             self.actuator.stop()
         super().do_power(command)
+        self.enabled = command.on
 
     def do_stop(self, command):
         """Stop the actuator.
@@ -214,6 +217,10 @@ class AxisDevice(BaseDevice):
         self.supersede_move_command()
         self.tracking_enabled = False
         self.actuator.stop()
+        # I am not sure if this should clear the target.
+        # It depends what the real controller reports for the "in position"
+        # event when an axis is stopped.
+        self.has_target = False
 
     def do_track(self, command):
         """Specify a tracking target tai_time, position, velocity.
@@ -228,6 +235,7 @@ class AxisDevice(BaseDevice):
         self.actuator.set_target(
             tai=tai_unix, position=command.position, velocity=command.velocity
         )
+        self.has_target = True
 
     def move_point_to_point(self, position, command):
         """Move to the specified position.
@@ -252,5 +260,7 @@ class AxisDevice(BaseDevice):
         # Despite the name, tai_from_utc works with any astropy.time.Time
         tai_unix = salobj.current_tai()
         self.actuator.set_target(tai=tai_unix, position=position, velocity=0)
+        self.has_target = True
         self.monitor_move_command(command)
-        return self.end_tai_unix - tai_unix
+        timeout = self.end_tai_unix - tai_unix
+        return timeout, self._monitor_move_task

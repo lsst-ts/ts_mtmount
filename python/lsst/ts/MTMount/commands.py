@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
+    "NUM_HEADER_FIELDS",
     "AckOnlyCommandCodes",
     "Command",
     "AzimuthAxisDriveEnable",
@@ -59,8 +60,8 @@ __all__ = [
     "MirrorCoverLocksPower",
     "MirrorCoverLocksResetAlarm",
     "MirrorCoverLocksStop",
-    "MirrorCoversClose",
-    "MirrorCoversOpen",
+    "MirrorCoversDeploy",
+    "MirrorCoversRetract",
     "MirrorCoversPower",
     "MirrorCoversResetAlarm",
     "MirrorCoversStop",
@@ -84,6 +85,9 @@ from . import field_info
 from . import utils
 
 MAX_SEQUENCE_ID = (1 << 31) - 1
+
+# Number of required fields, before the optional arguments start
+NUM_HEADER_FIELDS = 4
 
 
 # Command that are done when ACK is received
@@ -213,7 +217,7 @@ class AzimuthAxisDriveEnable(Command):
         (
             (
                 field_info.IntFieldInfo(
-                    name="drive", doc="Drive index: one of -1 (all), ?"
+                    name="drive", doc="Drive index: one of -1 (all), ?", default=-1
                 ),
             )
             + _OnOffParameters
@@ -224,7 +228,11 @@ class AzimuthAxisDriveEnable(Command):
 class AzimuthAxisDriveReset(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_AXIS_DRIVE_RESET,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index: one of -1 (all), ?"),),
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), ?", default=-1
+            ),
+        ),
     )
 
 
@@ -334,7 +342,12 @@ class BothAxesTrack(Command):
 class CameraCableWrapDriveEnable(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_ENABLE,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),)
+        (
+            field_info.IntFieldInfo(
+                name="drive",
+                doc="Drive index; just one drive can be enabled, so enabling one disables the other",
+            ),
+        )
         + _OnOffParameters,
     )
 
@@ -394,7 +407,7 @@ class ElevationAxisDriveEnable(Command):
         (
             (
                 field_info.IntFieldInfo(
-                    name="drive", doc="Drive index: one of -1 (all), ?"
+                    name="drive", doc="Drive index: one of -1 (all), ?", default=-1
                 ),
             )
             + _OnOffParameters
@@ -405,7 +418,11 @@ class ElevationAxisDriveEnable(Command):
 class ElevationAxisDriveReset(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_AXIS_DRIVE_RESET,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index: one of -1 (all), ?"),),
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), ?", default=-1
+            ),
+        ),
     )
 
 
@@ -472,7 +489,7 @@ class MirrorCoverLocksMoveAll(Command):
         enums.CommandCode.MIRROR_COVER_LOCKS_MOVE_ALL,
         (
             field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
             field_info.BoolFieldInfo(
                 name="deploy", doc="Deploy (True) or retract (False)?"
@@ -486,7 +503,7 @@ class MirrorCoverLocksPower(Command):
         enums.CommandCode.MIRROR_COVER_LOCKS_POWER,
         (
             field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
         )
         + _OnOffParameters,
@@ -496,6 +513,11 @@ class MirrorCoverLocksPower(Command):
 class MirrorCoverLocksResetAlarm(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_LOCKS_RESET_ALARM,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
+            ),
+        ),
     )
 
 
@@ -504,7 +526,7 @@ class MirrorCoverLocksStop(Command):
         enums.CommandCode.MIRROR_COVER_LOCKS_STOP,
         (
             field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
         ),
     )
@@ -518,23 +540,23 @@ Unsupported mirror cover commands:
 """
 
 
-class MirrorCoversClose(Command):
+class MirrorCoversDeploy(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MIRROR_COVERS_CLOSE,
+        enums.CommandCode.MIRROR_COVERS_DEPLOY,
         (
             field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
         ),
     )
 
 
-class MirrorCoversOpen(Command):
+class MirrorCoversRetract(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MIRROR_COVERS_OPEN,
+        enums.CommandCode.MIRROR_COVERS_RETRACT,
         (
             field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
         ),
     )
@@ -545,7 +567,7 @@ class MirrorCoversPower(Command):
         enums.CommandCode.MIRROR_COVERS_POWER,
         (
             field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
         )
         + _OnOffParameters,
@@ -553,7 +575,14 @@ class MirrorCoversPower(Command):
 
 
 class MirrorCoversResetAlarm(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.MIRROR_COVERS_RESET_ALARM,)
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVERS_RESET_ALARM,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
+            ),
+        ),
+    )
 
 
 class MirrorCoversStop(Command):
@@ -561,7 +590,7 @@ class MirrorCoversStop(Command):
         enums.CommandCode.MIRROR_COVERS_STOP,
         (
             field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3"
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
         ),
     )
@@ -654,8 +683,8 @@ Commands = (
     MirrorCoverLocksPower,
     MirrorCoverLocksResetAlarm,
     MirrorCoverLocksStop,
-    MirrorCoversClose,
-    MirrorCoversOpen,
+    MirrorCoversDeploy,
+    MirrorCoversRetract,
     MirrorCoversPower,
     MirrorCoversResetAlarm,
     MirrorCoversStop,
@@ -709,8 +738,10 @@ def parse_command(fields):
     ValueError
         If the data cannot be parsed.
     """
-    if len(fields) < 4:
-        raise ValueError(f"A command has at least 4 fields; only got {len(fields)}")
+    if len(fields) < NUM_HEADER_FIELDS:
+        raise ValueError(
+            f"A command has at least {NUM_HEADER_FIELDS} fields; only got {len(fields)}"
+        )
     command_code = enums.CommandCode(int(fields[1]))
     try:
         CommandClass = CommandDict[command_code]

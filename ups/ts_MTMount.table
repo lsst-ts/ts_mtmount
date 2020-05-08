@@ -2,6 +2,7 @@ setupRequired(sconsUtils)
 setupRequired(ts_salobj)
 setupRequired(ts_hexrotcomm)
 setupRequired(ts_simactuators)
+setupRequired(ts_config_mttcs)
 
 envPrepend(PATH, ${PRODUCT_DIR}/bin)
 

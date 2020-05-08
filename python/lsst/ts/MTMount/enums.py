@@ -114,11 +114,12 @@ class CommandCode(enum.IntEnum):
     MIRROR_COVERS_STOP = 902
     MIRROR_COVERS_MOVE = 903
     MIRROR_COVERS_MOVE_VELOCITY = 904
-    # WARNING: Tekniker's code uses the opposite naming convention.
-    # These enums intentionally differ, so that OPEN means
-    # allow light in and CLOSE means protect the mirror.
-    MIRROR_COVERS_CLOSE = 905
-    MIRROR_COVERS_OPEN = 906
+    # WARNING: Tekniker's code presently uses:
+    # OPEN to mean DEPLOY, which we call closing the mirror covers
+    # CLOSE to mean RETRACT, which we call opening the mirror covers.
+    # Tekniker will update their code to use deploy and retract.
+    MIRROR_COVERS_DEPLOY = 905
+    MIRROR_COVERS_RETRACT = 906
     MIRROR_COVERS_RESET_ALARM = 907
     CAMERA_CABLE_WRAP_POWER = 1001
     CAMERA_CABLE_WRAP_STOP = 1002
@@ -227,7 +228,7 @@ class EnabledState(enum.IntEnum):
 
 
 class ReplyCode(enum.IntEnum):
-    """Reply codes for messages read from the Operation Manager.
+    """Reply codes for messages read from the low-level controller.
 
     The values and names are from LL_MESSAGE in ll_commands.h.
     except that ON_STATE_INFO is hard-coded in ``eui_communication.cpp``
@@ -246,10 +247,13 @@ class ReplyCode(enum.IntEnum):
 
 class Source(enum.IntEnum):
     """Values for the ``source`` field of a message.
+
+    Note: EUI is called MCS in Tekniker's communication protocol
+    documentation.
     """
 
     TCS = 1
-    MCS = 2
+    EUI = 2
     HHD = 3
     PXI = 100
 

@@ -44,7 +44,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             initial_state=initial_state,
             config_dir=config_dir,
             simulation_mode=simulation_mode,
-            mock_reply_port=next(port_generator),
+            mock_command_port=next(port_generator),
         )
         # the next port is used for commands
         next(port_generator)
@@ -244,6 +244,9 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             await salobj.set_summary_state(
                 remote=self.remote, state=salobj.State.ENABLED
             )
+            await self.assert_next_sample(
+                self.remote.evt_axesInPosition, azimuth=False, elevation=False
+            )
 
             mock_azimuth = self.csc.mock_controller.device_dict[
                 MTMount.DeviceId.AZIMUTH_AXIS
@@ -259,36 +262,53 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertAlmostEqual(azimuth_pvt.velocity, 0)
 
             # Move the axes to a specified position.
-            # Use a short move to speed up the test
+            # Use a short move to speed up the test,
+            # but make the azimuth move significantly shorter
+            # so it finishes first.
             # Instead of waiting for the command to finish,
             # check the intermediate state and obtain the expected duration,
             # then wait for the command to finish.
-            target_azimuth = azimuth_pvt.position + 2
+            target_azimuth = azimuth_pvt.position + 1
             target_elevation = elevation_pvt.position + 2
+            estimated_move_time = 3  # seconds
             print(
                 f"start test_moveToTarget(azimuth={target_azimuth:0.2f}, "
                 f"elevation={target_elevation:0.2f})"
             )
-            ackcmd = await self.remote.cmd_moveToTarget.set_start(
-                azimuth=target_azimuth,
-                elevation=target_elevation,
-                timeout=STD_TIMEOUT,
-                wait_done=False,
+            task = asyncio.create_task(
+                self.remote.cmd_moveToTarget.set_start(
+                    azimuth=target_azimuth,
+                    elevation=target_elevation,
+                    timeout=estimated_move_time + STD_TIMEOUT,
+                )
             )
             await asyncio.sleep(0.1)  # Give the command a chance to start
-            end_tai = max(mock_elevation.end_tai_unix, mock_azimuth.end_tai_unix)
-            duration = 0.1 + end_tai - salobj.current_tai()
+            # Print move duration; the elevation move will take longer
+            duration = mock_elevation.end_tai_unix - salobj.current_tai()
             print(f"axis move duration={duration:0.2f} sec")
-            await self.remote.cmd_moveToTarget.next_ackcmd(
-                ackcmd=ackcmd, timeout=STD_TIMEOUT + duration
+            await self.assert_next_sample(
+                self.remote.evt_axesInPosition, azimuth=True, elevation=False,
             )
+            await self.assert_next_sample(
+                self.remote.evt_axesInPosition, azimuth=True, elevation=True,
+            )
+            await task
             tai_unix = salobj.current_tai()
             elevation_pvt = mock_elevation.actuator.path.at(tai_unix)
             azimuth_pvt = mock_azimuth.actuator.path.at(tai_unix)
             self.assertAlmostEqual(azimuth_pvt.position, target_azimuth)
+            self.assertGreaterEqual(tai_unix, mock_elevation.actuator.path[-1].tai)
             self.assertAlmostEqual(elevation_pvt.position, target_elevation)
             self.assertAlmostEqual(azimuth_pvt.velocity, 0)
             self.assertAlmostEqual(elevation_pvt.velocity, 0)
+
+            # Check that putting the CSC into STANDBY state
+            # sends the axes out of position
+            await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
+            await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
+            await self.assert_next_sample(
+                self.remote.evt_axesInPosition, azimuth=False, elevation=False,
+            )
 
     async def test_tracking(self):
         async with self.make_csc(
@@ -296,6 +316,9 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         ):
             await salobj.set_summary_state(
                 remote=self.remote, state=salobj.State.ENABLED
+            )
+            await self.assert_next_sample(
+                self.remote.evt_axesInPosition, azimuth=False, elevation=False
             )
 
             mock_azimuth = self.csc.mock_controller.device_dict[
@@ -327,47 +350,108 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertTrue(mock_azimuth.tracking_enabled)
             self.assertTrue(mock_elevation.tracking_enabled)
 
-            # Specify a few tracking positions
-            azimuth_velocity = 0.003
-            elevation_velocity = 0.01
-            initial_tai = salobj.current_tai()
-            for i in range(3):
-                await asyncio.sleep(0.2)
-                tai_unix = salobj.current_tai()
-                dt = tai_unix - initial_tai
-                azimuth_position = initial_azimuth + azimuth_velocity * dt
-                elevation_position = initial_elevation + elevation_velocity * dt
-                kwargs = self.make_track_target_kwargs(
-                    azimuth=azimuth_position,
-                    azimuthVelocity=azimuth_velocity,
-                    elevation=elevation_position,
-                    elevationVelocity=elevation_velocity,
-                    taiTime=tai_unix,
+            # Slew and track until both axes are in position
+            # Make the elevation move significantly smaller,
+            # so it is sure to be in position first.
+            t0 = time.monotonic()
+            estimated_slew_time = 4  # seconds
+            tracking_task = asyncio.create_task(
+                self.track_target_loop(
+                    azimuth=initial_azimuth + 3,
+                    elevation=initial_elevation + 1,
+                    azimuth_velocity=0.003,
+                    elevation_velocity=0.003,
                 )
-                await self.remote.cmd_trackTarget.set_start(
-                    **kwargs, timeout=STD_TIMEOUT
-                )
-                self.assertAlmostEqual(
-                    mock_azimuth.actuator.target.position, azimuth_position
-                )
-                self.assertAlmostEqual(
-                    mock_azimuth.actuator.target.velocity, azimuth_velocity
-                )
-                self.assertAlmostEqual(
-                    mock_azimuth.actuator.target.tai, tai_unix, delta=0.001
-                )
-                self.assertAlmostEqual(
-                    mock_elevation.actuator.target.position, elevation_position
-                )
-                self.assertAlmostEqual(
-                    mock_elevation.actuator.target.velocity, elevation_velocity
-                )
-                self.assertAlmostEqual(
-                    mock_elevation.actuator.target.tai, tai_unix, delta=0.001
-                )
-                await self.assert_next_sample(topic=self.remote.evt_target, **kwargs)
+            )
+            await self.assert_next_sample(
+                self.remote.evt_axesInPosition,
+                azimuth=False,
+                elevation=True,
+                timeout=estimated_slew_time + STD_TIMEOUT,
+            )
+            dt_elevation = time.monotonic() - t0
+            await self.assert_next_sample(
+                self.remote.evt_axesInPosition,
+                azimuth=True,
+                elevation=True,
+                timeout=estimated_slew_time + STD_TIMEOUT,
+            )
+            dt_azimuth = time.monotonic() - t0
+            tracking_task.cancel()
+            print(
+                f"Time to finish slew for elevation={dt_elevation:0.2f}; "
+                f"azimuth={dt_azimuth:0.2f} seconds"
+            )
 
             # Disable tracking and check axis controllers
             await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
             self.assertFalse(mock_azimuth.tracking_enabled)
             self.assertFalse(mock_elevation.tracking_enabled)
+
+            # Check that both axes are no longer in position.
+            # We don't yet know the details of Tekniker's InPosition message
+            # so make the test succeed whether it must be sent separately
+            # for each axis (resulting in two axesInPosition events)
+            # or can be sent for both axes at the same time
+            # (resulting in a single axesInPosition event).
+            data = await self.assert_next_sample(self.remote.evt_axesInPosition,)
+            self.assertIn(False, (data.azimuth, data.elevation))
+            if True in (data.azimuth, data.elevation):
+                await self.assert_next_sample(
+                    self.remote.evt_axesInPosition, azimuth=False, elevation=False,
+                )
+
+    async def track_target_loop(
+        self, azimuth, elevation, azimuth_velocity, elevation_velocity
+    ):
+        """Provide a stream of trackTarget commands until cancelled.
+        """
+        # Slew and track until both axes are in position
+        mock_azimuth = self.csc.mock_controller.device_dict[
+            MTMount.DeviceId.AZIMUTH_AXIS
+        ]
+        mock_elevation = self.csc.mock_controller.device_dict[
+            MTMount.DeviceId.ELEVATION_AXIS
+        ]
+        self.assertTrue(mock_azimuth.tracking_enabled)
+        self.assertTrue(mock_elevation.tracking_enabled)
+
+        initial_tai = salobj.current_tai()
+        previous_tai = 0
+        while True:
+            await asyncio.sleep(0.2)
+            tai_unix = salobj.current_tai()
+            # Provide some slop for non-monotonic clocks, which are
+            # sometimes seen when running Docker on macOS.
+            if tai_unix < previous_tai:
+                tai_unix = previous_tai + 0.001
+            dt = tai_unix - initial_tai
+            current_azimuth = azimuth + azimuth_velocity * dt
+            current_elevation = elevation + elevation_velocity * dt
+            kwargs = self.make_track_target_kwargs(
+                azimuth=current_azimuth,
+                azimuthVelocity=azimuth_velocity,
+                elevation=current_elevation,
+                elevationVelocity=elevation_velocity,
+                taiTime=tai_unix,
+            )
+            await self.remote.cmd_trackTarget.set_start(**kwargs, timeout=STD_TIMEOUT)
+            self.assertAlmostEqual(
+                mock_azimuth.actuator.target.position, current_azimuth
+            )
+            self.assertAlmostEqual(
+                mock_azimuth.actuator.target.velocity, azimuth_velocity
+            )
+            self.assertAlmostEqual(
+                mock_azimuth.actuator.target.tai, tai_unix, delta=0.001
+            )
+            self.assertAlmostEqual(
+                mock_elevation.actuator.target.position, current_elevation
+            )
+            self.assertAlmostEqual(
+                mock_elevation.actuator.target.velocity, elevation_velocity
+            )
+            self.assertAlmostEqual(
+                mock_elevation.actuator.target.tai, tai_unix, delta=0.001
+            )
+            await self.assert_next_sample(topic=self.remote.evt_target, **kwargs)

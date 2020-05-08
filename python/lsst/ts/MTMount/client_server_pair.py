@@ -50,8 +50,9 @@ class ClientServerPair:
         If 0 then use a random port.
     log : `logging.Logger`
         Logger.
-    connect_client : `bool`
+    connect : `bool`
         Connect the client at construction time?
+        (The server will automatically wait for connections.)
     connect_callback : callable or `None`
         Synchronous function to call when a connection is made or dropped.
         It receives one argument: this ClientServerPair.
@@ -66,9 +67,11 @@ class ClientServerPair:
       Client socket writer, or `None` if not connected.
     client_reader : `asyncio.StreamReader` or `None`
         Client socket reader,  or `None` if not connected.
+    client_connected_task : `asyncio.Task`
+        An `asyncio.Future` that is set done when the client is connected.
     connect_task : `asyncio.Task`
         An `asyncio.Task` that is set done when connected.
-        This attribute is only available if ``connect_client`` true.
+        This attribute is only available if ``connect`` true.
     """
 
     connect_retry_interval = 0.1
@@ -82,7 +85,7 @@ class ClientServerPair:
         server_host,
         server_port,
         log,
-        connect_client=True,
+        connect=True,
         connect_callback=None,
     ):
         self.name = name
@@ -92,6 +95,7 @@ class ClientServerPair:
         self.client_writer = None
         self.log = log.getChild(f"ClientServerPair({self.name})")
         self.connect_callback = connect_callback
+        self.client_connected_task = asyncio.Future()
         self._server = hexrotcomm.OneClientServer(
             name=name,
             host=server_host,
@@ -99,9 +103,9 @@ class ClientServerPair:
             log=log,
             connect_callback=self.call_connect_callback,
         )
-        if connect_client:
+        if connect:
             self.connect_task = asyncio.create_task(self.connect())
-        self.log.info(
+        self.log.debug(
             "Constructed with "
             f"client_port={self.client_port}; "
             f"client_host={self.client_host}; "
@@ -156,7 +160,7 @@ class ClientServerPair:
         try:
             self.connect_callback(self)
         except Exception:
-            self.log.exception("connect_callback failed")
+            self.log.exception(f"Connect callback {self.connect_callback} failed")
 
     async def close(self):
         """Close both the server and the client, to clean up when finished.
@@ -187,27 +191,28 @@ class ClientServerPair:
         -----
         This will wait forever for a connection.
         """
-        self.log.info(f"connect(port={port})")
         await self.close_client()
         if port is not None:
             self.client_port = port
         if not self.client_port:
             raise ValueError(f"client_port={self.client_port!r} must be nonzero")
 
+        print(f"ClientServerPair waiting for client to connect")
         while True:
             try:
                 self.log.info(
-                    f"connect: connect to host={self.client_host}, port={self.client_port}"
+                    f"Connect to host={self.client_host}, port={self.client_port}"
                 )
                 self.client_reader, self.client_writer = await asyncio.open_connection(
                     host=self.client_host, port=self.client_port
                 )
                 self.call_connect_callback()
-                return
+                break
             except Exception as e:
-                self.log.warning(f"connect failed with {e}; retrying")
+                self.log.debug(f"Connect failed; retrying. Error: {e}")
                 await asyncio.sleep(self.connect_retry_interval)
-        await self._server.connect_task
+        self.client_connected_task.set_result(None)
+        await self._server.connected_task
 
     async def wait_server_port(self):
         """Wait for the server to start, then return the port.

@@ -20,7 +20,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""A simple command-line script that sends commands to the Operation Manager.
+"""A simple command-line script that sends commands to
+the low-level controller (Operation Manager).
 
 Must be connected to a low-level port on the Operation Manger.
 At this time the only available port is for the hand-held device,
@@ -80,16 +81,19 @@ def print_connected(descr, communicator):
 
 
 class Commander:
-    """Communicate via TCP/IP with a Tekniker Operations Manager
+    """Command a Tekniker Operation Manager.
+
+    Read commands from a user on the command line
+    and send them to the low-level controller (Operation Manager).
+
+    Warning: this is only intended as a short-term hack.
+    It will be deleted once MTMountCsc has been shown to work
+    with the Operation Manager.
 
     Parameters
     ----------
     host : `str`
         IP address of the operation manager.
-    command_port : `int`
-        IP port of the operation manager.
-    reply_port : `int`
-        IP port for this end (the commander).
     log_level : `int`
         Logging level.
     simulate : `bool`
@@ -97,7 +101,7 @@ class Commander:
         If True then ``host`` is ignored.
     """
 
-    def __init__(self, host, command_port, reply_port, log_level, simulate):
+    def __init__(self, host, log_level, simulate):
         self.log = logging.getLogger()
         self.log.setLevel(log_level)
 
@@ -106,32 +110,48 @@ class Commander:
         self.simulator = None
         if simulate:
             host = salobj.LOCAL_HOST
-            self.simulator = TrivialSimulator(
-                command_port=command_port, reply_port=reply_port, log=self.log
+            self.simulator = MTMount.mock.Controller(
+                command_port=MTMount.CSC_COMMAND_PORT, log=self.log
             )
 
         self.communicator = MTMount.Communicator(
             name="tma_commander",
             client_host=host,
-            client_port=command_port,
+            client_port=MTMount.CSC_COMMAND_PORT,
             server_host=None,
-            server_port=reply_port,
+            # Tekniker uses repy port = command port + 1
+            server_port=MTMount.CSC_COMMAND_PORT + 1,
             log=self.log,
             read_replies=True,
-            connect_client=True,
+            connect=True,
             connect_callback=self.connect_callback,
         )
-        self.read_loop_task = asyncio.create_task(self.read_loop())
         self.command_loop_task = asyncio.create_task(self.command_loop())
         self.command_dict = dict(
-            ccw_power=MTMount.commands.CameraCableWrapPower,
-            ccw_stop=MTMount.commands.CameraCableWrapStop,
-            ccw_move=MTMount.commands.CameraCableWrapMove,
+            az_power=MTMount.commands.AzimuthAxisPower,
+            az_reset_alarm=MTMount.commands.AzimuthAxisResetAlarm,
             ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
             ccw_enable_tracking=MTMount.commands.CameraCableWrapEnableTracking,
+            ccw_move=MTMount.commands.CameraCableWrapMove,
+            ccw_power=MTMount.commands.CameraCableWrapPower,
+            ccw_reset_alarm=MTMount.commands.CameraCableWrapResetAlarm,
+            ccw_stop=MTMount.commands.CameraCableWrapStop,
             ccw_track=MTMount.commands.CameraCableWrapTrack,
-            disable=MTMount.commands.Disable,
-            enable=MTMount.commands.Enable,
+            el_power=MTMount.commands.ElevationAxisPower,
+            el_reset_alarm=MTMount.commands.ElevationAxisResetAlarm,
+            mc_deploy=MTMount.commands.MirrorCoversDeploy,
+            mc_power=MTMount.commands.MirrorCoversPower,
+            mc_reset_alarm=MTMount.commands.MirrorCoversResetAlarm,
+            mc_retract=MTMount.commands.MirrorCoversRetract,
+            mcl_move_all=MTMount.commands.MirrorCoverLocksMoveAll,
+            mcl_power=MTMount.commands.MirrorCoverLocksPower,
+            mcl_reset_alarm=MTMount.commands.MirrorCoverLocksResetAlarm,
+            mps_power=MTMount.commands.MainPowerSupplyPower,
+            mps_reset_alarm=MTMount.commands.MainPowerSupplyResetAlarm,
+            oss_power=MTMount.commands.OilSupplySystemPower,
+            oss_reset_alarm=MTMount.commands.OilSupplySystemResetAlarm,
+            tec_power=MTMount.commands.TopEndChillerPower,
+            tec_reset_alarm=MTMount.commands.TopEndChillerResetAlarm,
         )
         self.help_text = f"""Send commands to the telescope mount assemply.
 
@@ -144,9 +164,9 @@ help  # Print this help
 """
 
     async def close(self):
+        """Shut down this TMA commander."""
         try:
             self.read_loop_task.cancel()
-            self.command_loop_task.cancel()
             if self.simulator is not None:
                 await self.simulator.close()
             await self.communicator.close()
@@ -155,6 +175,8 @@ help  # Print this help
             self.done_task.set_exception(e)
 
     def get_command_help(self):
+        """Get help for all commands in self.command_dict, as a single string.
+        """
         help_strs = [
             f"{cmd_name} {self.get_argument_names(cmd_name)}"
             for cmd_name in self.command_dict
@@ -162,9 +184,18 @@ help  # Print this help
         return "\n".join(help_strs)
 
     def get_argument_names(self, cmd_name):
+        """Get the argument names from a command, for printing help.
+
+        Parameters
+        ----------
+        cmd_name : `str`
+            The command name, as the key in self.command_dict.
+        """
+        # Get FieldInfos for the command arguments (if any) from the
+        # command class, and use that to generate a list of argument names.
         CommandClass = self.command_dict[cmd_name]
-        arg_infos = CommandClass.field_infos[5:]
-        return " ".join(arg.name for arg in arg_infos)
+        arg_infos = CommandClass.field_infos[MTMount.commands.NUM_HEADER_FIELDS :]
+        return " ".join(arg_info.name for arg_info in arg_infos)
 
     async def handle_command(self, cmd_name, args):
         """Parse arguments and issue a command.
@@ -185,8 +216,12 @@ help  # Print this help
             CommandClass = self.command_dict[cmd_name]
         except KeyError:
             raise ValueError(f"Unrecognized command {cmd_name}")
-        arg_infos = CommandClass.field_infos[5:]
-        has_tai_time_argument = isinstance(
+        # Get FieldInfos for the command arguments (if any) from the
+        # command class, and use them to cast and validate the arguments.
+        arg_infos = CommandClass.field_infos[MTMount.commands.NUM_HEADER_FIELDS :]
+        # If the final argument for the command is TAI time,
+        # then set it to the current time.
+        has_tai_time_argument = arg_infos and isinstance(
             arg_infos[-1], MTMount.field_info.TimeFieldInfo
         )
         if has_tai_time_argument:
@@ -205,19 +240,33 @@ help  # Print this help
         await self.communicator.write(cmd)
 
     async def read_loop(self):
-        print("tma_commander waiting to connect")
-        await self.communicator.connect_task
-        print("tma_commander connected")
-        while True:
-            read_message = await self.communicator.read()
-            print(f"read {read_message}")
+        """Read replies from the operations manager.
+        """
+        try:
+            await self.communicator.connect_task
+            while True:
+                read_message = await self.communicator.read()
+                print(f"read {read_message}")
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"tma_commander read loop failed with {e!r}")
 
     def connect_callback(self, communicator):
+        """Callback function for changes in communicator connection state.
+
+        Parameters
+        ----------
+        communicator : `MTMount.Communicator`
+            The communicator whose connection state has changed.
+        """
         print_connected(descr="TMA commander", communicator=communicator)
         if communicator.connected:
-            asyncio.create_task(self.send_sample_replies())
+            self.read_loop_task = asyncio.create_task(self.read_loop())
 
     async def command_loop(self):
+        """Read commands from the user and send them to the operations manager.
+        """
         try:
             print(f"Waiting to connect to the operation manager")
             await self.communicator.connect_task
@@ -246,86 +295,12 @@ help  # Print this help
             await self.close()
 
 
-class TrivialSimulator:
-    """Simulate the most basic responses from the Operation Manager.
-
-    Acknowledge all commands and mark as done.
-    Also output a few other replies, to exercise the code.
-    """
-
-    def __init__(self, command_port, reply_port, log):
-        self.log = log.getChild("simulator")
-        self.communicator = MTMount.Communicator(
-            name="trivial_simulator",
-            client_host=salobj.LOCAL_HOST,
-            client_port=reply_port,
-            server_host=salobj.LOCAL_HOST,
-            server_port=command_port,
-            log=self.log,
-            read_replies=False,
-            connect_client=True,
-            connect_callback=self.connect_callback,
-        )
-        self.read_loop_task = asyncio.create_task(self.read_loop())
-
-    async def close(self):
-        self.read_loop_task.cancel()
-        await self.communicator.close()
-
-    async def read_loop(self):
-        print("trivial simulator: waiting for connection")
-        await self.communicator.connect_task
-        print("trivial simulator: connected")
-        while True:
-            read_command = await self.communicator.read()
-            self.log.debug(f"read {read_command}")
-            reply = MTMount.replies.AckReply(
-                sequence_id=read_command.sequence_id, timeout_ms=100
-            )
-            await self.communicator.write(reply)
-            reply = MTMount.replies.DoneReply(sequence_id=read_command.sequence_id)
-            await self.communicator.write(reply)
-
-    def connect_callback(self, communicator):
-        print_connected(descr="Trivial simulator", communicator=communicator)
-        if communicator.connected:
-            asyncio.create_task(self.send_sample_replies())
-
-    async def send_sample_replies(self):
-        """Send one of each kind of reply to the TMA commander.
-        """
-        for reply in (
-            MTMount.replies.AckReply(sequence_id=99997, timeout_ms=1234),
-            MTMount.replies.NoAckReply(sequence_id=99998, explanation="Example NoAck"),
-            MTMount.replies.DoneReply(sequence_id=99999),
-            MTMount.replies.WarningReply(
-                active=False, code=1, extra_data=["Example warning"]
-            ),
-            MTMount.replies.ErrorReply(
-                on=False, active=False, code=2, extra_data=["Example error"]
-            ),
-            MTMount.replies.OnStateInfoReply(description="Example onStateInfo"),
-            MTMount.replies.InPositionReply(in_position=0),
-        ):
-            await self.communicator.write(reply)
-
-
 async def amain():
+    """Parse command-line arguments and run the TMA commander.
+    """
     parser = argparse.ArgumentParser(f"Send commands to Tekniker's TMA")
     parser.add_argument(
-        "--host", default="192.168.0.1", help="TMA operation manager IP address."
-    )
-    parser.add_argument(
-        "--reply-port",
-        type=int,
-        default=MTMount.CSC_REPLY_PORT,
-        help="TCP port for replies.",
-    )
-    parser.add_argument(
-        "--command-port",
-        type=int,
-        default=MTMount.CSC_COMMAND_PORT,
-        help="TCP port for commands.",
+        "--host", default="127.0.0.1", help="TMA operation manager IP address."
     )
     parser.add_argument(
         "--log-level",
@@ -338,11 +313,7 @@ async def amain():
     )
     namespace = parser.parse_args()
     commander = Commander(
-        host=namespace.host,
-        reply_port=namespace.reply_port,
-        command_port=namespace.command_port,
-        log_level=namespace.log_level,
-        simulate=namespace.simulate,
+        host=namespace.host, log_level=namespace.log_level, simulate=namespace.simulate,
     )
     await commander.done_task
 

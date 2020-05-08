@@ -38,34 +38,48 @@ from .oil_supply_system_device import OilSupplySystemDevice
 from .top_end_chiller_device import TopEndChillerDevice
 
 
+async def wait_tasks(*tasks):
+    """Wait for one or more tasks to finish; if one fails cancel the others.
+
+    Like asyncio.gather but cancels the remaining tasks if one fails.
+    """
+    try:
+        await asyncio.gather(*tasks)
+    except Exception:
+        for task in tasks:
+            task.cancel()
+        raise
+
+
 class Controller:
-    """Simulate the most basic responses from the Operation Manager.
+    """Simulate the most basic responses from the low-level controller
+    (Operation Manager).
 
     Acknowledge all commands and mark as done.
     Also output a few other replies, to exercise the code.
 
     Parameters
     ----------
-    reply_port : `int`
-        Port for writing replies (that the CSC reads).
-        The command port is one greater than the reply port.
+    command_port : `int`
+        Port for reading commands (that the CSC writes).
+        The reply port is one greater than the command port.
     log : `logging.Logger`
         Logger.
+    reconnect : `bool` (optional)
+        Try to reconnect if the connection is lost?
+        Defaults to False for unit tests.
     """
 
-    def __init__(self, reply_port, log):
+    def __init__(self, command_port, log, reconnect=False):
+        self.command_port = command_port
         self.log = log.getChild("Controller")
-        self.communicator = communicator.Communicator(
-            name="Controller",
-            client_host=salobj.LOCAL_HOST,
-            client_port=reply_port,
-            server_host=salobj.LOCAL_HOST,
-            server_port=reply_port + 1,
-            log=self.log,
-            read_replies=False,
-            connect_client=False,
-            connect_callback=self.connect_callback,
-        )
+        self.reconnect = reconnect
+        self.telemetry_interval = 0.2  # Seconds
+        self.in_position_error = 0.01  # Degrees
+
+        self.communicator = None
+        self.sal_controller = None
+
         # Queue of commands, for unit testing
         self.command_queue = None
 
@@ -79,7 +93,77 @@ class Controller:
         self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
 
         self.read_loop_task = asyncio.Future()
-        self.start_task = asyncio.create_task(self.start())
+        self.telemetry_task = asyncio.Future()
+        self.start_task = asyncio.create_task(self.connect())
+        self.in_position_dict = {
+            enums.DeviceId.AZIMUTH_AXIS: None,
+            enums.DeviceId.ELEVATION_AXIS: None,
+        }
+
+    @property
+    def connected(self):
+        return self.communicator is not None and self.communicator.connected
+
+    async def put_axis_telemetry(self, device_id, tai):
+        """Warning: this minimal and simplistic.
+        """
+        prefix = {
+            enums.DeviceId.AZIMUTH_AXIS: "Azimuth",
+            enums.DeviceId.ELEVATION_AXIS: "Elevation",
+        }[device_id]
+        device = self.device_dict[device_id]
+        actuator = device.actuator
+        target = actuator.target.at(tai)
+        actual = actuator.path.at(tai)
+
+        # Write the SAL telemetry topic
+        topic = getattr(self.sal_controller, f"tel_{prefix}")
+        state_strs = [
+            "On" if device.power_on else "Off",
+            "DriveEnabled" if device.enabled else "DriveDisabled",
+            "TrackingEnabled" if device.tracking_enabled else "TrackingDisabled",
+        ]
+        kwargs = {
+            f"{prefix}_Status": "/".join(state_strs),
+            f"{prefix}_Angle_Set": target.position,
+            f"{prefix}_Velocity_Set": target.velocity,
+            f"{prefix}_Angle_Actual": actual.position,
+            f"{prefix}_Velocity_Actual": actual.velocity,
+            f"{prefix}_Aceleration_Actual": actual.acceleration,
+        }
+        topic.set_put(**kwargs)
+
+        # Write the InPosition TCP/IP message
+        in_position = (
+            device.has_target
+            and abs(target.position - actual.position) < self.in_position_error
+        )
+        if in_position != self.in_position_dict[device_id]:
+            self.in_position_dict[device_id] = in_position
+            what = {enums.DeviceId.AZIMUTH_AXIS: 0, enums.DeviceId.ELEVATION_AXIS: 1}[
+                device_id
+            ]
+            reply = replies.InPositionReply(what=what, in_position=in_position)
+            await self.communicator.write(reply)
+
+    async def telemetry_loop(self):
+        """Warning: this minimal and simplistic.
+        """
+        try:
+            while True:
+                tai = salobj.current_tai()
+                await self.put_axis_telemetry(
+                    device_id=enums.DeviceId.AZIMUTH_AXIS, tai=tai
+                )
+                await self.put_axis_telemetry(
+                    device_id=enums.DeviceId.ELEVATION_AXIS, tai=tai
+                )
+                await asyncio.sleep(self.telemetry_interval)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.log.exception("Telemetry loop failed")
+            raise
 
     def add_all_devices(self):
         """Add all mock devices.
@@ -140,18 +224,40 @@ class Controller:
         """
         self.command_queue = None
 
-    async def start(self):
-        self.log.debug("start: connecting")
-        await self.communicator.connect()
-        self.log.debug("start: connected")
-        self.read_loop_task = asyncio.create_task(self.read_loop())
+    async def connect(self):
+        self.read_loop_task.cancel()
+        self.telemetry_task.cancel()
+        self.communicator = communicator.Communicator(
+            name="Controller",
+            client_host=salobj.LOCAL_HOST,
+            # Tekniker uses repy port = command port + 1
+            client_port=self.command_port + 1,
+            server_host=salobj.LOCAL_HOST,
+            server_port=self.command_port,
+            log=self.log,
+            read_replies=False,
+            connect=False,
+            connect_callback=self.connect_callback,
+        )
+        self.sal_controller = salobj.Controller(name="MTMount")
+        await self.sal_controller.start_task
 
-    async def disconnect(self):
-        await self.communicator.disconnect()
+        self.log.debug("Connecting to the CSC")
+        await self.communicator.connect()
+        self.log.debug("Connected")
+        self.read_loop_task = asyncio.create_task(self.read_loop())
+        self.telemetry_task = asyncio.create_task(self.telemetry_loop())
 
     async def close(self):
         self.read_loop_task.cancel()
+        self.telemetry_task.cancel()
+        if self.sal_controller is not None:
+            await self.sal_controller.close()
+            self.sal_controller = None
         await self.communicator.close()
+        for device in self.device_dict.values():
+            await device.close()
+        self.communicator = None
 
     async def handle_command(self, command):
         command_func = self.command_dict.get(command.command_code)
@@ -162,28 +268,38 @@ class Controller:
             return
 
         try:
-            timeout = command_func(command)
+            timeout_task = command_func(command)
         except Exception as e:
             await self.write_noack(command=command, explanation=repr(e))
             return
-        await self.write_ack(command, timeout=timeout)
-        if timeout is None and command.command_code not in commands.AckOnlyCommandCodes:
-            await self.write_done(command)
+        if timeout_task is None:
+            await self.write_ack(command, timeout=None)
+            if command.command_code not in commands.AckOnlyCommandCodes:
+                await self.write_done(command)
+        else:
+            timeout, task = timeout_task
+            await self.write_ack(command, timeout=timeout)
+            # Do not bother to save the task because `Controller.close` calls
+            # `BaseDevice.close` on each mock device, which cancels the task
+            # that `Controller.monitor_command` is awaiting.
+            asyncio.create_task(self.monitor_command(command=command, task=task))
 
     async def read_loop(self):
-        self.log.debug("read_loop begins")
+        self.log.debug("Read loop begins")
         try:
-            while self.communicator.connected:
+            while self.connected:
                 command = await self.communicator.read()
                 if self.command_queue and not self.command_queue.full():
                     self.command_queue.put_nowait(command)
                 asyncio.create_task(self.handle_command(command))
         except asyncio.CancelledError:
             return
-        except asyncio.streams.IncompleteReadError:
-            self.log.error("Connection lost")
-            self.close()
-        self.log.debug("read_loop ends")
+        except asyncio.IncompleteReadError:
+            self.log.warning("Connection lost")
+            await self.close()
+            if self.reconnect:
+                asyncio.create_task(self.connect())
+        self.log.debug("Read loop ends")
 
     async def reply_to_command(self, command):
         try:
@@ -210,13 +326,15 @@ class Controller:
         elevation_command = commands.ElevationAxisMove(
             sequence_id=command.sequence_id, position=command.elevation,
         )
-        azimuth_time = self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_move(
-            azimuth_command
-        )
-        elevation_time = self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_move(
-            elevation_command
-        )
-        return max(azimuth_time, elevation_time)
+        azimuth_time, azimuth_task = self.device_dict[
+            enums.DeviceId.AZIMUTH_AXIS
+        ].do_move(azimuth_command)
+        elevation_time, elevation_task = self.device_dict[
+            enums.DeviceId.ELEVATION_AXIS
+        ].do_move(elevation_command)
+        timeout = max(azimuth_time, elevation_time)
+        task = asyncio.create_task(wait_tasks(azimuth_task, elevation_task))
+        return timeout, task
 
     def do_both_axes_stop(self, command):
         azimuth_command = commands.AzimuthAxisStop(sequence_id=command.sequence_id)
@@ -239,6 +357,18 @@ class Controller:
         )
         self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_track(azimuth_command)
         self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_track(elevation_command)
+
+    async def monitor_command(self, command, task):
+        try:
+            await task
+            if self.connected:
+                await self.write_done(command)
+        except asyncio.CancelledError:
+            if self.connected:
+                await self.write_noack(command, explanation="Superseded")
+        except Exception as e:
+            if self.connected:
+                await self.write_noack(command, explanation=str(e))
 
     async def write_ack(self, command, timeout):
         """Report a command as acknowledged.

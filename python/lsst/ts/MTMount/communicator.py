@@ -54,8 +54,9 @@ class Communicator(client_server_pair.ClientServerPair):
     read_replies : `bool`
         If True then read replies, else read commands,
         on the server port.
-    connect_client : `bool` (optional)
+    connect : `bool` (optional)
         Connect the client at construction time?
+        (The server automatically tries to connect.)
     connect_callback : callable (optional)
         Synchronous function to call when a connection is made or dropped.
 
@@ -81,7 +82,7 @@ class Communicator(client_server_pair.ClientServerPair):
         server_port,
         log,
         read_replies,
-        connect_client=True,
+        connect=True,
         connect_callback=None,
     ):
         super().__init__(
@@ -91,7 +92,7 @@ class Communicator(client_server_pair.ClientServerPair):
             server_host=server_host,
             server_port=server_port,
             log=log,
-            connect_client=connect_client,
+            connect=connect,
             connect_callback=connect_callback,
         )
         self.monitor_client_writer_task = asyncio.Future()
@@ -99,6 +100,9 @@ class Communicator(client_server_pair.ClientServerPair):
             self.parse_read_fields = replies.parse_reply
         else:
             self.parse_read_fields = commands.parse_command
+
+        # Lock write/drain to prevent calling drain while draining (an error).
+        self.write_lock = asyncio.Lock()
 
     async def close(self):
         self.monitor_client_writer_task.cancel()
@@ -136,7 +140,7 @@ class Communicator(client_server_pair.ClientServerPair):
             self.log.debug("Read %s", message)
             return message
         except Exception:
-            self.log.exception(f"Could not parse read data: {read_str!r}")
+            self.log.exception(f"Could not parse read data: {read_bytes}")
             raise
 
     async def write(self, message):
@@ -149,12 +153,15 @@ class Communicator(client_server_pair.ClientServerPair):
         """
         if not self.client_connected:
             raise RuntimeError("Client not connected")
+        self.log.debug("Write message %s", message)
+        message_bytes = message.encode()
+        self.log.debug("Write bytes %s", message_bytes)
         try:
-            self.log.debug("Write %s", message)
-            self.client_writer.write(message.encode())
-            await self.client_writer.drain()
+            async with self.write_lock:
+                self.client_writer.write(message.encode())
+                await self.client_writer.drain()
         except Exception:
-            self.log.exception(f"Failed to write {message}")
+            self.log.exception(f"Failed to write {message_bytes}")
             raise
 
     async def monitor_client_reader(self):

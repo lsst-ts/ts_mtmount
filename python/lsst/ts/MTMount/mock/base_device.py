@@ -52,12 +52,14 @@ class BaseDevice:
     If the command runs quickly then the do_command method should return
     `None` and the caller will write `AckReply` and (if the command
     is supposed to receive one) `DoneReply` for the command.
+
     If the command takes awhile to run then the do_command method
-    must return a timeout (in seconds) and must itself report
-    the final `DoneReply` when the command succeeds or `NoAckReply`
-    if the command fails or is superseded or canceled after do_command returns.
-    If the do_command method raises an exception the the caller will write
-    `NoAckReply` for the command, to report the command as failed.
+    must return two items:
+
+    * A timeout (in seconds)
+    * A task or future which will be set done when the command succeeds,
+      canceled if the command is superseded,
+      or raise an exception if the command fails.
     """
 
     all_command_names = {code.name for code in enums.CommandCode}
@@ -114,6 +116,11 @@ class BaseDevice:
                     )
                 self.controller.command_dict[command_code] = do_method
                 self.log.debug(f"Add {command_code.name} command to command_dict")
+
+    async def close(self):
+        """Cancel any background tasks and clean up resources.
+        """
+        pass
 
     def do_power(self, command):
         self.power_on = command.on
