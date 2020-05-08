@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
+    "NUM_HEADER_FIELDS",
     "AckOnlyCommandCodes",
     "Command",
     "AzimuthAxisDriveEnable",
@@ -84,6 +85,9 @@ from . import field_info
 from . import utils
 
 MAX_SEQUENCE_ID = (1 << 31) - 1
+
+# Number of required fields, before the optional arguments start
+NUM_HEADER_FIELDS = 4
 
 
 # Command that are done when ACK is received
@@ -734,8 +738,10 @@ def parse_command(fields):
     ValueError
         If the data cannot be parsed.
     """
-    if len(fields) < 4:
-        raise ValueError(f"A command has at least 4 fields; only got {len(fields)}")
+    if len(fields) < NUM_HEADER_FIELDS:
+        raise ValueError(
+            f"A command has at least {NUM_HEADER_FIELDS} fields; only got {len(fields)}"
+        )
     command_code = enums.CommandCode(int(fields[1]))
     try:
         CommandClass = CommandDict[command_code]
