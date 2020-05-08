@@ -105,7 +105,7 @@ class ClientServerPair:
         )
         if connect:
             self.connect_task = asyncio.create_task(self.connect())
-        self.log.info(
+        self.log.debug(
             "Constructed with "
             f"client_port={self.client_port}; "
             f"client_host={self.client_host}; "
@@ -160,7 +160,7 @@ class ClientServerPair:
         try:
             self.connect_callback(self)
         except Exception:
-            self.log.exception("connect_callback failed")
+            self.log.exception(f"Connect callback {self.connect_callback} failed")
 
     async def close(self):
         """Close both the server and the client, to clean up when finished.
@@ -191,7 +191,6 @@ class ClientServerPair:
         -----
         This will wait forever for a connection.
         """
-        self.log.info(f"connect(port={port})")
         await self.close_client()
         if port is not None:
             self.client_port = port
@@ -202,7 +201,7 @@ class ClientServerPair:
         while True:
             try:
                 self.log.info(
-                    f"connect: connect to host={self.client_host}, port={self.client_port}"
+                    f"Connect to host={self.client_host}, port={self.client_port}"
                 )
                 self.client_reader, self.client_writer = await asyncio.open_connection(
                     host=self.client_host, port=self.client_port
@@ -210,7 +209,7 @@ class ClientServerPair:
                 self.call_connect_callback()
                 break
             except Exception as e:
-                self.log.debug(f"connect failed with {e}; retrying")
+                self.log.debug(f"Connect failed; retrying. Error: {e}")
                 await asyncio.sleep(self.connect_retry_interval)
         self.client_connected_task.set_result(None)
         await self._server.connected_task
