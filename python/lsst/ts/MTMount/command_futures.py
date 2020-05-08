@@ -27,7 +27,7 @@ from lsst.ts import salobj
 
 
 class CommandFutures:
-    """asyncio futures to track the progress of an Operation Manager command.
+    """asyncio futures to track the progress of a low-level controller command.
 
     Attributes
     ----------

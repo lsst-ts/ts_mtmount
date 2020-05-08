@@ -20,7 +20,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""A simple command-line script that sends commands to the Operation Manager.
+"""A simple command-line script that sends commands to
+the low-level controller (Operation Manager).
 
 Must be connected to a low-level port on the Operation Manger.
 At this time the only available port is for the hand-held device,
@@ -80,10 +81,10 @@ def print_connected(descr, communicator):
 
 
 class Commander:
-    """Command a Tekniker Operations Manager.
+    """Command a Tekniker Operation Manager.
 
     Read commands from a user on the command line
-    and send them to the Operations Manager.
+    and send them to the low-level controller (Operation Manager).
 
     Warning: this is only intended as a short-term hack.
     It will be deleted once MTMountCsc has been shown to work

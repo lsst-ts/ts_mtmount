@@ -167,7 +167,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         return self.config.host
 
     async def connect(self):
-        """Connect to the Operation Manager.
+        """Connect to the low-level controller.
 
         Start the mock controller, if simulating.
         """

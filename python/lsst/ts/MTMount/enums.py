@@ -228,7 +228,7 @@ class EnabledState(enum.IntEnum):
 
 
 class ReplyCode(enum.IntEnum):
-    """Reply codes for messages read from the Operation Manager.
+    """Reply codes for messages read from the low-level controller.
 
     The values and names are from LL_MESSAGE in ll_commands.h.
     except that ON_STATE_INFO is hard-coded in ``eui_communication.cpp``
