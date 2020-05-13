@@ -20,22 +20,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
-    "get_tai_time",
     "wrap_parameter_doc",
 ]
 
 import textwrap
 
-from lsst.ts import salobj
-
 # Maximum documentation string length (chars)
 MAX_DOC_LENGTH = 79
-
-
-def get_tai_time():
-    """Get current TAI as an astropy.time.Time.
-    """
-    return salobj.astropy_time_from_tai_unix(salobj.current_tai())
 
 
 _ParamWrapper = textwrap.TextWrapper(

@@ -27,11 +27,10 @@ __all__ = [
     "FloatFieldInfo",
     "IntFieldInfo",
     "StrFieldInfo",
-    "TimeFieldInfo",
+    "TimestampFieldInfo",
     "CommandCodeFieldInfo",
     "ReplyCodeFieldInfo",
     "SourceFieldInfo",
-    "TimestampFieldInfo",
 ]
 
 import abc
@@ -41,7 +40,6 @@ import astropy.time
 
 from . import constants
 from . import enums
-from . import utils
 
 # Temporary hack until the CSC has a dedicated port.
 if constants.CSC_COMMAND_PORT == constants.EUI_COMMAND_PORT:
@@ -285,8 +283,8 @@ class StrFieldInfo(BaseFieldInfo):
         return strval
 
 
-class TimeFieldInfo(BaseFieldInfo):
-    """Date and time field.
+class TimestampFieldInfo(BaseFieldInfo):
+    """UTC timestamp field.
 
     The str representation is ISO-8601, with "T" between the date and time.
     For example: "2020-02-27T14:48:27.469". It will never have leap seconds
@@ -307,42 +305,32 @@ class TimeFieldInfo(BaseFieldInfo):
 
     Notes
     -----
-    ``scale="utc"`` is the unix time approximation to UTC, which has
-    no leap seconds. Instead the time is uniformly stretched on the day of
-    a leap second so there are the usual number of seconds in the day.
+    The time is not exactly UTC; it is a an approximation to UTC which has
+    no leap seconds. On the day of a leap second the time time is uniformly
+    stretched so there are the usual number of seconds in the day.
     Tekniker's code only uses UTC time for *unimportant* message timestamps,
     and this avoids the risk of passing Tekniker's code a timestamp value
     that it cannot handle.
     """
 
-    def __init__(self, name, doc, scale, default=None):
-        if scale not in ("tai", "utc"):
-            raise ValueError(f"Unsupported scale {scale}")
-        if default not in (True, None):
-            raise ValueError(f"default={default} must be True or None")
-        self.scale = scale
-        # Don't pass default=True to the parent class,
-        # because it is not a valid time.
-        super().__init__(name=name, doc=doc, dtype=astropy.time.Time, default=None)
-        self._default = default
+    def __init__(self):
+        super().__init__(
+            name="timestamp",
+            doc="Time at which the message was sent.",
+            dtype=astropy.time.Time,
+            default=None,
+        )
 
     @property
     def default(self):
-        if self._default is None:
-            return None
-        if self.scale == "utc":
-            return astropy.time.Time.now()
-        elif self.scale == "tai":
-            return utils.get_tai_time()
-        else:
-            raise RuntimeError(f"Unsupported scale {self.scale}")
+        return astropy.time.Time.now()
 
     def assert_value_ok(self, value):
         if not isinstance(value, astropy.time.Time):
             raise ValueError(f"value={value!r} is not an astropy.time.Time")
 
     def value_from_str(self, strval):
-        return astropy.time.Time(strval, scale=self.scale)
+        return astropy.time.Time(strval, scale="utc")
 
     def str_from_value(self, value):
         return value.isot
@@ -412,17 +400,4 @@ class SubsystemFieldInfo(StrFieldInfo):
         super().__init__(
             name="subsystem",
             doc=f"""Source of the {what}. The format is f"{{subsystem_id}}. {{details}}".""",
-        )
-
-
-class TimestampFieldInfo(TimeFieldInfo):
-    """Information for the ``timestamp`` field.
-    """
-
-    def __init__(self):
-        super().__init__(
-            name="timestamp",
-            doc="Time at which the message was sent.",
-            scale="utc",
-            default=True,
         )

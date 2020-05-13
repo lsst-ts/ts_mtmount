@@ -277,7 +277,7 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertTrue(device.enabled)
             self.assertTrue(device.tracking_enabled)
             track_command = MTMount.commands.AzimuthAxisTrack(
-                position=45, velocity=0, tai_time=MTMount.get_tai_time()
+                position=45, velocity=0, tai=salobj.current_tai()
             )
             await self.run_command(
                 track_command, read_done=False, use_read_loop=use_read_loop
@@ -376,19 +376,16 @@ class MockControllerTestCase(asynctest.TestCase):
 
             start_position = device.actuator.path.at(salobj.current_tai()).position
             end_position = start_position + 3
-            prev_tai_unix = 0
+            previous_tai = 0
             # Send tracking updates until an InPosition reply is seen.
             while True:
-                tai_unix = salobj.current_tai()
-                # Provide some slop for non-monotonic clocks, which are
+                tai = salobj.current_tai()
+                # Work around non-monotonic clocks, which are
                 # sometimes seen when running Docker on macOS.
-                if tai_unix <= prev_tai_unix:
-                    tai_unix = prev_tai_unix + 0.001
-                prev_tai_unix = tai_unix
+                if tai <= previous_tai:
+                    tai = previous_tai + 0.001
                 track_command = MTMount.commands.AzimuthAxisTrack(
-                    position=end_position,
-                    velocity=0,
-                    tai_time=salobj.astropy_time_from_tai_unix(tai_unix),
+                    position=end_position, velocity=0, tai=tai,
                 )
                 nonack_replies = await self.run_command(
                     track_command,
@@ -406,6 +403,7 @@ class MockControllerTestCase(asynctest.TestCase):
                             num_in_position_replies += 1
                     self.assertEqual(num_in_position_replies, 1)
                     break
+                previous_tai = tai
                 await asyncio.sleep(0.1)
 
             disable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(

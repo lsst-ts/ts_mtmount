@@ -75,7 +75,7 @@ class AxisDevice(BaseDevice):
         super().__init__(controller=controller, device_id=device_id)
 
     @property
-    def end_tai_unix(self):
+    def end_tai(self):
         """Get the end time of the current path, as TAI unix seconds.
         """
         return self.actuator.path[-1].tai
@@ -126,7 +126,7 @@ class AxisDevice(BaseDevice):
         """
         # Provide some slop for non-monotonic clocks, which are
         # sometimes seen when running Docker on macOS.
-        duration = 0.2 + self.end_tai_unix - salobj.current_tai()
+        duration = 0.2 + self.end_tai - salobj.current_tai()
         await asyncio.sleep(duration)
 
     def supersede_move_command(self):
@@ -223,17 +223,15 @@ class AxisDevice(BaseDevice):
         self.has_target = False
 
     def do_track(self, command):
-        """Specify a tracking target tai_time, position, velocity.
+        """Specify a tracking target position, velocity, and time.
 
         The drive must be enabled and tracking must be enabled.
         """
         self.assert_enabled()
         self.assert_tracking_enabled(True)
         self.supersede_move_command()
-        # Despite the name, tai_from_utc works with any astropy.time.Time
-        tai_unix = salobj.tai_from_utc(command.tai_time, format=None)
         self.actuator.set_target(
-            tai=tai_unix, position=command.position, velocity=command.velocity
+            tai=command.tai, position=command.position, velocity=command.velocity
         )
         self.has_target = True
 
@@ -257,10 +255,9 @@ class AxisDevice(BaseDevice):
         self.assert_enabled()
         self.assert_tracking_enabled(False)
         self.supersede_move_command()
-        # Despite the name, tai_from_utc works with any astropy.time.Time
-        tai_unix = salobj.current_tai()
-        self.actuator.set_target(tai=tai_unix, position=position, velocity=0)
+        tai = salobj.current_tai()
+        self.actuator.set_target(tai=tai, position=position, velocity=0)
         self.has_target = True
         self.monitor_move_command(command)
-        timeout = self.end_tai_unix - tai_unix
+        timeout = self.end_tai - tai
         return timeout, self._monitor_move_task

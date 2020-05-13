@@ -32,7 +32,6 @@ from . import enums
 from . import replies
 from . import communicator
 from . import mock
-from . import utils
 
 
 # Extra time to wait for commands to be done (sec)
@@ -171,7 +170,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         Start the mock controller, if simulating.
         """
-        self.log.debug(f"Connect to the low-level controller")
+        self.log.debug("Connect to the low-level controller")
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
@@ -201,16 +200,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 connect_callback=self.connect_callback,
             )
         try:
-            self.log.info(f"Connecting to the low-level controller")
+            self.log.info("Connecting to the low-level controller")
             connect_tasks.append(self.communicator.connect())
             await asyncio.wait_for(
                 asyncio.gather(*connect_tasks), timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
             self.read_loop_task = asyncio.create_task(self.read_loop())
-            self.log.debug(f"Connected to the low-level controller")
+            self.log.debug("Connected to the low-level controller")
         except Exception as e:
-            err_msg = f"Could not connect to the low-level controller "
+            err_msg = "Could not connect to the low-level controller "
             f"at client_host={client_host}, command_port={command_port}"
             self.log.exception(err_msg)
             self.fault(
@@ -363,9 +362,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # This command only receives an Ack; mark it done.
             futures.done.set_result(None)
         else:
-            await asyncio.wait_for(
-                futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
-            )
+            try:
+                await asyncio.wait_for(
+                    futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
+                )
+            except asyncio.TimeoutError:
+                raise asyncio.TimeoutError(
+                    f"Timed out after {futures.timeout + TIMEOUT_BUFFER} seconds "
+                    f"waiting for the Done reply to {command}"
+                )
         return futures
 
     async def send_commands(self, *commands, dolock=True):
@@ -415,7 +420,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 command = commands.CameraCableWrapTrack(
                     position=rot_application.Position,
                     velocity=estimated_velocity,
-                    tai_time=utils.get_tai_time(),
+                    tai=salobj.current_tai(),
                 )
                 await self.send_command(command)
                 self.prev_rot_application = rot_application
@@ -478,7 +483,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         force_output=True,
                     )
                 elif isinstance(reply, replies.OnStateInfoReply):
-                    self.log.info(f"Ignoring OnStateInfo reply: {reply}")
+                    self.log.debug(f"Ignoring OnStateInfo reply: {reply}")
                 elif isinstance(reply, replies.InPositionReply):
                     if reply.what == 0:
                         self.evt_axesInPosition.set_put(azimuth=reply.in_position)
@@ -588,14 +593,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_trackTarget(self, data):
         self.assert_enabled()
-        tai_astropy = salobj.astropy_time_from_tai_unix(data.taiTime)
         await self.send_command(
             commands.BothAxesTrack(
                 azimuth=data.azimuth,
                 azimuth_velocity=data.azimuthVelocity,
                 elevation=data.elevation,
                 elevation_velocity=data.elevationVelocity,
-                tai_time=tai_astropy,
+                tai=data.taiTime,
             ),
         )
         self.evt_target.set_put(
@@ -637,14 +641,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # supports the xAxisEnableTracking commands.
         if self.simulation_mode == 0:
             self.log.info(
-                "Ignoring the stopTracking command "
-                "because Tekniker's code does not yet support it"
+                "Issuing BothAxesStop instead of disabling tracking "
+                "because Tekniker's code does not yet support the latter"
             )
-            return
-        await self.send_commands(
-            commands.ElevationAxisEnableTracking(on=False),
-            commands.AzimuthAxisEnableTracking(on=False),
-        )
+            await self.send_command(commands.BothAxesStop(),)
+        else:
+            await self.send_commands(
+                commands.ElevationAxisEnableTracking(on=False),
+                commands.AzimuthAxisEnableTracking(on=False),
+            )
 
     @classmethod
     def add_arguments(cls, parser):

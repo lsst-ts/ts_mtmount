@@ -197,7 +197,7 @@ class ClientServerPair:
         if not self.client_port:
             raise ValueError(f"client_port={self.client_port!r} must be nonzero")
 
-        print(f"ClientServerPair waiting for client to connect")
+        self.log.debug("ClientServerPair waiting for client to connect")
         while True:
             try:
                 self.log.info(

@@ -20,9 +20,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
-import time
-
-import astropy.time
 
 from lsst.ts import MTMount
 from lsst.ts.MTMount.utils import MAX_DOC_LENGTH
@@ -30,16 +27,6 @@ from lsst.ts.MTMount.utils import MAX_DOC_LENGTH
 
 class UtilsTestCase(unittest.TestCase):
     """Test the utils subpackage."""
-
-    def check_get_tai(self):
-        t0 = time.monotonic()
-        curr_tai = MTMount.get_tai_time()
-        curr_unix = time.time()
-        dt = time.monotonic() - t0
-        self.assertIsInstance(curr_tai, astropy.time.Time)
-        self.assertEqual(curr_tai.scale, "tai")
-        time_diff_sec = curr_unix - curr_tai.unix
-        self.assertLessEqual(abs(time_diff_sec), dt)
 
     def test_wrap_parameter_doc(self):
         # The following text was chosen so when duplicated and wrapped

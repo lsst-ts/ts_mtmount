@@ -132,41 +132,45 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
 
                 position0 = 45
                 velocity = 0.1
-                tai_time0 = MTMount.get_tai_time()
+                tai0 = salobj.current_tai()
                 num_rotator_samples = 10
                 prev_position = None
-                prev_tai_time = None
-                prev_delay = None
+                previous_tai = 0
+                previous_delay = None
                 for i in range(num_rotator_samples):
-                    tai_time = MTMount.get_tai_time()
-                    dt = tai_time - tai_time0
-                    position = position0 + velocity * dt.sec
+                    tai = salobj.current_tai()
+                    # Work around non-monotonic clocks, which are
+                    # sometimes seen when running Docker on macOS.
+                    if tai < previous_tai:
+                        tai = previous_tai + 0.001
+                    dt = tai - tai0
+                    position = position0 + velocity * dt
                     rotator.tel_Application.set_put(Position=position)
                     command = await self.next_lowlevel_command()
-                    delay = MTMount.get_tai_time() - tai_time
+                    delay = salobj.current_tai() - tai
 
                     self.assertEqual(
                         command.command_code,
                         MTMount.CommandCode.CAMERA_CABLE_WRAP_TRACK,
                     )
-                    self.assertLessEqual(command.tai_time - tai_time, delay)
+                    self.assertLessEqual(command.tai - tai, delay)
                     self.assertAlmostEqual(command.position, position)
                     if i == 0:
                         self.assertAlmostEqual(command.velocity, 0)
                     else:
-                        nominal_dt = tai_time - prev_tai_time
-                        min_dt = nominal_dt - delay - prev_delay
-                        max_dt = nominal_dt + delay + prev_delay
-                        min_vel = (position - prev_position) / max_dt.sec
-                        max_vel = (position - prev_position) / min_dt.sec
+                        nominal_dt = tai - previous_tai
+                        min_dt = nominal_dt - delay - previous_delay
+                        max_dt = nominal_dt + delay + previous_delay
+                        min_vel = (position - prev_position) / max_dt
+                        max_vel = (position - prev_position) / min_dt
                         max_vel_error = max_vel - min_vel
                         self.assertAlmostEqual(
                             command.velocity, velocity, delta=max_vel_error
                         )
                     await asyncio.sleep(0.1)
                     prev_position = position
-                    prev_tai_time = tai_time
-                    prev_delay = delay
+                    previous_tai = tai
+                    previous_delay = delay
 
                 await self.remote.cmd_disableCameraCableWrapTracking.start(
                     timeout=STD_TIMEOUT
@@ -255,9 +259,9 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 MTMount.DeviceId.ELEVATION_AXIS
             ]
 
-            tai_unix = salobj.current_tai()
-            azimuth_pvt = mock_azimuth.actuator.path.at(tai_unix)
-            elevation_pvt = mock_elevation.actuator.path.at(tai_unix)
+            tai = salobj.current_tai()
+            azimuth_pvt = mock_azimuth.actuator.path.at(tai)
+            elevation_pvt = mock_elevation.actuator.path.at(tai)
             self.assertAlmostEqual(elevation_pvt.velocity, 0)
             self.assertAlmostEqual(azimuth_pvt.velocity, 0)
 
@@ -284,7 +288,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             )
             await asyncio.sleep(0.1)  # Give the command a chance to start
             # Print move duration; the elevation move will take longer
-            duration = mock_elevation.end_tai_unix - salobj.current_tai()
+            duration = mock_elevation.end_tai - salobj.current_tai()
             print(f"axis move duration={duration:0.2f} sec")
             await self.assert_next_sample(
                 self.remote.evt_axesInPosition, azimuth=True, elevation=False,
@@ -293,11 +297,11 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 self.remote.evt_axesInPosition, azimuth=True, elevation=True,
             )
             await task
-            tai_unix = salobj.current_tai()
-            elevation_pvt = mock_elevation.actuator.path.at(tai_unix)
-            azimuth_pvt = mock_azimuth.actuator.path.at(tai_unix)
+            tai = salobj.current_tai()
+            elevation_pvt = mock_elevation.actuator.path.at(tai)
+            azimuth_pvt = mock_azimuth.actuator.path.at(tai)
             self.assertAlmostEqual(azimuth_pvt.position, target_azimuth)
-            self.assertGreaterEqual(tai_unix, mock_elevation.actuator.path[-1].tai)
+            self.assertGreaterEqual(tai, mock_elevation.actuator.path[-1].tai)
             self.assertAlmostEqual(elevation_pvt.position, target_elevation)
             self.assertAlmostEqual(azimuth_pvt.velocity, 0)
             self.assertAlmostEqual(elevation_pvt.velocity, 0)
@@ -330,15 +334,13 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertFalse(mock_azimuth.tracking_enabled)
             self.assertFalse(mock_elevation.tracking_enabled)
 
-            current_tai = salobj.current_tai()
-            initial_azimuth = mock_azimuth.actuator.path.at(current_tai).position
-            initial_elevation = mock_elevation.actuator.path.at(current_tai).position
+            tai = salobj.current_tai()
+            initial_azimuth = mock_azimuth.actuator.path.at(tai).position
+            initial_elevation = mock_elevation.actuator.path.at(tai).position
 
             # Check that tracking is rejected if not enabled
             kwargs = self.make_track_target_kwargs(
-                azimuth=initial_azimuth,
-                elevation=initial_elevation,
-                taiTime=current_tai,
+                azimuth=initial_azimuth, elevation=initial_elevation, taiTime=tai,
             )
             with salobj.assertRaisesAckError():
                 await self.remote.cmd_trackTarget.set_start(
@@ -350,7 +352,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertTrue(mock_azimuth.tracking_enabled)
             self.assertTrue(mock_elevation.tracking_enabled)
 
-            # Slew and track until both axes are in position
+            # Slew and track until both axes are in position.
             # Make the elevation move significantly smaller,
             # so it is sure to be in position first.
             t0 = time.monotonic()
@@ -419,13 +421,13 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         initial_tai = salobj.current_tai()
         previous_tai = 0
         while True:
-            await asyncio.sleep(0.2)
-            tai_unix = salobj.current_tai()
-            # Provide some slop for non-monotonic clocks, which are
+            await asyncio.sleep(0.1)
+            tai = salobj.current_tai()
+            # Work around non-monotonic clocks, which are
             # sometimes seen when running Docker on macOS.
-            if tai_unix < previous_tai:
-                tai_unix = previous_tai + 0.001
-            dt = tai_unix - initial_tai
+            if tai < previous_tai:
+                tai = previous_tai + 0.001
+            dt = tai - initial_tai
             current_azimuth = azimuth + azimuth_velocity * dt
             current_elevation = elevation + elevation_velocity * dt
             kwargs = self.make_track_target_kwargs(
@@ -433,7 +435,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 azimuthVelocity=azimuth_velocity,
                 elevation=current_elevation,
                 elevationVelocity=elevation_velocity,
-                taiTime=tai_unix,
+                taiTime=tai,
             )
             await self.remote.cmd_trackTarget.set_start(**kwargs, timeout=STD_TIMEOUT)
             self.assertAlmostEqual(
@@ -442,16 +444,13 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertAlmostEqual(
                 mock_azimuth.actuator.target.velocity, azimuth_velocity
             )
-            self.assertAlmostEqual(
-                mock_azimuth.actuator.target.tai, tai_unix, delta=0.001
-            )
+            self.assertAlmostEqual(mock_azimuth.actuator.target.tai, tai, delta=0.001)
             self.assertAlmostEqual(
                 mock_elevation.actuator.target.position, current_elevation
             )
             self.assertAlmostEqual(
                 mock_elevation.actuator.target.velocity, elevation_velocity
             )
-            self.assertAlmostEqual(
-                mock_elevation.actuator.target.tai, tai_unix, delta=0.001
-            )
+            self.assertAlmostEqual(mock_elevation.actuator.target.tai, tai, delta=0.001)
             await self.assert_next_sample(topic=self.remote.evt_target, **kwargs)
+            previous_tai = tai
