@@ -421,7 +421,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         initial_tai = salobj.current_tai()
         previous_tai = 0
         while True:
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)
             tai = salobj.current_tai()
             # Work around non-monotonic clocks, which are
             # sometimes seen when running Docker on macOS.
