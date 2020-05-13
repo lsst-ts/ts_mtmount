@@ -93,6 +93,7 @@ NUM_HEADER_FIELDS = 4
 # Command that are done when ACK is received
 AckOnlyCommandCodes = set(
     (
+        enums.CommandCode.BOTH_AXES_TRACK,
         enums.CommandCode.AZIMUTH_AXIS_TRACK,
         enums.CommandCode.ELEVATION_AXIS_TRACK,
         enums.CommandCode.AZIMUTH_CABLE_WRAP_TRACK,
