@@ -75,7 +75,15 @@ class Controller:
         self.log = log.getChild("Controller")
         self.reconnect = reconnect
         self.telemetry_interval = 0.2  # Seconds
-        self.in_position_error = 0.01  # Degrees
+        # Maximum position and velocity error,
+        # below which an axis is considered in position
+        self.max_position_error = 0.01  # degrees
+        self.max_velocity_error = 0.01  # degrees/second
+        # A dict of device_id: in_position
+        self.in_position_dict = {
+            enums.DeviceId.AZIMUTH_AXIS: None,
+            enums.DeviceId.ELEVATION_AXIS: None,
+        }
 
         self.communicator = None
         self.sal_controller = None
@@ -95,10 +103,6 @@ class Controller:
         self.read_loop_task = asyncio.Future()
         self.telemetry_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.connect())
-        self.in_position_dict = {
-            enums.DeviceId.AZIMUTH_AXIS: None,
-            enums.DeviceId.ELEVATION_AXIS: None,
-        }
 
     @property
     def connected(self):
@@ -136,7 +140,8 @@ class Controller:
         # Write the InPosition TCP/IP message
         in_position = (
             device.has_target
-            and abs(target.position - actual.position) < self.in_position_error
+            and abs(target.position - actual.position) < self.max_position_error
+            and abs(target.velocity - actual.velocity) < self.max_velocity_error
         )
         if in_position != self.in_position_dict[device_id]:
             self.in_position_dict[device_id] = in_position
