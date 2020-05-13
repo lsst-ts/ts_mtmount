@@ -25,7 +25,6 @@ import logging
 import unittest
 
 import asynctest
-import astropy.time
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
@@ -150,15 +149,15 @@ class CommunicatorTestCase(asynctest.TestCase):
         self.connect_callback_data.append((communicator.name, communicator.connected))
 
     async def test_basic_communication(self):
-        tai_time = astropy.time.Time("2020-02-03T14:15:16.500", scale="tai")
+        tai = 1589372384.123
         # A representative sampling of commands, including
         # bool, int, float, and time fields.
         commands = (
             MTMount.commands.ElevationAxisTrack(
-                sequence_id=1, position=12, velocity=0.3, tai_time=tai_time
+                sequence_id=1, position=12, velocity=0.3, tai=tai
             ),
             MTMount.commands.AzimuthAxisTrack(
-                sequence_id=2, position=12, velocity=0.3, tai_time=tai_time
+                sequence_id=2, position=12, velocity=0.3, tai=tai
             ),
             MTMount.commands.MirrorCoversPower(sequence_id=3, drive=2, on=True),
         )

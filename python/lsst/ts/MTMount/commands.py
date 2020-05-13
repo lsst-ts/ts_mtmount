@@ -163,12 +163,10 @@ def make_command_field_infos(command_code, parameters=()):
 
 
 _TrackingParameters = (
-    field_info.FloatFieldInfo(name="position", doc="Target position (deg) at tai_time"),
+    field_info.FloatFieldInfo(name="position", doc="Target position (deg) at tai"),
+    field_info.FloatFieldInfo(name="velocity", doc="Target velocity (deg/sec) at tai"),
     field_info.FloatFieldInfo(
-        name="velocity", doc="Target velocity (deg/sec) at tai_time"
-    ),
-    field_info.TimeFieldInfo(
-        name="tai_time", doc="Target TAI time for position and velocity", scale="tai"
+        name="tai", doc="Target TAI time for position and velocity (unix seconds)",
     ),
 )
 
@@ -312,28 +310,25 @@ class BothAxesTrack(Command):
         enums.CommandCode.BOTH_AXES_TRACK,
         (
             field_info.FloatFieldInfo(
-                name="azimuth", doc="Target azimuth at tai_time (deg)"
+                name="azimuth", doc="Target azimuth at tai (deg)"
             ),
             field_info.FloatFieldInfo(
-                name="elevation", doc="Target elevation at tai_time (deg)"
+                name="elevation", doc="Target elevation at tai (deg)"
             ),
             field_info.FloatFieldInfo(
-                name="azimuth_velocity",
-                doc="Target azimuth velocity at tai_time (deg)",
+                name="azimuth_velocity", doc="Target azimuth velocity at tai (deg)",
             ),
             field_info.FloatFieldInfo(
-                name="elevation_velocity",
-                doc="Target elevation velocity at tai_time (deg)",
+                name="elevation_velocity", doc="Target elevation velocity at tai (deg)",
             ),
             field_info.IntFieldInfo(
                 name="negate_azimuth",
                 default=0,
                 doc="If 0 accept azimuth as is; if -1 multiply azimuth by -1",
             ),
-            field_info.TimeFieldInfo(
-                name="tai_time",
-                doc="Target TAI time for position and velocity",
-                scale="tai",
+            field_info.FloatFieldInfo(
+                name="tai",
+                doc="Target TAI time for position and velocity (unix seconds)",
             ),
         ),
     )

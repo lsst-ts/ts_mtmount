@@ -80,12 +80,11 @@ def get_random_value(finfo):
         return random.randint(-10000, 10000)
     elif isinstance(finfo, field_info.FloatFieldInfo):
         return random.uniform(-9e99, 9e99)
-    elif isinstance(finfo, field_info.TimeFieldInfo):
-        scale = random.choice(["utc", "tai"])
-        return astropy.time.Time(get_random_date().isoformat(), scale=scale)
     elif isinstance(finfo, field_info.StrFieldInfo):
         nchar = random.randint(1, 100)
         return "".join(random.sample(string.printable, nchar))
+    elif isinstance(finfo, field_info.TimestampFieldInfo):
+        return astropy.time.Time(get_random_date().isoformat())
     raise ValueError(f"Unrecognized field type {finfo!r}")
 
 

@@ -155,7 +155,7 @@ class Commander:
         )
         self.help_text = f"""Send commands to the telescope mount assemply.
 
-TMA Commands (omit the tai_time argument, if shown):
+TMA Commands (omit the tai argument, if shown):
 {self.get_command_help()}
 
 Other commands:
@@ -221,10 +221,8 @@ help  # Print this help
         arg_infos = CommandClass.field_infos[MTMount.commands.NUM_HEADER_FIELDS :]
         # If the final argument for the command is TAI time,
         # then set it to the current time.
-        has_tai_time_argument = arg_infos and isinstance(
-            arg_infos[-1], MTMount.field_info.TimeFieldInfo
-        )
-        if has_tai_time_argument:
+        has_tai_argument = arg_infos and arg_infos[-1].name == "tai"
+        if has_tai_argument:
             arg_infos = arg_infos[0:-1]
         if len(args) != len(arg_infos):
             raise ValueError(
@@ -233,8 +231,8 @@ help  # Print this help
         kwargs = {
             info.name: info.value_from_str(arg) for arg, info in zip(args, arg_infos)
         }
-        if has_tai_time_argument:
-            kwargs["tai_time"] = MTMount.get_tai_time()
+        if has_tai_argument:
+            kwargs["tai"] = salobj.current_tai()
 
         cmd = CommandClass(**kwargs)
         await self.communicator.write(cmd)

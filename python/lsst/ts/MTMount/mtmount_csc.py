@@ -32,7 +32,6 @@ from . import enums
 from . import replies
 from . import communicator
 from . import mock
-from . import utils
 
 
 # Extra time to wait for commands to be done (sec)
@@ -415,7 +414,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 command = commands.CameraCableWrapTrack(
                     position=rot_application.Position,
                     velocity=estimated_velocity,
-                    tai_time=utils.get_tai_time(),
+                    tai=salobj.current_tai(),
                 )
                 await self.send_command(command)
                 self.prev_rot_application = rot_application
@@ -588,14 +587,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_trackTarget(self, data):
         self.assert_enabled()
-        tai_astropy = salobj.astropy_time_from_tai_unix(data.taiTime)
         await self.send_command(
             commands.BothAxesTrack(
                 azimuth=data.azimuth,
                 azimuth_velocity=data.azimuthVelocity,
                 elevation=data.elevation,
                 elevation_velocity=data.elevationVelocity,
-                tai_time=tai_astropy,
+                tai=data.taiTime,
             ),
         )
         self.evt_target.set_put(

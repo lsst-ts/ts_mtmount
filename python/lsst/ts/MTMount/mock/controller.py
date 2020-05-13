@@ -347,13 +347,13 @@ class Controller:
             sequence_id=command.sequence_id,
             position=command.azimuth,
             velocity=command.azimuth_velocity,
-            tai_time=command.tai_time,
+            tai=command.tai,
         )
         elevation_command = commands.ElevationAxisTrack(
             sequence_id=command.sequence_id,
             position=command.elevation,
             velocity=command.elevation_velocity,
-            tai_time=command.tai_time,
+            tai=command.tai,
         )
         self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_track(azimuth_command)
         self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_track(elevation_command)

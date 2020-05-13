@@ -177,37 +177,26 @@ class FieldInfoTestCase(unittest.TestCase):
             bad_values=(None, False, True, 1, 5.5),
         )
 
-    def test_time_field_info(self):
-        for scale in ("tai", "utc"):
-            with self.subTest(scale=scale):
-                field_info = MTMount.field_info.TimeFieldInfo(
-                    name=self.name, doc=self.doc, scale=scale
-                )
-                self.check_name_doc(field_info)
-                valid_date_str = "2020-04-06T22:33:57.335"
-                valid_times = (
-                    astropy.time.Time(valid_date_str, format="isot", scale=scale),
-                    astropy.time.Time(2000, format="jyear", scale=scale),
-                    astropy.time.Time(58884, format="mjd", scale=scale),
-                )
-                self.check_field_basics(
-                    field_info=field_info,
-                    str_value_dict={t.isot: t for t in valid_times},
-                    bad_values=(None, False, True, 1, 5.5, valid_date_str),
-                )
-
-        for bad_scale in ("inches", None, 5):
-            with self.subTest(bad_scale=bad_scale):
-                with self.assertRaises(ValueError):
-                    MTMount.field_info.TimeFieldInfo(
-                        name=self.name, doc=self.doc, scale=bad_scale
-                    )
-
     def test_command_code_field_info(self):
         self.check_fixed_field_info(
             MTMount.field_info.CommandCodeFieldInfo,
             dtype=MTMount.CommandCode,
             expected_name="command_code",
+        )
+
+    def test_timestamp_field_info(self):
+        field_info = MTMount.field_info.TimestampFieldInfo()
+        self.assertEqual(field_info.name, "timestamp")
+        valid_date_str = "2020-04-06T22:33:57.335"
+        valid_times = (
+            astropy.time.Time(valid_date_str, format="isot", scale="utc"),
+            astropy.time.Time(2000, format="jyear", scale="utc"),
+            astropy.time.Time(58884, format="mjd", scale="utc"),
+        )
+        self.check_field_basics(
+            field_info=field_info,
+            str_value_dict={t.isot: t for t in valid_times},
+            bad_values=(None, False, True, 1, 5.5, valid_date_str),
         )
 
     def test_reply_code_field_info(self):
@@ -224,12 +213,6 @@ class FieldInfoTestCase(unittest.TestCase):
             self.assertIn(what, field_info.doc)
             self.assertIsInstance(field_info, MTMount.field_info.EnumFieldInfo)
             self.assertIs(field_info.dtype, MTMount.Source)
-
-    def test_timestamp_field_info(self):
-        field_info = MTMount.field_info.TimestampFieldInfo()
-        self.assertIsInstance(field_info, MTMount.field_info.TimeFieldInfo)
-        self.assertEqual(field_info.name, "timestamp")
-        self.assertEqual(field_info.scale, "utc")
 
 
 if __name__ == "__main__":

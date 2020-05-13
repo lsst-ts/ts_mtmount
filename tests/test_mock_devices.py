@@ -350,7 +350,7 @@ class MockDevicesTestCase(asynctest.TestCase):
             command_classes["track"](
                 position=device.actuator.min_position + 1,
                 velocity=0,
-                tai_time=MTMount.get_tai_time(),
+                tai=salobj.current_tai(),
             ),
         ]
         for command in fail_if_not_enabled_commands:
@@ -417,7 +417,7 @@ class MockDevicesTestCase(asynctest.TestCase):
         track_command = command_classes["track"](
             position=device.actuator.min_position + 1,
             velocity=0,
-            tai_time=MTMount.get_tai_time(),
+            tai=salobj.current_tai(),
         )
         with self.assertRaises(RuntimeError):
             await self.run_command(track_command)
@@ -446,16 +446,18 @@ class MockDevicesTestCase(asynctest.TestCase):
         # Issue a few tracking commands; confirm that the actuator path
         # is updated accordingly.
         tai0 = salobj.current_tai()
+        previous_tai = tai0
         position0 = device.actuator.path[-1].position + 1
         for i in range(3):
             tai = salobj.current_tai()
+            if tai < previous_tai:
+                tai = previous_tai + 0.01
+            previous_tai = tai
             dt = tai - tai0
             velocity = 0.1 + 0.001 * i
             position = position0 + velocity * dt
             track_command = command_classes["track"](
-                position=position,
-                velocity=velocity,
-                tai_time=salobj.astropy_time_from_tai_unix(tai),
+                position=position, velocity=velocity, tai=tai,
             )
             await self.run_command(track_command)
             self.assertAlmostEqual(device.actuator.target.position, position)
