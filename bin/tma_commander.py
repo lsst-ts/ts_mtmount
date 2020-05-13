@@ -266,7 +266,7 @@ help  # Print this help
         """Read commands from the user and send them to the operations manager.
         """
         try:
-            print(f"Waiting to connect to the operation manager")
+            print("Waiting to connect to the operation manager")
             await self.communicator.connect_task
             print(f"\n{self.help_text}")
             async for line in salobj.stream_as_generator(stream=sys.stdin):
@@ -296,7 +296,7 @@ help  # Print this help
 async def amain():
     """Parse command-line arguments and run the TMA commander.
     """
-    parser = argparse.ArgumentParser(f"Send commands to Tekniker's TMA")
+    parser = argparse.ArgumentParser("Send commands to Tekniker's TMA")
     parser.add_argument(
         "--host", default="127.0.0.1", help="TMA operation manager IP address."
     )

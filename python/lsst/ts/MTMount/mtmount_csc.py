@@ -170,7 +170,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         Start the mock controller, if simulating.
         """
-        self.log.debug(f"Connect to the low-level controller")
+        self.log.debug("Connect to the low-level controller")
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
@@ -200,16 +200,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 connect_callback=self.connect_callback,
             )
         try:
-            self.log.info(f"Connecting to the low-level controller")
+            self.log.info("Connecting to the low-level controller")
             connect_tasks.append(self.communicator.connect())
             await asyncio.wait_for(
                 asyncio.gather(*connect_tasks), timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
             self.read_loop_task = asyncio.create_task(self.read_loop())
-            self.log.debug(f"Connected to the low-level controller")
+            self.log.debug("Connected to the low-level controller")
         except Exception as e:
-            err_msg = f"Could not connect to the low-level controller "
+            err_msg = "Could not connect to the low-level controller "
             f"at client_host={client_host}, command_port={command_port}"
             self.log.exception(err_msg)
             self.fault(
