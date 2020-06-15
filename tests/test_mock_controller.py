@@ -248,14 +248,14 @@ class MockControllerTestCase(asynctest.TestCase):
 
             # Issue a background command
             self.assertAlmostEqual(
-                device.actuator.current_position, device.actuator.min_position
+                device.actuator.position(), device.actuator.min_position
             )
             deploy_command = MTMount.commands.MirrorCoverLocksMoveAll(
                 drive=-1, deploy=True
             )
             await self.run_command(deploy_command, use_read_loop=use_read_loop)
             self.assertAlmostEqual(
-                device.actuator.current_position, device.actuator.max_position
+                device.actuator.position(), device.actuator.max_position
             )
 
             # Issue a command (AzimuthAxisTrack) that gets no Done reply

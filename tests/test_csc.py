@@ -204,8 +204,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             ]
             actuator = mock_device.actuator
 
-            self.assertAlmostEqual(actuator.current_position, 0)
-            self.assertFalse(actuator.moving)
+            self.assertAlmostEqual(actuator.position(), 0)
+            self.assertFalse(actuator.moving())
 
             # Open the mirror covers.
             # Instead of waiting for the command to finish,
@@ -221,16 +221,16 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             await self.remote.cmd_openMirrorCovers.start(timeout=STD_TIMEOUT)
             dt = time.monotonic() - t0
             print(f"opening the mirror covers again took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.current_position, 100)
-            self.assertFalse(actuator.moving)
+            self.assertAlmostEqual(actuator.position(), 100)
+            self.assertFalse(actuator.moving())
 
             # Close the mirror covers.
             t0 = time.monotonic()
             await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
             dt = time.monotonic() - t0
             print(f"closing the mirror covers took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.current_position, 0)
-            self.assertFalse(actuator.moving)
+            self.assertAlmostEqual(actuator.position(), 0)
+            self.assertFalse(actuator.moving())
 
             # Close the mirror covers again;
             # the locks are retracted and engaged so it takes some time.
@@ -238,8 +238,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
             dt = time.monotonic() - t0
             print(f"closing the mirror covers again took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.current_position, 0)
-            self.assertFalse(actuator.moving)
+            self.assertAlmostEqual(actuator.position(), 0)
+            self.assertFalse(actuator.moving())
 
     async def test_move_to_target(self):
         async with self.make_csc(
