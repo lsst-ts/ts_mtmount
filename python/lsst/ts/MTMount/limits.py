@@ -45,17 +45,19 @@ class Limits:
         self.max_velocity = max_velocity
         self.max_acceleration = max_acceleration
 
-    def scale(self, factor=1.01):
-        """Scale the limits by the specified factor.
+    def scaled(self, factor=1.01):
+        """Return a copy scaled by the specified factor.
 
         Intended for use in mock axis controllers, because the actuator
         soft limits should be slighly larger than the limits
         allowed by the CSC.
         """
-        self.min_position *= factor
-        self.max_position *= factor
-        self.max_velocity *= factor
-        self.max_acceleration *= factor
+        return Limits(
+            min_position=self.min_position * factor,
+            max_position=self.max_position * factor,
+            max_velocity=self.max_velocity * factor,
+            max_acceleration=self.max_acceleration * factor,
+        )
 
 
 LimitsDict = {

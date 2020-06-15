@@ -57,8 +57,7 @@ class AxisDevice(BaseDevice):
 
     def __init__(self, controller, device_id):
         device_id = enums.DeviceId(device_id)
-        device_limits = limits.LimitsDict[device_id]
-        device_limits.scale(factor=1.01)
+        device_limits = limits.LimitsDict[device_id].scaled()
         self.enabled = False
         self.tracking_enabled = False
         # Has a target position been specified?
