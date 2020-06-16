@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
+import contextlib
 import pathlib
 import logging
 import time
@@ -30,6 +31,7 @@ from lsst.ts import salobj
 from lsst.ts import MTMount
 
 STD_TIMEOUT = 2  # standard command timeout (sec)
+STARTUP_TIMEOUT = 60  # Remote startup time (sec)
 MIRROR_COVER_TIMEOUT = 5  # timeout for opening or closing mirror covers (sec)
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
@@ -48,6 +50,58 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         )
         # the next port is used for commands
         next(port_generator)
+
+    @contextlib.asynccontextmanager
+    async def make_csc(self, **kwargs):
+        async with super().make_csc(**kwargs):
+            self.mtmount_remote = salobj.Remote(
+                domain=self.csc.salinfo.domain, name="MTMount"
+            )
+            await asyncio.wait_for(self.remote.start_task, timeout=STARTUP_TIMEOUT)
+            try:
+                yield
+            finally:
+                await self.mtmount_remote.close()
+
+    async def test_initial_state(self):
+        async with self.make_csc(
+            initial_state=salobj.State.STANDBY, config_dir=None, simulation_mode=1
+        ):
+            await salobj.set_summary_state(
+                remote=self.remote, state=salobj.State.ENABLED
+            )
+
+            # Test initial telemetry
+            data = await self.mtmount_remote.tel_Azimuth.next(
+                flush=False, timeout=STD_TIMEOUT
+            )
+            self.assertEqual(data.Azimuth_Angle_Set, 0)
+            self.assertEqual(data.Azimuth_Velocity_Set, 0)
+            self.assertEqual(data.Azimuth_Angle_Actual, 0)
+            self.assertEqual(data.Azimuth_Velocity_Actual, 0)
+            self.assertEqual(data.Azimuth_Aceleration_Actual, 0)
+
+            data = await self.mtmount_remote.tel_Elevation.next(
+                flush=False, timeout=STD_TIMEOUT
+            )
+            min_elevation = (
+                MTMount.LimitsDict[MTMount.DeviceId.ELEVATION_AXIS]
+                .scaled()
+                .min_position
+            )
+            self.assertAlmostEqual(data.Elevation_Angle_Set, min_elevation)
+            self.assertEqual(data.Elevation_Velocity_Set, 0)
+            self.assertAlmostEqual(data.Elevation_Angle_Actual, min_elevation)
+            self.assertEqual(data.Elevation_Velocity_Actual, 0)
+            self.assertEqual(data.Elevation_Aceleration_Actual, 0)
+
+            data = await self.mtmount_remote.tel_Camera_Cable_Wrap.next(
+                flush=False, timeout=STD_TIMEOUT
+            )
+            self.assertEqual(data.CCW_Angle_1, 0)
+            self.assertEqual(data.CCW_Angle_1, 0)
+            self.assertEqual(data.CCW_Speed_1, 0)
+            self.assertEqual(data.CCW_Speed_1, 0)
 
     async def test_standard_state_transitions(self):
         async with self.make_csc(
@@ -108,6 +162,9 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 remote=self.remote, state=salobj.State.ENABLED
             )
             self.csc.mock_controller.set_command_queue(maxsize=0)
+            ccw_actuator = self.csc.mock_controller.device_dict[
+                MTMount.DeviceId.CAMERA_CABLE_WRAP
+            ].actuator
             async with salobj.Controller(name="Rotator") as rotator:
                 self.assertTrue(self.csc.mock_controller.command_queue.empty())
 
@@ -167,6 +224,21 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                         self.assertAlmostEqual(
                             command.velocity, velocity, delta=max_vel_error
                         )
+
+                    # Check camera cable wrap telemetry
+                    tel_ccw_data = await self.mtmount_remote.tel_Camera_Cable_Wrap.next(
+                        flush=True, timeout=STD_TIMEOUT
+                    )
+                    actual_segment = ccw_actuator.path.at(tel_ccw_data.timestamp)
+                    self.assertAlmostEqual(
+                        tel_ccw_data.CCW_Angle_1, actual_segment.position
+                    )
+                    self.assertAlmostEqual(
+                        tel_ccw_data.CCW_Speed_1, actual_segment.velocity
+                    )
+                    self.assertEqual(tel_ccw_data.CCW_Angle_1, tel_ccw_data.CCW_Angle_2)
+                    self.assertEqual(tel_ccw_data.CCW_Speed_1, tel_ccw_data.CCW_Speed_2)
+
                     await asyncio.sleep(0.1)
                     prev_position = position
                     previous_tai = tai
@@ -417,6 +489,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         ]
         self.assertTrue(mock_azimuth.tracking_enabled)
         self.assertTrue(mock_elevation.tracking_enabled)
+        azimuth_actuator = mock_azimuth.actuator
+        elevation_actuator = mock_elevation.actuator
 
         initial_tai = salobj.current_tai()
         previous_tai = 0
@@ -453,4 +527,34 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             )
             self.assertAlmostEqual(mock_elevation.actuator.target.tai, tai, delta=0.001)
             await self.assert_next_sample(topic=self.remote.evt_target, **kwargs)
+
+            # Check elevation and azimuth telemetry
+            tel_el_data = await self.mtmount_remote.tel_Elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            el_actual = elevation_actuator.path.at(tel_el_data.timestamp)
+            el_target = elevation_actuator.target.at(tel_el_data.timestamp)
+            self.assertAlmostEqual(tel_el_data.Elevation_Angle_Set, el_target.position)
+            self.assertAlmostEqual(
+                tel_el_data.Elevation_Velocity_Set, el_target.velocity
+            )
+            self.assertAlmostEqual(
+                tel_el_data.Elevation_Angle_Actual, el_actual.position
+            )
+            self.assertAlmostEqual(
+                tel_el_data.Elevation_Velocity_Actual, el_actual.velocity
+            )
+
+            tel_az_data = await self.mtmount_remote.tel_Azimuth.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            az_actual = azimuth_actuator.path.at(tel_az_data.timestamp)
+            az_target = azimuth_actuator.target.at(tel_az_data.timestamp)
+            self.assertAlmostEqual(tel_az_data.Azimuth_Angle_Set, az_target.position)
+            self.assertAlmostEqual(tel_az_data.Azimuth_Velocity_Set, az_target.velocity)
+            self.assertAlmostEqual(tel_az_data.Azimuth_Angle_Actual, az_actual.position)
+            self.assertAlmostEqual(
+                tel_az_data.Azimuth_Velocity_Actual, az_actual.velocity
+            )
+
             previous_tai = tai

@@ -134,6 +134,7 @@ class Controller:
             f"{prefix}_Angle_Actual": actual.position,
             f"{prefix}_Velocity_Actual": actual.velocity,
             f"{prefix}_Aceleration_Actual": actual.acceleration,
+            "timestamp": tai,
         }
         topic.set_put(**kwargs)
 
@@ -151,6 +152,27 @@ class Controller:
             reply = replies.InPositionReply(what=what, in_position=in_position)
             await self.communicator.write(reply)
 
+    async def put_camera_cable_wrap_telemetry(self, tai):
+        """Warning: this minimal and simplistic.
+        """
+        device = self.device_dict[enums.DeviceId.CAMERA_CABLE_WRAP]
+        actuator = device.actuator
+        actual = actuator.path.at(tai)
+
+        state_strs = [
+            "On" if device.power_on else "Off",
+            "DriveEnabled" if device.enabled else "DriveDisabled",
+            "TrackingEnabled" if device.tracking_enabled else "TrackingDisabled",
+        ]
+        self.sal_controller.tel_Camera_Cable_Wrap.set_put(
+            CCW_Status="/".join(state_strs),
+            CCW_Angle_1=actual.position,
+            CCW_Angle_2=actual.position,
+            CCW_Speed_1=actual.velocity,
+            CCW_Speed_2=actual.velocity,
+            timestamp=tai,
+        )
+
     async def telemetry_loop(self):
         """Warning: this minimal and simplistic.
         """
@@ -163,6 +185,7 @@ class Controller:
                 await self.put_axis_telemetry(
                     device_id=enums.DeviceId.ELEVATION_AXIS, tai=tai
                 )
+                await self.put_camera_cable_wrap_telemetry(tai=tai)
                 await asyncio.sleep(self.telemetry_interval)
         except asyncio.CancelledError:
             raise
