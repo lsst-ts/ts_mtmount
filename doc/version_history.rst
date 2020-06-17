@@ -14,6 +14,7 @@ Changes:
 * Updated for ts_simactuators 2
 * Changed ``Limits.scale`` to `Limits.scaled`.
   It now returns a scaled copy instead of modifying the instance in place.
+* Added minimal camera cable wrap telemetry to the mock controller.
 * Added this version history.
 
 Requires:
