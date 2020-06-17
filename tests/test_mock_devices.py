@@ -603,19 +603,19 @@ class MockDevicesTestCase(asynctest.TestCase):
             """
             if at_min:
                 self.assertAlmostEqual(
-                    device.actuator.current_position, device.actuator.min_position
+                    device.actuator.position(), device.actuator.min_position
                 )
                 self.assertAlmostEqual(
                     device.actuator.end_position, device.actuator.min_position
                 )
             else:
                 self.assertAlmostEqual(
-                    device.actuator.current_position, device.actuator.max_position
+                    device.actuator.position(), device.actuator.max_position
                 )
                 self.assertAlmostEqual(
                     device.actuator.end_position, device.actuator.max_position
                 )
-            self.assertFalse(device.actuator.moving)
+            self.assertFalse(device.actuator.moving())
 
         assert_at_end(at_min=start_at_min)
 
@@ -652,12 +652,12 @@ class MockDevicesTestCase(asynctest.TestCase):
         )
         await asyncio.sleep(0.1)  # Let the move begin
         self.assertGreaterEqual(
-            device.actuator.current_position, device.actuator.min_position
+            device.actuator.position(), device.actuator.min_position
         )
         self.assertAlmostEqual(
             device.actuator.end_position, device.actuator.max_position
         )
-        self.assertTrue(device.actuator.moving)
+        self.assertTrue(device.actuator.moving())
 
         await task
         assert_at_end(at_min=False)
@@ -671,14 +671,14 @@ class MockDevicesTestCase(asynctest.TestCase):
             )
         )
         await asyncio.sleep(0.1)  # Let the move begin
-        self.assertLess(device.actuator.current_position, device.actuator.max_position)
+        self.assertLess(device.actuator.position(), device.actuator.max_position)
         self.assertAlmostEqual(
             device.actuator.end_position, device.actuator.min_position
         )
-        self.assertTrue(device.actuator.moving)
+        self.assertTrue(device.actuator.moving())
         await self.run_command(command=stop_command, min_timeout=None)
-        self.assertLess(device.actuator.current_position, device.actuator.max_position)
-        self.assertFalse(device.actuator.moving)
+        self.assertLess(device.actuator.position(), device.actuator.max_position)
+        self.assertFalse(device.actuator.moving())
 
         await task
 

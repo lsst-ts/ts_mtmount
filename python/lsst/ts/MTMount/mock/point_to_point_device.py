@@ -107,7 +107,7 @@ class PointToPointDevice(base_device.BaseDevice):
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command.
         """
-        await asyncio.sleep(self.actuator.remaining_time)
+        await asyncio.sleep(self.actuator.remaining_time())
 
     def supersede_move_command(self):
         """Report the current move command (if any) as superseded.
@@ -152,7 +152,6 @@ class PointToPointDevice(base_device.BaseDevice):
         if self.multi_drive:
             self.assert_drive_all(command)
         self.supersede_move_command()
-        self.actuator.set_position(position)
-        timeout = self.actuator.remaining_time
+        timeout = self.actuator.set_position(position)
         task = self.monitor_move_command(command)
         return timeout, task
