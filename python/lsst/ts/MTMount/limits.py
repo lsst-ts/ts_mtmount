@@ -61,13 +61,16 @@ class Limits:
 
 
 LimitsDict = {
+    # From LTS-103.
     enums.DeviceId.ELEVATION_AXIS: Limits(
-        min_position=5, max_position=90, max_velocity=3, max_acceleration=1
+        min_position=20, max_position=86.5, max_velocity=3.5, max_acceleration=3.5
     ),
+    # From LTS-103.
     enums.DeviceId.AZIMUTH_AXIS: Limits(
-        min_position=-180, max_position=360, max_velocity=3, max_acceleration=1
+        min_position=-270, max_position=270, max_velocity=7.0, max_acceleration=7.0
     ),
+    # From LTS-218.
     enums.DeviceId.CAMERA_CABLE_WRAP: Limits(
-        min_position=-100, max_position=100, max_velocity=3, max_acceleration=1
+        min_position=-90, max_position=90, max_velocity=3.5, max_acceleration=1
     ),
 }

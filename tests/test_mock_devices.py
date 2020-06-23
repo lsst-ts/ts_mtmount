@@ -376,9 +376,9 @@ class MockDevicesTestCase(asynctest.TestCase):
         start_segment = device.actuator.path.at(salobj.current_tai())
         self.assertEqual(start_segment.velocity, 0)
         start_position = start_segment.position
-        end_position = start_position + 1
+        end_position = start_position + 2
         move_command = command_classes["move"](position=end_position)
-        task = asyncio.create_task(self.run_command(move_command, min_timeout=1))
+        task = asyncio.create_task(self.run_command(move_command, min_timeout=0.5))
 
         await asyncio.sleep(0.1)  # give command time to start
         self.assertAlmostEqual(device.actuator.target.position, end_position)
@@ -402,7 +402,7 @@ class MockDevicesTestCase(asynctest.TestCase):
             end_position = start_position + 10
             slow_move_command = command_classes["move"](position=end_position)
         task = asyncio.create_task(
-            self.run_command(slow_move_command, min_timeout=1, should_noack=True)
+            self.run_command(slow_move_command, min_timeout=0.5, should_noack=True)
         )
 
         await asyncio.sleep(0.1)
