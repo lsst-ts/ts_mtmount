@@ -6,6 +6,20 @@
 Version History
 ###############
 
+v0.3.0
+======
+
+Changes:
+
+* Update the motion limits for the simulator with more realistic values.
+
+Requires:
+
+* ts_salobj 5.15
+* ts_simactuators 2
+* ts_idl
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
+
 v0.2.0
 ======
 
