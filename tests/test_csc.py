@@ -346,7 +346,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             # then wait for the command to finish.
             target_azimuth = azimuth_pvt.position + 1
             target_elevation = elevation_pvt.position + 2
-            estimated_move_time = 3  # seconds
+            estimated_move_time = 2  # seconds
             print(
                 f"start test_moveToTarget(azimuth={target_azimuth:0.2f}, "
                 f"elevation={target_elevation:0.2f})"
@@ -428,7 +428,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             # Make the elevation move significantly smaller,
             # so it is sure to be in position first.
             t0 = time.monotonic()
-            estimated_slew_time = 4  # seconds
+            estimated_slew_time = 2  # seconds
             tracking_task = asyncio.create_task(
                 self.track_target_loop(
                     azimuth=initial_azimuth + 3,
