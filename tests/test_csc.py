@@ -187,7 +187,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 self.assertTrue(command.on)
                 self.assertTrue(self.csc.mock_controller.command_queue.empty())
 
-                position0 = 45
+                # Test regular tracking mode. CCW and Rotator start in sync.
+                position0 = 0.0
                 velocity = 0.1
                 tai0 = salobj.current_tai()
                 num_rotator_samples = 10
@@ -202,7 +203,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                         tai = previous_tai + 0.001
                     dt = tai - tai0
                     position = position0 + velocity * dt
-                    rotator.tel_Application.set_put(Position=position)
+                    rotator.tel_Application.set_put(Position=position, Demand=position)
                     command = await self.next_lowlevel_command()
                     delay = salobj.current_tai() - tai
 
@@ -212,8 +213,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     )
                     self.assertLessEqual(command.tai - tai, delay)
                     self.assertAlmostEqual(command.position, position)
-                    if i == 0:
-                        self.assertAlmostEqual(command.velocity, 0)
+                    if i == 0 or not self.csc.catch_up_mode:
+                        self.assertAlmostEqual(command.velocity, 0.0)
                     else:
                         nominal_dt = tai - previous_tai
                         min_dt = nominal_dt - delay - previous_delay
