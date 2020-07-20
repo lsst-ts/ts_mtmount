@@ -6,6 +6,20 @@
 Version History
 ###############
 
+v0.4.0
+======
+
+Changes:
+
+* Update CCW-Rotator synchronization algorithm to account for the current position of the CCW when computing the CCW demand.
+
+Requires:
+
+* ts_salobj 5.15
+* ts_simactuators 2
+* ts_idl
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
+
 v0.3.0
 ======
 
