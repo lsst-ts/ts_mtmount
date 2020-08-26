@@ -178,7 +178,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.close_communication()
 
     async def get_ccw_demand(self):
-        """Get CCW demand.
+        """Get CCW tracking command data.
 
         The method will get the position of the CCW and of the Rotator and
         compute an optimum demand for the CCW. It takes into account how far
@@ -187,11 +187,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         Returns
         -------
-        ccw_demand_position: `float`
-            CCW demand position (in degrees).
-        ccw_demand_velocity: `float`
-            CCW demand velocity (in degrees).
-
+        desired_position : `float`
+            CCW tracking command position (in degrees).
+        desired_velocity : `float`
+            CCW tracking command velocity (in degrees).
+        desired_tai : `float`
+            CCW tracking command time (TAI unix seconds).
+            This will be config.camera_cable_wrap_advance_time
+            seconds in the future.
         """
 
         rot_data = await self.rotator.tel_Application.next(flush=True)
@@ -233,7 +236,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # CCW and Rotator synchronized or in the goto limit and CCW-Rotator
             # Close enough. Follow demand.
             self.catch_up_mode = False
-            return rot_data.Demand, 0.0
+            demand_position = rot_data.Demand
+            demand_velocity = 0.0
         else:
             if not self.catch_up_mode:
                 self.catch_up_mode = True
@@ -247,14 +251,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
             # If CCW ahead of Rotator, set velocity to zero, otherwise, use
             # Rotator velocity.
-            return (
-                rot_data.Position,
-                (
-                    rotator_velocity
-                    if abs(distance_ccw_rot_demand) > abs(distance_rot_demand)
-                    else 0.0
-                ),
+            demand_velocity = (
+                rotator_velocity
+                if abs(distance_ccw_rot_demand) > abs(distance_rot_demand)
+                else 0.0
             )
+            demand_position = rot_data.Position
+
+        # Adjust demand position for desired time.
+        # Demand position and velocity were based on the most recent
+        # rotator telemetry data sample.
+        demand_tai = salobj.current_tai() + self.config.camera_cable_wrap_advance_time
+        delta_t = demand_tai - rot_data.private_sndStamp
+        adjusted_demand_position = demand_position + demand_velocity * delta_t
+
+        return (adjusted_demand_position, demand_velocity, demand_tai)
 
     async def close_communication(self):
         """Close and delete the communicator and mock controller, if present.
@@ -515,12 +526,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.info("Camera cable wrap control begins")
         try:
             while True:
-                ccw_demand_position, ccw_demand_velocity = await self.get_ccw_demand()
+                (
+                    demand_position,
+                    demand_velocity,
+                    demand_tai,
+                ) = await self.get_ccw_demand()
 
                 command = commands.CameraCableWrapTrack(
-                    position=ccw_demand_position,
-                    velocity=ccw_demand_velocity,
-                    tai=salobj.current_tai(),
+                    position=demand_position, velocity=demand_velocity, tai=demand_tai,
                 )
                 await self.send_command(command)
 
