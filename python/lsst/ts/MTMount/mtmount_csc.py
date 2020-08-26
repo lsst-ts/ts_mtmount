@@ -355,6 +355,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.AzimuthAxisPower(on=True),
                 commands.ElevationAxisPower(on=True),
                 commands.CameraCableWrapPower(on=True),
+                commands.CameraCableWrapEnableTracking(on=True),
             ]
             await self.send_commands(*enable_commands)
             self.enabled_state = enums.EnabledState.ENABLED
@@ -364,6 +365,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.exception(err_msg)
             self.fault(
                 code=enums.CscErrorCode.ACTUATOR_ENABLE_ERROR, report=f"{err_msg}: {e}",
+            )
+        if self.camera_cable_wrap_task.done():
+            self.camera_cable_wrap_task = asyncio.create_task(
+                self.camera_cable_wrap_loop()
             )
 
     async def disable_devices(self):
@@ -681,7 +686,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_enableCameraCableWrapTracking(self, data):
         self.assert_enabled()
         await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
-        self.camera_cable_wrap_task = asyncio.create_task(self.camera_cable_wrap_loop())
+        if self.camera_cable_wrap_task.done():
+            self.camera_cable_wrap_task = asyncio.create_task(
+                self.camera_cable_wrap_loop()
+            )
 
     async def do_moveToTarget(self, data):
         self.assert_enabled()

@@ -162,29 +162,15 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 remote=self.remote, state=salobj.State.ENABLED
             )
             self.csc.mock_controller.set_command_queue(maxsize=0)
-            ccw_actuator = self.csc.mock_controller.device_dict[
+            ccw_device = self.csc.mock_controller.device_dict[
                 MTMount.DeviceId.CAMERA_CABLE_WRAP
-            ].actuator
+            ]
+            ccw_actuator = ccw_device.actuator
+            self.assertTrue(ccw_device.power_on)
+            self.assertTrue(ccw_device.enabled)
+            self.assertTrue(ccw_device.tracking_enabled)
+
             async with salobj.Controller(name="Rotator") as rotator:
-                self.assertTrue(self.csc.mock_controller.command_queue.empty())
-
-                # Check that rotator targets are ignored before
-                # tracking is enabled.
-                for i in range(2):
-                    rotator.tel_Application.set_put(Position=45)
-                    await asyncio.sleep(0.1)
-                self.assertTrue(self.csc.mock_controller.command_queue.empty())
-
-                # Enable camera cable wrap tracking
-                await self.remote.cmd_enableCameraCableWrapTracking.start(
-                    timeout=STD_TIMEOUT
-                )
-                command = await self.next_lowlevel_command()
-                self.assertEqual(
-                    command.command_code,
-                    MTMount.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING,
-                )
-                self.assertTrue(command.on)
                 self.assertTrue(self.csc.mock_controller.command_queue.empty())
 
                 # Test regular tracking mode. CCW and Rotator start in sync.
@@ -254,6 +240,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     MTMount.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING,
                 )
                 self.assertFalse(command.on)
+                self.assertTrue(ccw_device.enabled)
+                self.assertFalse(ccw_device.tracking_enabled)
                 self.assertTrue(self.csc.mock_controller.command_queue.empty())
 
                 # Check that rotator targets are ignored after
