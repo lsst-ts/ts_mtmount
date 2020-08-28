@@ -39,7 +39,12 @@ class ValidationTestCase(unittest.TestCase):
             rawschema = f.read()
         self.schema = yaml.safe_load(rawschema)
         self.validator = salobj.DefaultingValidator(schema=self.schema)
-        self.default = dict(host="127.0.0.1", connection_timeout=10, ack_timeout=10,)
+        self.default = dict(
+            host="127.0.0.1",
+            connection_timeout=10,
+            ack_timeout=10,
+            camera_cable_wrap_advance_time=0.02,
+        )
 
     def test_default(self):
         result = self.validator.validate(None)
@@ -47,7 +52,12 @@ class ValidationTestCase(unittest.TestCase):
             self.assertEqual(result[field], expected_value)
 
     def test_some_specified(self):
-        data = dict(host="1.2.3.4", connection_timeout=3.4, ack_timeout=4.5)
+        data = dict(
+            host="1.2.3.4",
+            connection_timeout=3.4,
+            ack_timeout=4.5,
+            camera_cable_wrap_advance_time=0.1,
+        )
         for field, value in data.items():
             one_field_data = {field: value}
             with self.subTest(one_field_data=one_field_data):

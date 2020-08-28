@@ -20,8 +20,21 @@ properties:
     type: number
     exclusiveMinimum: 0
     default: 10
+  camera_cable_wrap_advance_time:
+      description: >-
+        How far in advance of the current time to make the tai time field of camera cable wrap
+        tracking commands (sec). All tracking commands must sent to the low-level controller in advance,
+        so it can interpolate between pairs of tracking command. If a tracking command is late then
+        the controller will halt the axis. Set this value large enough that camera cable wrap
+        commands reliably arrive in time, despite variation in speed of the Python CSC.
+        Avoid making it much larger than required, because it introduces a delay in motion
+        of the camera cable wrap, which can cause too large an error between the camera rotator
+        and the camera cable wrap when the rotator is offset or slewed to a new field.
+      type: number
+      default: 0.02
 required:
   - host
   - connection_timeout
   - ack_timeout
+  - camera_cable_wrap_advance_time
 additionalProperties: false
