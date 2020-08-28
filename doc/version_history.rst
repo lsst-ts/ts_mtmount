@@ -6,6 +6,21 @@
 Version History
 ###############
 
+v0.5.0
+======
+
+Changes:
+
+* Send camera cable wrap tracking commands in advance, by a configurable duration.
+* Make the CSC enable camera cable wrap tracking when first enabled.
+
+Requires:
+
+* ts_salobj 5.15
+* ts_simactuators 2
+* ts_idl
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
+
 v0.4.0
 ======
 
