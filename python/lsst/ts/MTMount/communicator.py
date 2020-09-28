@@ -54,10 +54,10 @@ class Communicator(client_server_pair.ClientServerPair):
     read_replies : `bool`
         If True then read replies, else read commands,
         on the server port.
-    connect : `bool` (optional)
+    connect : `bool`, optional
         Connect the client at construction time?
         (The server automatically tries to connect.)
-    connect_callback : callable (optional)
+    connect_callback : callable, optional
         Synchronous function to call when a connection is made or dropped.
 
     Notes

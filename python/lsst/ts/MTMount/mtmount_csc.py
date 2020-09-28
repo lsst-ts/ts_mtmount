@@ -47,13 +47,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     Parameters
     ----------
-    initial_state : `salobj.State` or `int` (optional)
+    initial_state : `salobj.State` or `int`, optional
         The initial state of the CSC. This is provided for unit testing,
         as real CSCs should start up in `lsst.ts.salobj.StateSTANDBY`,
         the default.
-    simulation_mode : `int` (optional)
+    simulation_mode : `int`, optional
         Simulation mode.
-    mock_command_port : `int` (optional)
+    mock_command_port : `int`, optional
         Port for mock controller TCP/IP interface. If `None` then use the
         port specified by the configuration. Only used in simulation mode.
 
@@ -447,7 +447,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ----------
         command : `Command`
             Command to send.
-        dolock : `bool` (optional)
+        dolock : `bool`, optional
             Lock the port while using it?
             Specify False for emergency commands
             or if being called by send_commands.
@@ -503,7 +503,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ----------
         commands : `List` [``Command``]
             Commands to send. The sequence_id attribute is set.
-        dolock : `bool` (optional)
+        dolock : `bool`, optional
             Lock the port while using it?
             Specify False for emergency commands.
 

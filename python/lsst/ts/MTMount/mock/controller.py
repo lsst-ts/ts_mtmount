@@ -65,7 +65,7 @@ class Controller:
         The reply port is one greater than the command port.
     log : `logging.Logger`
         Logger.
-    reconnect : `bool` (optional)
+    reconnect : `bool`, optional
         Try to reconnect if the connection is lost?
         Defaults to False for unit tests.
     """
@@ -238,7 +238,7 @@ class Controller:
 
         Parameters
         ----------
-        maxsize : `int` (optional)
+        maxsize : `int`, optional
             Maximum number of items on the queue.
             If <= 0 then no limit.
             If the queue gets full then the newest items are dropped.

@@ -183,7 +183,7 @@ class ClientServerPair:
 
         Parameters
         ----------
-        port : `int` or `None` (optional)
+        port : `int` or `None`, optional
             TCP/IP port. If `None` use the port specified in the constructor.
             Being able to specify a port here is primarily for unit tests.
 

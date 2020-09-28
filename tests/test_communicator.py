@@ -59,9 +59,9 @@ class CommunicatorTestCase(asynctest.TestCase):
 
         Parameters
         ----------
-        connect_clients : `bool` (optional)
+        connect_clients : `bool`, optional
             Connect the clients to the servers?
-        use_connect_callback : `bool` (optional)
+        use_connect_callback : `bool`, optional
             Specify a connect_callback?
             If True then use self.connect_callback.
         """

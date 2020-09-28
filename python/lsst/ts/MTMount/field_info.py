@@ -59,7 +59,7 @@ class BaseFieldInfo(metaclass=abc.ABCMeta):
         Name of field. Must be a valid Python identifier.
     doc : `str`
         Description of the field.
-    default : ``any`` or `None` (optional)
+    default : ``any`` or `None`, optional
         Default value (using the native type of this FieldInfo).
         If `None` then this field must be specified
         when constructing a command or reply.
@@ -119,7 +119,7 @@ class BoolFieldInfo(BaseFieldInfo):
         Name of field. Must be a valid Python identifier.
     doc : `str`
         Description of the field.
-    default : ``any`` or `None` (optional)
+    default : ``any`` or `None`, optional
         Default value (using the native type of this FieldInfo).
         If `None` then this field must be specified
         when constructing a command or reply.
@@ -208,7 +208,7 @@ class FloatFieldInfo(BaseFieldInfo):
         Name of field. Must be a valid Python identifier.
     doc : `str`
         Description of the field.
-    default : ``any`` or `None` (optional)
+    default : ``any`` or `None`, optional
         Default value (using the native type of this FieldInfo).
         If `None` then this field must be specified
         when constructing a command or reply.
@@ -237,7 +237,7 @@ class IntFieldInfo(BaseFieldInfo):
         Name of field. Must be a valid Python identifier.
     doc : `str`
         Description of the field.
-    default : ``any`` or `None` (optional)
+    default : ``any`` or `None`, optional
         Default value (using the native type of this FieldInfo).
         If `None` then this field must be specified
         when constructing a command or reply.
@@ -270,7 +270,7 @@ class StrFieldInfo(BaseFieldInfo):
         Name of field. Must be a valid Python identifier.
     doc : `str`
         Description of the field.
-    default : ``any`` or `None` (optional)
+    default : ``any`` or `None`, optional
         Default value (using the native type of this FieldInfo).
         If `None` then this field must be specified
         when constructing a command or reply.
@@ -294,7 +294,7 @@ class TimestampFieldInfo(BaseFieldInfo):
     ----------
     name : `str`
         Name of field. Must be a valid Python identifier.
-    doc : `str` (optional)
+    doc : `str`, optional
         Description of the field.
     scale : `str`
         One of "tai" or "utc", where "utc" is an approximation
