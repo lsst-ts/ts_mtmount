@@ -22,6 +22,7 @@
 __all__ = ["Controller"]
 
 import asyncio
+import signal
 
 from lsst.ts import salobj
 from .. import commands
@@ -74,6 +75,7 @@ class Controller:
         self.command_port = command_port
         self.log = log.getChild("Controller")
         self.reconnect = reconnect
+        self.closing = False
         self.telemetry_interval = 0.2  # Seconds
         # Maximum position and velocity error,
         # below which an axis is considered in position
@@ -100,9 +102,15 @@ class Controller:
         self.command_dict[enums.CommandCode.BOTH_AXES_STOP] = self.do_both_axes_stop
         self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
 
+        self.sal_controller = salobj.Controller(name="MTMount")
         self.read_loop_task = asyncio.Future()
         self.telemetry_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.connect())
+        self.reconnect_task = salobj.make_done_future()
+        self.done_task = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self.signal_handler)
 
     @property
     def connected(self):
@@ -187,8 +195,10 @@ class Controller:
                 )
                 await self.put_camera_cable_wrap_telemetry(tai=tai)
                 await asyncio.sleep(self.telemetry_interval)
+        except ConnectionResetError:
+            self.log.warning("Disconnected")
         except asyncio.CancelledError:
-            raise
+            pass
         except Exception:
             self.log.exception("Telemetry loop failed")
             raise
@@ -255,6 +265,8 @@ class Controller:
     async def connect(self):
         self.read_loop_task.cancel()
         self.telemetry_task.cancel()
+        self.log.debug("Waiting for the SAL controller to start")
+        await self.sal_controller.start_task
         self.communicator = communicator.Communicator(
             name="Controller",
             client_host=salobj.LOCAL_HOST,
@@ -267,8 +279,6 @@ class Controller:
             connect=False,
             connect_callback=self.connect_callback,
         )
-        self.sal_controller = salobj.Controller(name="MTMount")
-        await self.sal_controller.start_task
 
         self.log.debug("Connecting to the CSC")
         await self.communicator.connect()
@@ -276,16 +286,43 @@ class Controller:
         self.read_loop_task = asyncio.create_task(self.read_loop())
         self.telemetry_task = asyncio.create_task(self.telemetry_loop())
 
-    async def close(self):
-        self.read_loop_task.cancel()
-        self.telemetry_task.cancel()
-        if self.sal_controller is not None:
-            await self.sal_controller.close()
-            self.sal_controller = None
-        await self.communicator.close()
-        for device in self.device_dict.values():
-            await device.close()
-        self.communicator = None
+    async def close(self, cancel_read_loop=True, shutdown=True):
+        """Close the controller.
+
+        Parameters
+        ----------
+        cancel_read_loop : `bool`, optional
+            If True (default) then cancel the read loop task.
+            Set False if calling from read_loop.
+        shutdown : `bool`, optional
+            Set done_task result? True by default.
+            Use False if reconnecting.
+        """
+        if self.closing:
+            if not self.done_task.done():
+                await self.done_task
+            return
+
+        try:
+            self.closing = True
+            if cancel_read_loop:
+                self.read_loop_task.cancel()
+            self.telemetry_task.cancel()
+            self.reconnect_task.cancel()
+            self.start_task.cancel()
+            try:
+                await self.sal_controller.close()
+            except Exception:
+                self.log.exception("Failed to close controller")
+            for device in self.device_dict.values():
+                await device.close()
+            await self.communicator.close()
+        except Exception:
+            self.log.exception("close failed")
+        finally:
+            self.closing = False
+            if shutdown and not self.done_task.done():
+                self.done_task.set_result(None)
 
     async def handle_command(self, command):
         command_func = self.command_dict.get(command.command_code)
@@ -321,12 +358,13 @@ class Controller:
                     self.command_queue.put_nowait(command)
                 asyncio.create_task(self.handle_command(command))
         except asyncio.CancelledError:
-            return
-        except asyncio.IncompleteReadError:
+            pass
+        except (ConnectionResetError, asyncio.IncompleteReadError):
             self.log.warning("Connection lost")
-            await self.close()
-            if self.reconnect:
-                asyncio.create_task(self.connect())
+            if not self.done_task.done():
+                await self.close(shutdown=not self.reconnect, cancel_read_loop=False)
+            if self.reconnect and not self.done_task.done():
+                self.reconnect_task = asyncio.create_task(self.connect())
         self.log.debug("Read loop ends")
 
     async def reply_to_command(self, command):
@@ -342,6 +380,9 @@ class Controller:
         except Exception:
             self.log.exception(f"reply_to_command({command}) failed")
             raise
+
+    def signal_handler(self):
+        asyncio.create_task(self.close())
 
     def connect_callback(self, server):
         state_str = "connected to" if server.connected else "disconnected from"
