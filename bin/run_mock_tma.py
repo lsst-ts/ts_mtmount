@@ -32,9 +32,6 @@ async def amain():
         default=logging.INFO,
         help="Log level (DEBUG=10, INFO=20, WARNING=30).",
     )
-    parser.add_argument(
-        "-s", "--simulate", action="store_true", help="Run in simuation mode?"
-    )
     namespace = parser.parse_args()
     log = logging.getLogger("TMASimulator")
     log.setLevel(namespace.log_level)
