@@ -121,6 +121,14 @@ class Communicator(client_server_pair.ClientServerPair):
         -------
         message : `BaseMessage`
             The message read.
+
+        Raises
+        ------
+        RuntimeError
+            If not connected before reading begins.
+        ConnectionResetError
+            If the connection is lost while reading.
+            This also calls ``connect_callback``.
         """
         if not self.server_connected:
             raise RuntimeError("Server not connected")
@@ -129,6 +137,11 @@ class Communicator(client_server_pair.ClientServerPair):
             read_str = read_bytes.decode()[:-2]
         except asyncio.CancelledError:
             raise
+        except ConnectionResetError:
+            self.log.error(
+                "Lost connection to the low-level controller (detected in read)"
+            )
+            self.call_connect_callback()
         except Exception:
             # Print details if the error is other than "connection lost"
             if self.connected:
@@ -150,6 +163,14 @@ class Communicator(client_server_pair.ClientServerPair):
         ----------
         message : `BaseMessage`
             Message to write.
+
+        Raises
+        ------
+        RuntimeError
+            If not connected before writing.
+        ConnectionResetError
+            If the connection is lost while writing.
+            This also calls ``connect_callback``.
         """
         if not self.client_connected:
             raise RuntimeError("Client not connected")
@@ -160,6 +181,12 @@ class Communicator(client_server_pair.ClientServerPair):
             async with self.write_lock:
                 self.client_writer.write(message.encode())
                 await self.client_writer.drain()
+        except ConnectionResetError:
+            self.log.error(
+                "Lost connection to the low-level controller (detected in write)"
+            )
+            self.call_connect_callback()
+            raise
         except Exception:
             self.log.exception(f"Failed to write {message_bytes}")
             raise
@@ -169,13 +196,20 @@ class Communicator(client_server_pair.ClientServerPair):
         """
         # We do not expect to read any data, but we may as well accept it
         # if some comes in.
-        while True:
-            await self.client_reader.read(1000)
-            if self.client_reader.reader.at_eof():
-                # reader closed; close the writer
-                await self.close_client()
-                self.call_connect_callback()
-                return
-            else:
-                self.log.warning("Unexpected data read from the command socket.")
-                await asyncio.sleep(0.01)
+        try:
+            while True:
+                await self.client_reader.read(1000)
+                if self.client_reader.at_eof():
+                    break
+                else:
+                    self.log.warning("Unexpected data read from the command socket.")
+                    await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            pass
+        except (ConnectionResetError, asyncio.IncompleteReadError):
+            pass
+        except Exception as e:
+            print(f"monitor_client_reader failed: {e}")
+
+        await self.close_client()
+        self.call_connect_callback()
