@@ -6,6 +6,20 @@
 Version History
 ###############
 
+v0.6.0
+======
+
+Changes:
+
+* In simulation mode have the `MTMountCSC` run the mock controller in a subprocess,
+  in order to give the CSC a better chance of keeping up with tracking commands.
+  This eliminates the `MTMountCSC.mock_controller` attribute.
+* Add `MTMountCsc` constructor argument ``run_mock_controller``
+  to control whether the CSC runs the mock controller in simulation mode
+  (if false then you must run the mock controller yourself).
+  This supports unit tests that need access to the mock controller --
+  access that is difficult if the CSC runs the mock controller in a subuprocess.
+
 v0.5.0
 ======
 
