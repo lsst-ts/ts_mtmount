@@ -13,3 +13,7 @@ _g.update(
         project_name="ts_MTMount", version=lsst.ts.MTMount.__version__
     )
 )
+
+intersphinx_mapping["ts_xml"] = ("https://ts-xml.lsst.io", None)  # noqa
+intersphinx_mapping["ts_salobj"] = ("https://ts-salobj.lsst.io", None)  # noqa
+intersphinx_mapping["ts_hexrotcomm"] = ("https://ts-salobj.lsst.io", None)  # noqa
