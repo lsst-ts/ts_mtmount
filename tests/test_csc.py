@@ -119,6 +119,10 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             name="NewMTMount", index=None, exe_name="run_mtmount.py",
         )
 
+    def test_class_attributes(self):
+        self.assertEqual(tuple(MTMount.MTMountCsc.valid_simulation_modes), (0, 1))
+        self.assertEqual(MTMount.MTMountCsc.version, MTMount.__version__)
+
     async def test_initial_state(self):
         async with self.make_csc():
             await salobj.set_summary_state(

@@ -31,7 +31,7 @@ from . import constants
 from . import enums
 from . import replies
 from . import communicator
-
+from . import __version__
 
 # Extra time to wait for commands to be done (sec)
 TIMEOUT_BUFFER = 5
@@ -80,6 +80,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     See `CscErrorCode`
     """
+
+    valid_simulation_modes = (0, 1)
+    version = __version__
 
     def __init__(
         self,
