@@ -6,12 +6,29 @@
 Version History
 ###############
 
+v0.7.0
+======
+
+Changes:
+
+* This release requires ts_salobj 6.
+* Simplified the simulation mode support, using ts_salobj 6-specific features.
+* Added class attribute ``version`` to `MTMountCsc`.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_idl 2
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
+
 v0.6.1
 ======
 
 Changes:
 
 * Fix bin/run_mtmount.py so that it works with ts_salobj 6 (and 5).
+* Add a unit test of bin/run_mtmount.py.
 
 Requires:
 
