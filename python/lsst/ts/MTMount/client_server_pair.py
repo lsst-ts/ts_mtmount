@@ -167,6 +167,7 @@ class ClientServerPair:
 
         Set the server done_task done.
         """
+        self.client_connected_task.cancel()
         await self.close_client()  # Does not call connect_callback.
         await self._server.close()  # Does call connect_callback.
 
@@ -175,15 +176,17 @@ class ClientServerPair:
 
         Warning: does NOT call the connect_callback.
         """
-        if self.client_writer is not None and not self.client_writer.is_closing():
-            self.client_writer.close()
+        if self.client_writer is not None:
+            await hexrotcomm.close_stream_writer(self.client_writer)
+            self.client_writer = None
+            self.client_reader = None
 
     async def connect(self, port=None):
         """Connect the client socket and wait for a connection to the server.
 
         Parameters
         ----------
-        port : `int` or `None` (optional)
+        port : `int` or `None`, optional
             TCP/IP port. If `None` use the port specified in the constructor.
             Being able to specify a port here is primarily for unit tests.
 
@@ -197,19 +200,18 @@ class ClientServerPair:
         if not self.client_port:
             raise ValueError(f"client_port={self.client_port!r} must be nonzero")
 
-        self.log.debug("ClientServerPair waiting for client to connect")
+        self.log.info(
+            "Waiting for client to connect to "
+            f"host={self.client_host}, port={self.client_port}"
+        )
         while True:
             try:
-                self.log.info(
-                    f"Connect to host={self.client_host}, port={self.client_port}"
-                )
                 self.client_reader, self.client_writer = await asyncio.open_connection(
                     host=self.client_host, port=self.client_port
                 )
                 self.call_connect_callback()
                 break
-            except Exception as e:
-                self.log.debug(f"Connect failed; retrying. Error: {e}")
+            except ConnectionError:
                 await asyncio.sleep(self.connect_retry_interval)
         self.client_connected_task.set_result(None)
         await self._server.connected_task

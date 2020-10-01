@@ -56,9 +56,9 @@ class ClientServerPairTestCase(asynctest.TestCase):
 
         Parameters
         ----------
-        connect : `bool` (optional)
+        connect : `bool`, optional
             Connect the pairs to each other?
-        use_connect_callback : `bool` (optional)
+        use_connect_callback : `bool`, optional
             Specify a connect_callback?
             If True then use self.connect_callback.
         """

@@ -30,7 +30,7 @@ import asynctest
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
-STD_TIMEOUT = 2  # standard command timeout (sec)
+STD_TIMEOUT = 5  # standard command timeout (sec)
 STARTUP_TIMEOUT = 60  # Remote startup time (sec)
 MIRROR_COVER_TIMEOUT = 5  # timeout for opening or closing mirror covers (sec)
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
@@ -41,32 +41,81 @@ logging.basicConfig()
 
 
 class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
-    def basic_make_csc(self, initial_state, config_dir, simulation_mode):
-        return MTMount.MTMountCsc(
+    def setUp(self):
+        self.mtmount_remote = None
+        self.mock_controller = None
+
+    async def tearDown(self):
+        if self.mtmount_remote is not None:
+            await self.mtmount_remote.close()
+        if self.mock_controller is not None:
+            await self.mock_controller.close()
+
+    def basic_make_csc(
+        self, initial_state, config_dir, simulation_mode, internal_mock_controller
+    ):
+        mock_command_port = next(port_generator)
+        csc = MTMount.MTMountCsc(
             initial_state=initial_state,
             config_dir=config_dir,
             simulation_mode=simulation_mode,
-            mock_command_port=next(port_generator),
+            mock_command_port=mock_command_port,
+            run_mock_controller=internal_mock_controller,
         )
-        # the next port is used for commands
-        next(port_generator)
+        if internal_mock_controller:
+            self.mock_controller = csc.mock_controller
+        elif simulation_mode != 0:
+            self.mock_controller = MTMount.mock.Controller(
+                command_port=mock_command_port, log=csc.log
+            )
+        return csc
 
     @contextlib.asynccontextmanager
-    async def make_csc(self, **kwargs):
-        async with super().make_csc(**kwargs):
+    async def make_csc(
+        self,
+        initial_state=salobj.State.STANDBY,
+        config_dir=None,
+        simulation_mode=1,
+        internal_mock_controller=False,
+    ):
+        """Make and return a CSC, an mtmount_remote and possibly a mock
+        controller.
+
+        mtmount_remote is needed to read telemetry, which the mock controller
+        publishes using the MTMount telemetry topics, instead of NewMTMount.
+
+        Parameters
+        ----------
+        initial_state : `lsst.ts.salobj.State` or `int`, optional
+            The initial state of the CSC. Ignored except in simulation mode
+            because in normal operation the initial state is the current state
+            of the controller.
+        config_dir : `str`, optional
+            Directory of configuration files, or None (default)
+            for the standard configuration directory (obtained from
+            `ConfigureCsc._get_default_config_dir`).
+        simulation_mode : `int`, optional
+            Simulation mode. Defaults to 1: do simulate.
+        internal_mock_controller : `bool`, optional
+            Should the CSC run the mock controller?
+            Ignored if ``simulation_mode == 0``.
+        """
+        async with super().make_csc(
+            initial_state=initial_state,
+            config_dir=config_dir,
+            simulation_mode=simulation_mode,
+            internal_mock_controller=internal_mock_controller,
+        ):
             self.mtmount_remote = salobj.Remote(
                 domain=self.csc.salinfo.domain, name="MTMount"
             )
-            await asyncio.wait_for(self.remote.start_task, timeout=STARTUP_TIMEOUT)
-            try:
-                yield
-            finally:
-                await self.mtmount_remote.close()
+            await asyncio.wait_for(
+                self.mtmount_remote.start_task, timeout=STARTUP_TIMEOUT
+            )
+            yield
 
     async def test_initial_state(self):
-        async with self.make_csc(
-            initial_state=salobj.State.STANDBY, config_dir=None, simulation_mode=1
-        ):
+        async with self.make_csc():
             await salobj.set_summary_state(
                 remote=self.remote, state=salobj.State.ENABLED
             )
@@ -104,9 +153,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertEqual(data.CCW_Speed_1, 0)
 
     async def test_standard_state_transitions(self):
-        async with self.make_csc(
-            initial_state=salobj.State.STANDBY, config_dir=None, simulation_mode=1
-        ):
+        async with self.make_csc():
             await self.check_standard_state_transitions(
                 enabled_commands=(
                     "closeMirrorCovers",
@@ -151,18 +198,16 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         """Get the next low level command.
         """
         return await asyncio.wait_for(
-            self.csc.mock_controller.command_queue.get(), timeout=timeout
+            self.mock_controller.command_queue.get(), timeout=timeout
         )
 
     async def test_camera_cable_wrap_tracking(self):
-        async with self.make_csc(
-            initial_state=salobj.State.STANDBY, config_dir=None, simulation_mode=1
-        ):
+        async with self.make_csc():
             await salobj.set_summary_state(
                 remote=self.remote, state=salobj.State.ENABLED
             )
-            self.csc.mock_controller.set_command_queue(maxsize=0)
-            ccw_device = self.csc.mock_controller.device_dict[
+            self.mock_controller.set_command_queue(maxsize=0)
+            ccw_device = self.mock_controller.device_dict[
                 MTMount.DeviceId.CAMERA_CABLE_WRAP
             ]
             ccw_actuator = ccw_device.actuator
@@ -171,7 +216,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertTrue(ccw_device.tracking_enabled)
 
             async with salobj.Controller(name="Rotator") as rotator:
-                self.assertTrue(self.csc.mock_controller.command_queue.empty())
+                self.assertTrue(self.mock_controller.command_queue.empty())
 
                 # Test regular tracking mode. CCW and Rotator start in sync.
                 position0 = 0.0
@@ -245,25 +290,23 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 self.assertFalse(command.on)
                 self.assertTrue(ccw_device.enabled)
                 self.assertFalse(ccw_device.tracking_enabled)
-                self.assertTrue(self.csc.mock_controller.command_queue.empty())
+                self.assertTrue(self.mock_controller.command_queue.empty())
 
                 # Check that rotator targets are ignored after
                 # tracking is disabled.
                 for i in range(2):
                     rotator.tel_Application.set_put(Position=45)
                     await asyncio.sleep(0.1)
-                self.assertTrue(self.csc.mock_controller.command_queue.empty())
+                self.assertTrue(self.mock_controller.command_queue.empty())
 
     async def test_mirror_covers(self):
-        async with self.make_csc(
-            initial_state=salobj.State.STANDBY, config_dir=None, simulation_mode=1
-        ):
+        async with self.make_csc():
             await salobj.set_summary_state(
                 remote=self.remote, state=salobj.State.ENABLED
             )
-            self.csc.mock_controller.set_command_queue(maxsize=0)
+            self.mock_controller.set_command_queue(maxsize=0)
 
-            mock_device = self.csc.mock_controller.device_dict[
+            mock_device = self.mock_controller.device_dict[
                 MTMount.DeviceId.MIRROR_COVERS
             ]
             actuator = mock_device.actuator
@@ -306,9 +349,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertFalse(actuator.moving())
 
     async def test_move_to_target(self):
-        async with self.make_csc(
-            initial_state=salobj.State.STANDBY, config_dir=None, simulation_mode=1
-        ):
+        async with self.make_csc():
             await salobj.set_summary_state(
                 remote=self.remote, state=salobj.State.ENABLED
             )
@@ -316,10 +357,10 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 self.remote.evt_axesInPosition, azimuth=False, elevation=False
             )
 
-            mock_azimuth = self.csc.mock_controller.device_dict[
+            mock_azimuth = self.mock_controller.device_dict[
                 MTMount.DeviceId.AZIMUTH_AXIS
             ]
-            mock_elevation = self.csc.mock_controller.device_dict[
+            mock_elevation = self.mock_controller.device_dict[
                 MTMount.DeviceId.ELEVATION_AXIS
             ]
 
@@ -379,9 +420,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             )
 
     async def test_tracking(self):
-        async with self.make_csc(
-            initial_state=salobj.State.STANDBY, config_dir=None, simulation_mode=1
-        ):
+        async with self.make_csc():
             await salobj.set_summary_state(
                 remote=self.remote, state=salobj.State.ENABLED
             )
@@ -389,10 +428,10 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 self.remote.evt_axesInPosition, azimuth=False, elevation=False
             )
 
-            mock_azimuth = self.csc.mock_controller.device_dict[
+            mock_azimuth = self.mock_controller.device_dict[
                 MTMount.DeviceId.AZIMUTH_AXIS
             ]
-            mock_elevation = self.csc.mock_controller.device_dict[
+            mock_elevation = self.mock_controller.device_dict[
                 MTMount.DeviceId.ELEVATION_AXIS
             ]
             self.assertFalse(mock_azimuth.tracking_enabled)
@@ -473,10 +512,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         """Provide a stream of trackTarget commands until cancelled.
         """
         # Slew and track until both axes are in position
-        mock_azimuth = self.csc.mock_controller.device_dict[
-            MTMount.DeviceId.AZIMUTH_AXIS
-        ]
-        mock_elevation = self.csc.mock_controller.device_dict[
+        mock_azimuth = self.mock_controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
+        mock_elevation = self.mock_controller.device_dict[
             MTMount.DeviceId.ELEVATION_AXIS
         ]
         self.assertTrue(mock_azimuth.tracking_enabled)

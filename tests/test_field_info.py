@@ -45,9 +45,9 @@ class FieldInfoTestCase(unittest.TestCase):
         ----------
         field_info : `FieldInfo`
             Field info to check
-        name : `str` or `None` (optional)
+        name : `str` or `None`, optional
             Expected name, or `None` to use ``self.name``
-        doc : `str` or `None` (optional)
+        doc : `str` or `None`, optional
             Expected doc, or `None` to use ``self.doc``
         """
         if name is None:

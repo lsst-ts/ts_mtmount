@@ -66,10 +66,10 @@ class MockDevicesTestCase(asynctest.TestCase):
         ----------
         command : `MTMount.commands.Command`
             Command to execute.
-        min_timeout : `float` or `None` (optional)
+        min_timeout : `float` or `None`, optional
             Minimum timeout. Must be specified if the command method
             returns a timeout, None if not.
-        should_noack : `bool` (optional)
+        should_noack : `bool`, optional
             True if the command should start OK,
             but then fail or be superseded.
         """

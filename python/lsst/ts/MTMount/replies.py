@@ -59,7 +59,7 @@ def make_reply_doc(cls):
     for finfo in cls.field_infos:
         param_doc = utils.wrap_parameter_doc(finfo.doc)
         is_optional = finfo.default is not None
-        optional_str = " (optional)" if is_optional else ""
+        optional_str = ", optional" if is_optional else ""
         param_strings.append(
             f"{finfo.name} : `{finfo.dtype.__name__}{optional_str}`\n{param_doc}"
         )
