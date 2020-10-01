@@ -444,7 +444,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 f"Simulation_mode={simulation_mode} must be 0 or 1"
             )
 
-    async def send_command(self, command, dolock=True):
+    async def send_command(self, command, do_lock=True):
         """Send a command to the operation manager
         and add it to command_dict.
 
@@ -452,7 +452,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ----------
         command : `Command`
             Command to send.
-        dolock : `bool`, optional
+        do_lock : `bool`, optional
             Lock the port while using it?
             Specify False for emergency commands
             or if being called by send_commands.
@@ -463,7 +463,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Futures that monitor the command.
         """
         try:
-            if dolock:
+            if do_lock:
                 async with self.command_lock:
                     return await self._basic_send_command(command=command)
             else:
@@ -502,14 +502,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
         return futures
 
-    async def send_commands(self, *commands, dolock=True):
+    async def send_commands(self, *commands, do_lock=True):
         """Run a set of operation manager commands.
 
         Parameters
         ----------
         commands : `List` [``Command``]
             Commands to send. The sequence_id attribute is set.
-        dolock : `bool`, optional
+        do_lock : `bool`, optional
             Lock the port while using it?
             Specify False for emergency commands.
 
@@ -520,15 +520,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         futures_list = []
         try:
-            if dolock:
+            if do_lock:
                 async with self.command_lock:
                     for command in commands:
                         futures_list.append(
-                            await self.send_command(command, dolock=False)
+                            await self.send_command(command, do_lock=False)
                         )
             else:
                 for command in commands:
-                    futures_list.append(await self.send_command(command, dolock=False))
+                    futures_list.append(await self.send_command(command, do_lock=False))
             return futures_list
         except ConnectionResetError:
             for future in futures_list:
@@ -761,7 +761,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stop(self, data):
         self.assert_enabled()
         await self.send_commands(
-            commands.BothAxesStop(), commands.CameraCableWrapStop(), dolock=False,
+            commands.BothAxesStop(), commands.CameraCableWrapStop(), do_lock=False,
         )
 
     async def do_stopTracking(self, data):
