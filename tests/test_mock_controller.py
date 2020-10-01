@@ -35,6 +35,8 @@ STD_TIMEOUT = 2  # Timeout for short operations (sec)
 # Padding for the time limit returned by device do_methods
 TIMEOUT_PADDING = 2
 
+logging.basicConfig()
+
 port_generator = salobj.index_generator(imin=3000)
 
 

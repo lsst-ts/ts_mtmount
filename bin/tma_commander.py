@@ -106,6 +106,7 @@ class Commander:
         self.log.setLevel(log_level)
 
         self.done_task = asyncio.Future()
+        self.read_loop_task = salobj.make_done_future()
 
         self.simulator = None
         if simulate:
@@ -167,6 +168,7 @@ help  # Print this help
         """Shut down this TMA commander."""
         try:
             self.read_loop_task.cancel()
+            self.command_loop_task.cancel()
             if self.simulator is not None:
                 await self.simulator.close()
             await self.communicator.close()

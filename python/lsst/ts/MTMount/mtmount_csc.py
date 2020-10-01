@@ -31,7 +31,6 @@ from . import constants
 from . import enums
 from . import replies
 from . import communicator
-from . import mock
 
 
 # Extra time to wait for commands to be done (sec)
@@ -47,15 +46,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     Parameters
     ----------
-    initial_state : `salobj.State` or `int` (optional)
+    initial_state : `salobj.State` or `int`, optional
         The initial state of the CSC. This is provided for unit testing,
         as real CSCs should start up in `lsst.ts.salobj.StateSTANDBY`,
         the default.
-    simulation_mode : `int` (optional)
+    simulation_mode : `int`, optional
         Simulation mode.
-    mock_command_port : `int` (optional)
+    mock_command_port : `int`, optional
         Port for mock controller TCP/IP interface. If `None` then use the
         port specified by the configuration. Only used in simulation mode.
+    run_mock_controller : `bool`, optional
+        Run the mock controller? Ignored unless ``simulation_mode == 1``.
+        This is used by unit tests which run the mock controller
+        themselves in order to monitor the effect of commands.
+        This is necessary because the mock controller provides
+        very little feedback as to what it is doing.
 
     Raises
     ------
@@ -76,19 +81,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
     See `CscErrorCode`
     """
 
+    valid_simulation_modes = (0, 1)
+
     def __init__(
         self,
         config_dir=None,
         initial_state=salobj.State.STANDBY,
         simulation_mode=0,
         mock_command_port=None,
+        run_mock_controller=True,
     ):
         schema_path = (
             pathlib.Path(__file__).resolve().parents[4] / "schema" / "MTMount.yaml"
         )
         self.mock_command_port = mock_command_port
+        self.run_mock_controller = run_mock_controller
         self.communicator = None
-        self.mock_controller = None  # mock controller, or None of not constructed
+        # Subprocess running the mock controller
+        self.mock_controller_process = None
         # Dict of command sequence-id: (ack_task, done_task).
         # ack_task is set to the timeout (sec) when command is acknowledged.
         # done_task is set to to None when the command is done.
@@ -175,6 +185,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def close_tasks(self):
         """Shut down pending tasks. Called by `close`."""
         await super().close_tasks()
+        if self.mock_controller_process is not None:
+            self.mock_controller_process.terminate()
         await self.close_communication()
 
     async def get_ccw_demand(self):
@@ -268,15 +280,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         return (adjusted_demand_position, demand_velocity, demand_tai)
 
     async def close_communication(self):
-        """Close and delete the communicator and mock controller, if present.
+        """Close and delete the communicator, if present.
         """
         self.should_be_connected = False
         if self.communicator is not None:
             await self.communicator.close()
             self.communicator = None
-        if self.mock_controller is not None:
-            await self.mock_controller.close()
-            self.mock_controller = None
 
     def get_host(self):
         if self.simulation_mode:
@@ -301,9 +310,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             server_host = salobj.LOCAL_HOST
             if self.mock_command_port is not None:
                 command_port = self.mock_command_port
-        connect_tasks = []
-        if self.simulation_mode:
-            connect_tasks.append(self.start_mock_ctrl())
         if self.communicator is None:
             self.communicator = communicator.Communicator(
                 name="communicator",
@@ -319,9 +325,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         try:
             self.log.info("Connecting to the low-level controller")
-            connect_tasks.append(self.communicator.connect())
             await asyncio.wait_for(
-                asyncio.gather(*connect_tasks), timeout=self.config.connection_timeout
+                self.communicator.connect(), timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
             self.read_loop_task = asyncio.create_task(self.read_loop())
@@ -343,7 +348,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.should_be_connected = False
             self.fault(
                 code=enums.CscErrorCode.CONNECTION_LOST,
-                report="Connection lost to low-level controller (noticed in connect_callback)",
+                report="Lost connection to low-level controller",
             )
 
     async def enable_devices(self):
@@ -439,7 +444,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 f"Simulation_mode={simulation_mode} must be 0 or 1"
             )
 
-    async def send_command(self, command, dolock=True):
+    async def send_command(self, command, do_lock=True):
         """Send a command to the operation manager
         and add it to command_dict.
 
@@ -447,11 +452,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ----------
         command : `Command`
             Command to send.
-        dolock : `bool` (optional)
+        do_lock : `bool`, optional
             Lock the port while using it?
             Specify False for emergency commands
             or if being called by send_commands.
-
 
         Returns
         -------
@@ -459,11 +463,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Futures that monitor the command.
         """
         try:
-            if dolock:
+            if do_lock:
                 async with self.command_lock:
                     return await self._basic_send_command(command=command)
             else:
                 return await self._basic_send_command(command=command)
+        except ConnectionResetError:
+            raise
         except Exception:
             self.log.exception(f"Failed to send command {command}")
             raise
@@ -496,14 +502,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
         return futures
 
-    async def send_commands(self, *commands, dolock=True):
+    async def send_commands(self, *commands, do_lock=True):
         """Run a set of operation manager commands.
 
         Parameters
         ----------
         commands : `List` [``Command``]
             Commands to send. The sequence_id attribute is set.
-        dolock : `bool` (optional)
+        do_lock : `bool`, optional
             Lock the port while using it?
             Specify False for emergency commands.
 
@@ -513,14 +519,26 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Command future for each command.
         """
         futures_list = []
-        if dolock:
-            async with self.command_lock:
+        try:
+            if do_lock:
+                async with self.command_lock:
+                    for command in commands:
+                        futures_list.append(
+                            await self.send_command(command, do_lock=False)
+                        )
+            else:
                 for command in commands:
-                    futures_list.append(await self.send_command(command, dolock=False))
-        else:
-            for command in commands:
-                futures_list.append(await self.send_command(command, dolock=False))
-        return futures_list
+                    futures_list.append(await self.send_command(command, do_lock=False))
+            return futures_list
+        except ConnectionResetError:
+            for future in futures_list:
+                future.setnoack("Connection lost")
+            raise
+        except Exception as e:
+            self.log.exception("send_commands failed")
+            for future in futures_list:
+                future.setnoack(f"send_commands failed: {e}")
+            raise
 
     async def camera_cable_wrap_loop(self):
         self.log.info("Camera cable wrap control begins")
@@ -631,31 +649,23 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def start(self):
         await super().start()
+
+        if self.simulation_mode == 1 and self.run_mock_controller:
+            self.log.debug("Starting the mock controller")
+            try:
+                self.mock_controller_process = await asyncio.create_subprocess_exec(
+                    [
+                        "run_mock_tma.py",
+                        f"--command-port={self.mock_command_port}",
+                        "--noreconnect",
+                    ]
+                )
+            except Exception:
+                self.log.exception("Could not start the mock controller")
+
         self.log.debug("Waiting for the Rotator remote to start")
         await self.rotator.start_task
         self.log.debug("Started")
-
-    async def start_mock_ctrl(self):
-        """Start the mock controller.
-
-        The simulation mode must be 1.
-        """
-        try:
-            assert self.simulation_mode == 1
-            if self.mock_command_port is not None:
-                command_port = self.mock_command_port
-            else:
-                command_port = constants.CSC_COMMAND_PORT
-            self.mock_controller = mock.Controller(
-                command_port=command_port, log=self.log
-            )
-            await asyncio.wait_for(self.mock_controller.start_task, timeout=60)
-        except Exception as e:
-            err_msg = "Could not start mock controller"
-            self.log.exception(e)
-            self.fault(
-                code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR, report=f"{err_msg}: {e}"
-            )
 
     async def do_clearError(self, data):
         self.assert_enabled()
@@ -751,7 +761,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stop(self, data):
         self.assert_enabled()
         await self.send_commands(
-            commands.BothAxesStop(), commands.CameraCableWrapStop(), dolock=False,
+            commands.BothAxesStop(), commands.CameraCableWrapStop(), do_lock=False,
         )
 
     async def do_stopTracking(self, data):

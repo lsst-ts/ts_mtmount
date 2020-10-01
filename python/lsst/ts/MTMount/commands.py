@@ -124,7 +124,7 @@ def make_command_doc(cls):
     for finfo in cls.field_infos:
         param_doc = utils.wrap_parameter_doc(finfo.doc)
         is_optional = finfo.default is not None or finfo.name == "sequence_id"
-        optional_str = " (optional)" if is_optional else ""
+        optional_str = ", optional" if is_optional else ""
         param_strings.append(
             f"{finfo.name} : `{finfo.dtype.__name__}{optional_str}`\n{param_doc}"
         )
@@ -144,7 +144,7 @@ def make_command_field_infos(command_code, parameters=()):
     ----------
     command_code : `CommandCode`
         Command code.
-    parameters : `List` [`FieldInfo`] (optional)
+    parameters : `List` [`FieldInfo`], optional
         Field information for command parameters, if any.
     """
     for param in parameters:
