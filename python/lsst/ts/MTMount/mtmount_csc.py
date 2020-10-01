@@ -285,11 +285,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.communicator.close()
             self.communicator = None
 
-    def get_host(self):
-        if self.simulation_mode:
-            return salobj.LOCAL_HOST
-        return self.config.host
-
     async def connect(self):
         """Connect to the low-level controller.
 
@@ -435,12 +430,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.disable_task = asyncio.create_task(self.disable_devices())
                 await self.disable_task
             await self.close_communication()
-
-    async def implement_simulation_mode(self, simulation_mode):
-        if simulation_mode not in (0, 1):
-            raise salobj.ExpectedError(
-                f"Simulation_mode={simulation_mode} must be 0 or 1"
-            )
 
     async def send_command(self, command, do_lock=True):
         """Send a command to the operation manager
@@ -777,15 +766,3 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.ElevationAxisEnableTracking(on=False),
                 commands.AzimuthAxisEnableTracking(on=False),
             )
-
-    @classmethod
-    def add_arguments(cls, parser):
-        super(MTMountCsc, cls).add_arguments(parser)
-        parser.add_argument(
-            "-s", "--simulate", action="store_true", help="Run in simuation mode?"
-        )
-
-    @classmethod
-    def add_kwargs_from_args(cls, args, kwargs):
-        super(MTMountCsc, cls).add_kwargs_from_args(args, kwargs)
-        kwargs["simulation_mode"] = 1 if args.simulate else 0
