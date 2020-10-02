@@ -6,6 +6,20 @@
 Version History
 ###############
 
+v0.6.1
+======
+
+Changes:
+
+* Fix bin/run_mtmount.py so that it works with ts_salobj 6 (and 5).
+
+Requires:
+
+* ts_salobj 5.15 or 6
+* ts_simactuators 2
+* ts_idl 1 (with salobj 5) or 2 (with salobj 6)
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
+
 v0.6.0
 ======
 
@@ -19,6 +33,13 @@ Changes:
   (if false then you must run the mock controller yourself).
   This supports unit tests that need access to the mock controller --
   access that is difficult if the CSC runs the mock controller in a subuprocess.
+
+Requires:
+
+* ts_salobj 5.15
+* ts_simactuators 2
+* ts_idl
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
 
 v0.5.0
 ======
