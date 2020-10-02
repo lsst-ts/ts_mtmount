@@ -81,8 +81,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
     See `CscErrorCode`
     """
 
-    valid_simulation_modes = (0, 1)
-
     def __init__(
         self,
         config_dir=None,

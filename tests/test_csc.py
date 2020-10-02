@@ -114,6 +114,11 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             )
             yield
 
+    async def test_bin_script(self):
+        await self.check_bin_script(
+            name="NewMTMount", index=None, exe_name="run_mtmount.py",
+        )
+
     async def test_initial_state(self):
         async with self.make_csc():
             await salobj.set_summary_state(
