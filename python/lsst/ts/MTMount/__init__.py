@@ -19,6 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+# Set __version__ before importing the CSC
+try:
+    from .version import *
+except ImportError:
+    __version__ = "?"
+
 from .constants import *
 from .enums import *
 from .utils import *
@@ -34,8 +40,3 @@ from .mtmount_commander import *
 from .mtmount_csc import *
 from . import mock
 from . import testutils
-
-try:
-    from .version import *
-except ImportError:
-    __version__ = "?"

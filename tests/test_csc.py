@@ -55,6 +55,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         self, initial_state, config_dir, simulation_mode, internal_mock_controller
     ):
         mock_command_port = next(port_generator)
+        # discard a value for the reply port
+        next(port_generator)
         csc = MTMount.MTMountCsc(
             initial_state=initial_state,
             config_dir=config_dir,
@@ -118,6 +120,24 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         await self.check_bin_script(
             name="NewMTMount", index=None, exe_name="run_mtmount.py",
         )
+
+    def test_class_attributes(self):
+        self.assertEqual(tuple(MTMount.MTMountCsc.valid_simulation_modes), (0, 1))
+        self.assertEqual(MTMount.MTMountCsc.version, MTMount.__version__)
+
+    async def test_disconnect(self):
+        """Test that the CSC goes to FAULT state if it loses connection
+        to the low-level controller.
+        """
+        async with self.make_csc():
+            await salobj.set_summary_state(
+                remote=self.remote, state=salobj.State.ENABLED
+            )
+            await self.assert_next_summary_state(salobj.State.STANDBY)
+            await self.assert_next_summary_state(salobj.State.DISABLED)
+            await self.assert_next_summary_state(salobj.State.ENABLED)
+            await self.mock_controller.close()
+            await self.assert_next_summary_state(salobj.State.FAULT)
 
     async def test_initial_state(self):
         async with self.make_csc():
