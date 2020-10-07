@@ -6,6 +6,21 @@
 Version History
 ###############
 
+v0.7.1
+======
+
+Changes:
+
+* Fix the requirements information in the version history for v0.6.0, v0.6.1, and v0.7.0.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
+
 v0.7.0
 ======
 
@@ -19,6 +34,7 @@ Requires:
 
 * ts_salobj 6
 * ts_simactuators 2
+* ts_hexrotcomm 0.9
 * ts_idl 2
 * IDL files for NewMTMount and MTMount from ts_xml 4.8
 
@@ -34,6 +50,7 @@ Requires:
 
 * ts_salobj 5.15 or 6
 * ts_simactuators 2
+* ts_hexrotcomm 0.9
 * ts_idl 1 (with salobj 5) or 2 (with salobj 6)
 * IDL files for NewMTMount and MTMount from ts_xml 4.8
 
@@ -55,7 +72,8 @@ Requires:
 
 * ts_salobj 5.15
 * ts_simactuators 2
-* ts_idl
+* ts_hexrotcomm 0.9
+* ts_idl 1
 * IDL files for NewMTMount and MTMount from ts_xml 4.8
 
 v0.5.0
@@ -70,6 +88,7 @@ Requires:
 
 * ts_salobj 5.15
 * ts_simactuators 2
+* ts_hexrotcomm
 * ts_idl
 * IDL files for NewMTMount and MTMount from ts_xml 4.8
 
@@ -84,6 +103,7 @@ Requires:
 
 * ts_salobj 5.15
 * ts_simactuators 2
+* ts_hexrotcomm
 * ts_idl
 * IDL files for NewMTMount and MTMount from ts_xml 4.8
 
@@ -98,6 +118,7 @@ Requires:
 
 * ts_salobj 5.15
 * ts_simactuators 2
+* ts_hexrotcomm
 * ts_idl
 * IDL files for NewMTMount and MTMount from ts_xml 4.8
 
@@ -116,6 +137,7 @@ Requires:
 
 * ts_salobj 5.15
 * ts_simactuators 2
+* ts_hexrotcomm
 * ts_idl
 * IDL files for NewMTMount and MTMount from ts_xml 4.8
 
@@ -128,5 +150,6 @@ Requires:
 
 * ts_salobj 5.11
 * ts_simactuators 1
+* ts_hexrotcomm
 * ts_idl
 * IDL files for NewMTMount and MTMount from ts_xml 4.8
