@@ -95,7 +95,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         schema_path = (
             pathlib.Path(__file__).resolve().parents[4] / "schema" / "MTMount.yaml"
         )
-        self.mock_command_port = mock_command_port
+        self.mock_command_port = (
+            mock_command_port
+            if mock_command_port is not None
+            else constants.CSC_COMMAND_PORT
+        )
         self.run_mock_controller = run_mock_controller
         self.communicator = None
         # Subprocess running the mock controller
@@ -298,14 +302,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise RuntimeError("Not yet configured")
         if self.connected:
             raise RuntimeError("Already connected")
-        client_host = self.config.host
-        server_host = None
-        command_port = constants.CSC_COMMAND_PORT
         if self.simulation_mode:
             client_host = salobj.LOCAL_HOST
             server_host = salobj.LOCAL_HOST
-            if self.mock_command_port is not None:
-                command_port = self.mock_command_port
+            command_port = self.mock_command_port
+        else:
+            client_host = self.config.host
+            server_host = None
+            command_port = constants.CSC_COMMAND_PORT
         if self.communicator is None:
             self.communicator = communicator.Communicator(
                 name="communicator",
@@ -644,11 +648,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.debug("Starting the mock controller")
             try:
                 self.mock_controller_process = await asyncio.create_subprocess_exec(
-                    [
-                        "run_mock_tma.py",
-                        f"--command-port={self.mock_command_port}",
-                        "--noreconnect",
-                    ]
+                    "run_mock_tma.py",
+                    f"--command-port={self.mock_command_port}",
+                    "--noreconnect",
                 )
             except Exception:
                 self.log.exception("Could not start the mock controller")
