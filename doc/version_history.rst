@@ -6,6 +6,22 @@
 Version History
 ###############
 
+v0.7.2
+======
+
+Changes:
+
+* Fix a bug that prevents the CSC from starting the mock TMA controller.
+* Added missing ``enable`` constructor argument to `MTMountCommander`.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
+
 v0.7.1
 ======
 
