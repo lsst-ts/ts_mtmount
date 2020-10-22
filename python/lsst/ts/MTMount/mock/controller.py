@@ -117,8 +117,7 @@ class Controller:
         return self.communicator is not None and self.communicator.connected
 
     async def put_axis_telemetry(self, device_id, tai):
-        """Warning: this minimal and simplistic.
-        """
+        """Warning: this minimal and simplistic."""
         prefix = {
             enums.DeviceId.AZIMUTH_AXIS: "Azimuth",
             enums.DeviceId.ELEVATION_AXIS: "Elevation",
@@ -161,8 +160,7 @@ class Controller:
             await self.communicator.write(reply)
 
     async def put_camera_cable_wrap_telemetry(self, tai):
-        """Warning: this minimal and simplistic.
-        """
+        """Warning: this minimal and simplistic."""
         device = self.device_dict[enums.DeviceId.CAMERA_CABLE_WRAP]
         actuator = device.actuator
         actual = actuator.path.at(tai)
@@ -182,8 +180,7 @@ class Controller:
         )
 
     async def telemetry_loop(self):
-        """Warning: this minimal and simplistic.
-        """
+        """Warning: this minimal and simplistic."""
         try:
             while True:
                 tai = salobj.current_tai()
