@@ -88,7 +88,6 @@ class Controller:
         }
 
         self.communicator = None
-        self.sal_controller = None
 
         # Queue of commands, for unit testing
         self.command_queue = None
@@ -313,7 +312,8 @@ class Controller:
                 self.log.exception("Failed to close controller")
             for device in self.device_dict.values():
                 await device.close()
-            await self.communicator.close()
+            if self.communicator is not None:
+                await self.communicator.close()
         except Exception:
             self.log.exception("close failed")
         finally:
