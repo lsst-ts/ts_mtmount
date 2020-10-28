@@ -6,6 +6,21 @@
 Version History
 ###############
 
+v0.7.4
+======
+
+Changes:
+
+* Add run_mock_tma.py script to setup.py.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for NewMTMount and MTMount from ts_xml 4.8
+
 v0.7.3
 ======
 
