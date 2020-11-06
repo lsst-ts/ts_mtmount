@@ -40,6 +40,10 @@ TIMEOUT_BUFFER = 5
 # beyond which rotator velocity will not be estimated.
 MAX_ROTATOR_APPLICATION_GAP = 1.0
 
+NOT_SUPPORTED_MESSAGE = (
+    "Not supported in this camera-cable-wrap-only version of the CSC"
+)
+
 
 class MTMountCsc(salobj.ConfigurableCsc):
     """MTMount CSC
@@ -357,19 +361,19 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.enabled_state = enums.EnabledState.ENABLING
         try:
             enable_commands = [
-                commands.TopEndChillerResetAlarm(),
-                commands.MainPowerSupplyResetAlarm(),
-                commands.MirrorCoverLocksResetAlarm(),
-                commands.MirrorCoversResetAlarm(),
-                commands.AzimuthAxisResetAlarm(),
-                commands.ElevationAxisResetAlarm(),
+                # commands.TopEndChillerResetAlarm(),
+                # commands.MainPowerSupplyResetAlarm(),
+                # commands.MirrorCoverLocksResetAlarm(),
+                # commands.MirrorCoversResetAlarm(),
+                # commands.AzimuthAxisResetAlarm(),
+                # commands.ElevationAxisResetAlarm(),
                 commands.CameraCableWrapResetAlarm(),
-                commands.TopEndChillerPower(on=True),
-                commands.TopEndChillerTrackAmbient(on=True, temperature=0),
-                commands.MainPowerSupplyPower(on=True),
-                commands.OilSupplySystemPower(on=True),
-                commands.AzimuthAxisPower(on=True),
-                commands.ElevationAxisPower(on=True),
+                # commands.TopEndChillerPower(on=True),
+                # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
+                # commands.MainPowerSupplyPower(on=True),
+                # commands.OilSupplySystemPower(on=True),
+                # commands.AzimuthAxisPower(on=True),
+                # commands.ElevationAxisPower(on=True),
                 commands.CameraCableWrapPower(on=True),
                 commands.CameraCableWrapEnableTracking(on=True),
             ]
@@ -402,10 +406,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.enabled_state = enums.EnabledState.DISABLING
             try:
                 disable_commands = [
-                    commands.BothAxesStop(),
+                    # commands.BothAxesStop(),
                     commands.CameraCableWrapStop(),
-                    commands.AzimuthAxisPower(on=False),
-                    commands.ElevationAxisPower(on=False),
+                    # commands.AzimuthAxisPower(on=False),
+                    # commands.ElevationAxisPower(on=False),
                     commands.CameraCableWrapPower(on=False),
                 ]
                 await self.send_commands(*disable_commands)
@@ -665,6 +669,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_closeMirrorCovers(self, data):
         self.assert_enabled()
+        raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
         # Deploy the mirror cover locks/guides.
         await self.send_commands(
             commands.MirrorCoverLocksPower(on=True),
@@ -680,6 +685,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_openMirrorCovers(self, data):
         self.assert_enabled()
+        raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
         # Retract the mirror covers.
         await self.send_commands(
             commands.MirrorCoversPower(on=True),
@@ -708,12 +714,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_moveToTarget(self, data):
         self.assert_enabled()
+        raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
         await self.send_command(
             commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation,),
         )
 
     async def do_trackTarget(self, data):
         self.assert_enabled()
+        raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
         await self.send_command(
             commands.BothAxesTrack(
                 azimuth=data.azimuth,
@@ -737,6 +745,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_startTracking(self, data):
         self.assert_enabled()
+        raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
         # TODO DM-24783 remove this if block once Tekniker's TMA code
         # supports the xAxisEnableTracking commands.
         if self.simulation_mode == 0:
@@ -758,6 +767,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_stopTracking(self, data):
         self.assert_enabled()
+        raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
         # TODO DM-24783 remove this if block once Tekniker's TMA code
         # supports the xAxisEnableTracking commands.
         if self.simulation_mode == 0:
