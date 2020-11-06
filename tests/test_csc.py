@@ -24,6 +24,7 @@ import contextlib
 import pathlib
 import logging
 import time
+import unittest
 
 import asynctest
 
@@ -324,6 +325,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     await asyncio.sleep(0.1)
                 self.assertTrue(self.mock_controller.command_queue.empty())
 
+    @unittest.skip("Not available in this camera-cable-wrap-only version")
     async def test_mirror_covers(self):
         async with self.make_csc():
             await salobj.set_summary_state(
@@ -373,6 +375,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertAlmostEqual(actuator.position(), 0)
             self.assertFalse(actuator.moving())
 
+    @unittest.skip("Not available in this camera-cable-wrap-only version")
     async def test_move_to_target(self):
         async with self.make_csc():
             await salobj.set_summary_state(
@@ -444,6 +447,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 self.remote.evt_axesInPosition, azimuth=False, elevation=False,
             )
 
+    @unittest.skip("Not available in this camera-cable-wrap-only version")
     async def test_tracking(self):
         async with self.make_csc():
             await salobj.set_summary_state(
