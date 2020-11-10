@@ -130,21 +130,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task for self.read_loop
         self.read_loop_task = salobj.make_done_future()
 
-        # Most recent Rotator Application telemetry sample,
-        # or None if camera cable wrap not tracking.
-        self.prev_rot_application = None
-
-        # CCW - Rotator synchronization limits.
-        # The goto limit is the distance between the CCW and the Rotator demand
-        # position after which the CCW will blindly go to the demand, as long
-        # as the distance between the ccw and rot are less then half the max
-        # limit.
+        # CCW - MTRotator synchronization limits.
+        # The goto limit is the distance between the CCW and the MTRotator
+        # demand position after which the CCW will blindly go to the demand,
+        # as long as the distance between the ccw and rot are less then
+        # half the max limit.
         # The max limit is the maximum distance allowed between CCW and
-        # Rotator.
-        # The slew limit is the distance between CCW - Rotator where CCW will
-        # enter "slew" mode, and start following the position of the Rotator.
-        # The track limit is the distance between CCW - Rotator at which they
-        # are considered in synchronization and CCW will follow the Rotator
+        # MTRotator.
+        # The slew limit is the distance between CCW - MTRotator where CCW will
+        # enter "slew" mode, and start following the position of the MTRotator.
+        # The track limit is the distance between CCW - MTRotator at which they
+        # are considered in synchronization and CCW will follow the MTRotator
         # demand.
         # TODO: Make these configuration parameters (DM-25941).
         self.ccw_rot_sync_limit_goto = 7.5
@@ -153,7 +149,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.ccw_rot_sync_limit_track = 0.125
 
         # Is CCW in catchup mode? This is True if CCW is enabled and the
-        # distance between CCW and Rotator goes beyond ccw_rot_sync_limit_slew.
+        # distance between CCW and MTRotator exceeds ccw_rot_sync_limit_slew.
         # It will remain True until the distance is smaller then
         # ccw_rot_sync_limit_track.
         self.catch_up_mode = False
@@ -174,7 +170,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
         self.rotator = salobj.Remote(
-            domain=self.domain, name="Rotator", include=["Application"]
+            domain=self.domain, name="MTRotator", include=["rotation"]
         )
 
         self.mtmount = salobj.Remote(
@@ -201,9 +197,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def get_ccw_demand(self):
         """Get CCW tracking command data.
 
-        The method will get the position of the CCW and of the Rotator and
+        The method will get the position of the CCW and of the MTRotator and
         compute an optimum demand for the CCW. It takes into account how far
-        CCW and Rotator are from each other and also how far they both are
+        CCW and MTRotator are from each other and also how far they both are
         from the demand position.
 
         Returns
@@ -216,68 +212,50 @@ class MTMountCsc(salobj.ConfigurableCsc):
             CCW tracking command time (TAI unix seconds).
             This will be config.camera_cable_wrap_advance_time
             seconds in the future.
+
+        Notes
+        -----
+        This will require an update when we clean up the TMA telemetry.
+        At that point we should use the timestamps in the MTRotator
+        and MTMount telemetry for better accuracy.
         """
 
-        rot_data = await self.rotator.tel_Application.next(flush=True)
+        rot_data = await self.rotator.tel_rotation.next(flush=True)
         ccw_data = await self.mtmount.tel_Camera_Cable_Wrap.aget()
 
-        if self.prev_rot_application is not None:
-            dt = rot_data.private_sndStamp - self.prev_rot_application.private_sndStamp
-            # Estimate velocity if GAP between last rotator data and current
-            # data is smaller then MAX_ROTATOR_APPLICATION_GAP, else set
-            # velocity to zero.
-            rotator_velocity = (
-                (rot_data.Position - self.prev_rot_application.Position) / dt
-                if dt < MAX_ROTATOR_APPLICATION_GAP
-                else 0.0
-            )
-        else:
-            rotator_velocity = 0.0
+        ccw_angle = ccw_data.CCW_Angle_1
 
-        self.prev_rot_application = rot_data
+        # distance between ccw and rotator actual position
+        distance_ccw_rot = ccw_angle - rot_data.actualPosition
 
-        ccw_angle = ccw_data.CCW_Camera_Position
+        # distance between ccw and rotator demand position
+        distance_ccw_rot_demand = ccw_angle - rot_data.demandPosition
 
-        # distance between ccw and rotator position
-        distance_ccw_rot = ccw_angle - rot_data.Position
+        # distance between rotator actual and demand position
+        distance_rot_demand = rot_data.actualPosition - rot_data.demandPosition
 
-        # distance between ccw and rotator demand
-        distance_ccw_rot_demand = ccw_angle - rot_data.Demand
+        # catch up mode activates if ccw is ahead of Rotator by more than the
+        # specified limit.
+        self.catch_up_mode = (
+            abs(distance_ccw_rot) > self.ccw_rot_sync_limit_slew
+        ) and (abs(distance_ccw_rot_demand) < abs(distance_rot_demand))
 
-        # distance between rotator position and demand
-        distance_rot_demand = rot_data.Position - rot_data.Demand
-
-        if (
-            not self.catch_up_mode
-            and abs(distance_ccw_rot) < self.ccw_rot_sync_limit_slew
-        ) or (
-            abs(distance_ccw_rot_demand) < self.ccw_rot_sync_limit_goto
-            and abs(distance_ccw_rot) < self.ccw_rot_sync_limit_max / 2.0
-        ):
+        if not self.catch_up_mode:
             # CCW and Rotator synchronized or in the goto limit and CCW-Rotator
             # Close enough. Follow demand.
             self.catch_up_mode = False
-            demand_position = rot_data.Demand
+            demand_position = rot_data.demandPosition
             demand_velocity = 0.0
         else:
-            if not self.catch_up_mode:
-                self.catch_up_mode = True
-                self.log.info("Rotator and CCW out of sync. Going into catchup mode.")
-            else:
-                # Switch off catch_up_mode only when ccw-rot in the "track"
-                # limit.
-                self.catch_up_mode = (
-                    abs(distance_ccw_rot) > self.ccw_rot_sync_limit_track
-                )
-
+            self.log.info("Rotator and CCW out of sync. Going into catchup mode.")
             # If CCW ahead of Rotator, set velocity to zero, otherwise, use
             # Rotator velocity.
             demand_velocity = (
-                rotator_velocity
+                rot_data.demandVelocity
                 if abs(distance_ccw_rot_demand) > abs(distance_rot_demand)
                 else 0.0
             )
-            demand_position = rot_data.Position
+            demand_position = rot_data.actualPosition
 
         # Adjust demand position for desired time.
         # Demand position and velocity were based on the most recent
@@ -361,21 +339,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.enabled_state = enums.EnabledState.ENABLING
         try:
             enable_commands = [
+                commands.AskForCommand(commander=3),
                 # commands.TopEndChillerResetAlarm(),
                 # commands.MainPowerSupplyResetAlarm(),
                 # commands.MirrorCoverLocksResetAlarm(),
                 # commands.MirrorCoversResetAlarm(),
                 # commands.AzimuthAxisResetAlarm(),
                 # commands.ElevationAxisResetAlarm(),
-                commands.CameraCableWrapResetAlarm(),
+                # commands.CameraCableWrapResetAlarm(),
                 # commands.TopEndChillerPower(on=True),
                 # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
                 # commands.MainPowerSupplyPower(on=True),
                 # commands.OilSupplySystemPower(on=True),
                 # commands.AzimuthAxisPower(on=True),
                 # commands.ElevationAxisPower(on=True),
-                commands.CameraCableWrapPower(on=True),
-                commands.CameraCableWrapEnableTracking(on=True),
+                # commands.CameraCableWrapPower(on=True),
+                # commands.CameraCableWrapEnableTracking(on=True),
             ]
             await self.send_commands(*enable_commands)
             self.enabled_state = enums.EnabledState.ENABLED
@@ -386,10 +365,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.fault(
                 code=enums.CscErrorCode.ACTUATOR_ENABLE_ERROR, report=f"{err_msg}: {e}",
             )
-        if self.camera_cable_wrap_task.done():
-            self.camera_cable_wrap_task = asyncio.create_task(
-                self.camera_cable_wrap_loop()
-            )
+        # if self.camera_cable_wrap_task.done():
+        #     self.camera_cable_wrap_task = asyncio.create_task(
+        #         self.camera_cable_wrap_loop()
+        #     )
 
     async def disable_devices(self):
         self.log.info("Disable devices")
@@ -407,10 +386,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             try:
                 disable_commands = [
                     # commands.BothAxesStop(),
-                    commands.CameraCableWrapStop(),
+                    # commands.CameraCableWrapStop(),
                     # commands.AzimuthAxisPower(on=False),
                     # commands.ElevationAxisPower(on=False),
-                    commands.CameraCableWrapPower(on=False),
+                    # commands.CameraCableWrapPower(on=False),
+                    commands.AskForCommand(commander=2),
                 ]
                 await self.send_commands(*disable_commands)
                 self.enabled_state = enums.EnabledState.DISABLED
@@ -541,6 +521,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def camera_cable_wrap_loop(self):
         self.log.info("Camera cable wrap control begins")
         try:
+
+            move_task = salobj.make_done_future()
+
             while True:
                 (
                     demand_position,
@@ -548,10 +531,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     demand_tai,
                 ) = await self.get_ccw_demand()
 
-                command = commands.CameraCableWrapTrack(
-                    position=demand_position, velocity=demand_velocity, tai=demand_tai,
+                # catch up mode means CCW is ahead of Rotator by more than a
+                # safe margin. In this case, stop and wait.
+                if self.catch_up_mode and not move_task.done():
+                    await self.send_command(commands.CameraCableWrapStop())
+                    await move_task
+                elif self.catch_up_mode:
+                    continue
+
+                # Move at maximum velocity, acceleration and jerk
+                command = commands.CameraCableWrapMove(
+                    position=demand_position, velocity=3.5, acceleration=1.0, jerk=7.0,
                 )
-                await self.send_command(command)
+
+                # Start move command in the background
+                move_task = asyncio.create_task(self.send_command(command))
 
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap control ends")
@@ -659,7 +653,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except Exception:
                 self.log.exception("Could not start the mock controller")
 
-        self.log.debug("Waiting for the Rotator remote to start")
+        self.log.debug("Waiting for the MTRotator remote to start")
         await self.rotator.start_task
         self.log.debug("Started")
 
@@ -702,11 +696,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_disableCameraCableWrapTracking(self, data):
         self.assert_enabled()
         self.camera_cable_wrap_task.cancel()
-        await self.send_command(commands.CameraCableWrapEnableTracking(on=False))
+        # await self.send_command(commands.CameraCableWrapEnableTracking(on=False))
 
     async def do_enableCameraCableWrapTracking(self, data):
         self.assert_enabled()
-        await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
+        # await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
         if self.camera_cable_wrap_task.done():
             self.camera_cable_wrap_task = asyncio.create_task(
                 self.camera_cable_wrap_loop()
