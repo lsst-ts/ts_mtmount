@@ -240,10 +240,10 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertTrue(ccw_device.enabled)
             self.assertTrue(ccw_device.tracking_enabled)
 
-            async with salobj.Controller(name="Rotator") as rotator:
+            async with salobj.Controller(name="MTRotator") as rotator:
                 self.assertTrue(self.mock_controller.command_queue.empty())
 
-                # Test regular tracking mode. CCW and Rotator start in sync.
+                # Test regular tracking mode. CCW and MTRotator start in sync.
                 position0 = 0.0
                 velocity = 0.1
                 tai0 = salobj.current_tai()
@@ -259,7 +259,14 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                         tai = previous_tai + 0.001
                     dt = tai - tai0
                     position = position0 + velocity * dt
-                    rotator.tel_Application.set_put(Position=position, Demand=position)
+                    rotator.tel_rotation.set_put(
+                        demandPosition=position,
+                        demandVelocity=velocity,
+                        demandAcceleration=0,
+                        actualPosition=position,
+                        actualVelocity=velocity,
+                        timestamp=tai,
+                    )
                     command = await self.next_lowlevel_command()
                     delay = salobj.current_tai() - tai
 
@@ -320,7 +327,14 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 # Check that rotator targets are ignored after
                 # tracking is disabled.
                 for i in range(2):
-                    rotator.tel_Application.set_put(Position=45)
+                    rotator.tel_rotation.set_put(
+                        demandPosition=45,
+                        demandVelocity=1,
+                        demandAcceleration=0,
+                        actualPosition=45,
+                        actualVelocity=1,
+                        timestamp=salobj.current_tai(),
+                    )
                     await asyncio.sleep(0.1)
                 self.assertTrue(self.mock_controller.command_queue.empty())
 
