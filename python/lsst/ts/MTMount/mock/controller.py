@@ -100,6 +100,7 @@ class Controller:
         self.command_dict[enums.CommandCode.BOTH_AXES_MOVE] = self.do_both_axes_move
         self.command_dict[enums.CommandCode.BOTH_AXES_STOP] = self.do_both_axes_stop
         self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
+        self.command_dict[enums.CommandCode.ASK_FOR_COMMAND] = self.do_nothing
 
         self.sal_controller = salobj.Controller(name="MTMount")
         self.read_loop_task = asyncio.Future()
@@ -131,7 +132,6 @@ class Controller:
         state_strs = [
             "On" if device.power_on else "Off",
             "DriveEnabled" if device.enabled else "DriveDisabled",
-            "TrackingEnabled" if device.tracking_enabled else "TrackingDisabled",
         ]
         kwargs = {
             f"{prefix}_Status": "/".join(state_strs),
@@ -167,7 +167,6 @@ class Controller:
         state_strs = [
             "On" if device.power_on else "Off",
             "DriveEnabled" if device.enabled else "DriveDisabled",
-            "TrackingEnabled" if device.tracking_enabled else "TrackingDisabled",
         ]
         self.sal_controller.tel_Camera_Cable_Wrap.set_put(
             CCW_Status="/".join(state_strs),
@@ -423,6 +422,10 @@ class Controller:
         )
         self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_track(azimuth_command)
         self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_track(elevation_command)
+
+    def do_nothing(self, command):
+        """A no-op for commands such as ASK_FOR_COMMAND."""
+        pass
 
     async def monitor_command(self, command, task):
         try:

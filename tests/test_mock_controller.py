@@ -260,24 +260,15 @@ class MockControllerTestCase(asynctest.TestCase):
                 device.actuator.position(), device.actuator.max_position
             )
 
-            # Issue a command (AzimuthAxisTrack) that gets no Done reply
-            # but first enable the device and tracking
+            # Issue a command (AzimuthAxisTrack) that gets no Done reply,
+            # but first enable the device.
             device = self.controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
             self.assertFalse(device.power_on)
             self.assertFalse(device.enabled)
-            self.assertFalse(device.tracking_enabled)
             power_on_command = MTMount.commands.AzimuthAxisPower(on=True)
             await self.run_command(power_on_command, use_read_loop=use_read_loop)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=True
-            )
-            await self.run_command(enable_tracking_command, use_read_loop=use_read_loop)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertTrue(device.tracking_enabled)
             track_command = MTMount.commands.AzimuthAxisTrack(
                 position=45, velocity=0, tai=salobj.current_tai()
             )
@@ -286,18 +277,12 @@ class MockControllerTestCase(asynctest.TestCase):
             )
             # Issue one more command to be sure we really didn't get
             # a Done reply for the previous command
-            disable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=False
-            )
-            await self.run_command(
-                disable_tracking_command, use_read_loop=use_read_loop
-            )
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
+            power_off_command = MTMount.commands.AzimuthAxisPower(on=False)
+            await self.run_command(power_off_command, use_read_loop=use_read_loop)
+            self.assertFalse(device.power_on)
+            self.assertFalse(device.enabled)
 
-            # Try a command that will fail
-            # (tracking while tracking not enabled)
+            # Try a command that will fail: tracking while axes not enabled.
             await self.run_command(
                 track_command, should_fail=True, use_read_loop=use_read_loop
             )
@@ -367,14 +352,6 @@ class MockControllerTestCase(asynctest.TestCase):
             await self.run_command(power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=True
-            )
-            await self.run_command(enable_tracking_command, use_read_loop=True)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertTrue(device.tracking_enabled)
 
             start_position = device.actuator.path.at(salobj.current_tai()).position
             end_position = start_position + 3
@@ -408,24 +385,6 @@ class MockControllerTestCase(asynctest.TestCase):
                 previous_tai = tai
                 await asyncio.sleep(0.1)
 
-            disable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=False
-            )
-            nonack_replies = await self.run_command(
-                disable_tracking_command,
-                use_read_loop=True,
-                noack_reply_types=[MTMount.replies.InPositionReply],
-                return_others=False,
-            )
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
-            self.assertEqual(len(nonack_replies), 1)
-            reply = nonack_replies[0]
-            self.assertIsInstance(reply, MTMount.replies.InPositionReply)
-            self.assertFalse(reply.in_position)
-            self.assertEqual(reply.what, 0)
-
     async def test_move(self):
         """Test the <axis>AxisMove command and InPosition replies.
         """
@@ -445,7 +404,6 @@ class MockControllerTestCase(asynctest.TestCase):
             await self.run_command(power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
 
             start_position = device.actuator.path.at(salobj.current_tai()).position
             end_position = start_position + 1
@@ -463,7 +421,6 @@ class MockControllerTestCase(asynctest.TestCase):
             print(f"Move duration={dt:0.2f} second")
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
             self.assertEqual(len(nonack_replies), 1)
             reply = nonack_replies[0]
             self.assertTrue(reply.in_position)

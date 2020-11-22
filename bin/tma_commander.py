@@ -135,7 +135,6 @@ class Commander:
             safety_reset=MTMount.commands.SafetyReset,
             ask_for_command=MTMount.commands.AskForCommand,
             ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
-            ccw_enable_tracking=MTMount.commands.CameraCableWrapEnableTracking,
             ccw_move=MTMount.commands.CameraCableWrapMove,
             ccw_power=MTMount.commands.CameraCableWrapPower,
             ccw_reset_alarm=MTMount.commands.CameraCableWrapResetAlarm,
