@@ -59,10 +59,10 @@ class AxisDevice(BaseDevice):
         device_id = enums.DeviceId(device_id)
         device_limits = limits.LimitsDict[device_id].scaled()
         self.enabled = False
-        self.tracking_enabled = False
         # Has a target position been specified?
         # Set True when tracking or moving point to point and False otherwise.
         self.has_target = False
+        self.async_move = device_id != enums.DeviceId.CAMERA_CABLE_WRAP
         self.actuator = simactuators.TrackingActuator(
             min_position=device_limits.min_position,
             max_position=device_limits.max_position,
@@ -71,6 +71,7 @@ class AxisDevice(BaseDevice):
             dtmax_track=0.2,
         )
         self._monitor_move_task = asyncio.Future()
+        self._monitor_move_task.set_result(None)
         super().__init__(controller=controller, device_id=device_id)
 
     @property
@@ -88,16 +89,6 @@ class AxisDevice(BaseDevice):
         self.assert_on()
         if not self.enabled:
             raise RuntimeError("Not enabled")
-
-    def assert_tracking_enabled(self, enabled):
-        """Raise `RuntimeError` if tracking is or is not enabled.
-        """
-        if enabled:
-            if not self.tracking_enabled:
-                raise RuntimeError("Tracking not enabled")
-        else:
-            if self.tracking_enabled:
-                raise RuntimeError("Tracking not disabled")
 
     async def close(self):
         await super().close()
@@ -145,7 +136,6 @@ class AxisDevice(BaseDevice):
         """
         self.supersede_move_command()
         self.abort()
-        self.tracking_enabled = False
         self.enabled = command.on
 
     def do_drive_reset(self, command):
@@ -158,19 +148,7 @@ class AxisDevice(BaseDevice):
         self.assert_on()
         self.supersede_move_command()
         self.abort()
-        self.tracking_enabled = False
         self.enabled = False
-
-    def do_enable_tracking(self, command):
-        """Enable or disable tracking mode.
-
-        The drive must be enabled.
-        """
-        self.assert_enabled()
-        self.supersede_move_command()
-        self.actuator.stop()
-        self.has_target = False
-        self.tracking_enabled = command.on
 
     def do_home(self, command):
         """Home the actuator.
@@ -204,7 +182,6 @@ class AxisDevice(BaseDevice):
     def do_power(self, command):
         if not command.on:
             self.supersede_move_command()
-            self.tracking_enabled = False
             self.actuator.stop()
         super().do_power(command)
         self.enabled = command.on
@@ -214,7 +191,6 @@ class AxisDevice(BaseDevice):
         """
         self.assert_enabled()
         self.supersede_move_command()
-        self.tracking_enabled = False
         self.actuator.stop()
         # I am not sure if this should clear the target.
         # It depends what the real controller reports for the "in position"
@@ -227,7 +203,6 @@ class AxisDevice(BaseDevice):
         The drive must be enabled and tracking must be enabled.
         """
         self.assert_enabled()
-        self.assert_tracking_enabled(True)
         self.supersede_move_command()
         self.actuator.set_target(
             tai=command.tai, position=command.position, velocity=command.velocity
@@ -252,8 +227,12 @@ class AxisDevice(BaseDevice):
            Minimum duration of move (sec)
         """
         self.assert_enabled()
-        self.assert_tracking_enabled(False)
-        self.supersede_move_command()
+
+        if self.async_move:
+            self.supersede_move_command()
+        elif not self._monitor_move_task.done():
+            raise RuntimeError("Device busy executing move.")
+
         tai = salobj.current_tai()
         self.actuator.set_target(tai=tai, position=position, velocity=0)
         self.has_target = True

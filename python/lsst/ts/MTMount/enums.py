@@ -129,6 +129,8 @@ class CommandCode(enum.IntEnum):
     CAMERA_CABLE_WRAP_DRIVE_ENABLE = 1006
     CAMERA_CABLE_WRAP_DRIVE_RESET = 1007
     CAMERA_CABLE_WRAP_MOVE_VELOCITY = 1008
+    # Turn on or off automatic following of the camera rotator
+    # in the PXI/operation manager. We don't use this.
     CAMERA_CABLE_WRAP_ENABLE_TRACKING = 1009
     BALANCE_POWER = 1101
     BALANCE_STOP = 1102

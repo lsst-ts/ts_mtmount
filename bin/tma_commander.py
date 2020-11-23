@@ -38,6 +38,7 @@ import argparse
 import asyncio
 import logging
 import sys
+import traceback
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
@@ -131,8 +132,9 @@ class Commander:
         self.command_dict = dict(
             az_power=MTMount.commands.AzimuthAxisPower,
             az_reset_alarm=MTMount.commands.AzimuthAxisResetAlarm,
+            safety_reset=MTMount.commands.SafetyReset,
+            ask_for_command=MTMount.commands.AskForCommand,
             ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
-            ccw_enable_tracking=MTMount.commands.CameraCableWrapEnableTracking,
             ccw_move=MTMount.commands.CameraCableWrapMove,
             ccw_power=MTMount.commands.CameraCableWrapPower,
             ccw_reset_alarm=MTMount.commands.CameraCableWrapResetAlarm,
@@ -290,6 +292,7 @@ help  # Print this help
                         await self.handle_command(cmd_name, args)
                 except Exception as e:
                     print(f"Command {cmd_name} failed: {e}")
+                    print(traceback.format_exc())
                     continue
         finally:
             await self.close()

@@ -239,12 +239,16 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             ccw_actuator = ccw_device.actuator
             self.assertTrue(ccw_device.power_on)
             self.assertTrue(ccw_device.enabled)
-            self.assertTrue(ccw_device.tracking_enabled)
 
-            async with salobj.Controller(name="Rotator") as rotator:
+            # Start the camera cable wrap tracking loop.
+            await self.remote.cmd_enableCameraCableWrapTracking.set_start(
+                timeout=STD_TIMEOUT
+            )
+
+            async with salobj.Controller(name="MTRotator") as rotator:
                 self.assertTrue(self.mock_controller.command_queue.empty())
 
-                # Test regular tracking mode. CCW and Rotator start in sync.
+                # Test regular tracking mode. CCW and MTRotator start in sync.
                 position0 = 0.0
                 velocity = 0.1
                 tai0 = salobj.current_tai()
@@ -260,7 +264,14 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                         tai = previous_tai + 0.001
                     dt = tai - tai0
                     position = position0 + velocity * dt
-                    rotator.tel_Application.set_put(Position=position, Demand=position)
+                    rotator.tel_rotation.set_put(
+                        demandPosition=position,
+                        demandVelocity=velocity,
+                        demandAcceleration=0,
+                        actualPosition=position,
+                        actualVelocity=velocity,
+                        timestamp=tai,
+                    )
                     command = await self.next_lowlevel_command()
                     delay = salobj.current_tai() - tai
 
@@ -305,23 +316,24 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     previous_tai = tai
                     previous_delay = delay
 
+                # Stop the camera cable wrap tracking loop.
                 await self.remote.cmd_disableCameraCableWrapTracking.start(
                     timeout=STD_TIMEOUT
                 )
-                command = await self.next_lowlevel_command()
-                self.assertEqual(
-                    command.command_code,
-                    MTMount.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING,
-                )
-                self.assertFalse(command.on)
                 self.assertTrue(ccw_device.enabled)
-                self.assertFalse(ccw_device.tracking_enabled)
                 self.assertTrue(self.mock_controller.command_queue.empty())
 
                 # Check that rotator targets are ignored after
                 # tracking is disabled.
                 for i in range(2):
-                    rotator.tel_Application.set_put(Position=45)
+                    rotator.tel_rotation.set_put(
+                        demandPosition=45,
+                        demandVelocity=1,
+                        demandAcceleration=0,
+                        actualPosition=45,
+                        actualVelocity=1,
+                        timestamp=salobj.current_tai(),
+                    )
                     await asyncio.sleep(0.1)
                 self.assertTrue(self.mock_controller.command_queue.empty())
 
@@ -463,8 +475,6 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             mock_elevation = self.mock_controller.device_dict[
                 MTMount.DeviceId.ELEVATION_AXIS
             ]
-            self.assertFalse(mock_azimuth.tracking_enabled)
-            self.assertFalse(mock_elevation.tracking_enabled)
 
             tai = salobj.current_tai()
             initial_azimuth = mock_azimuth.actuator.path.at(tai).position
@@ -481,8 +491,6 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
 
             # Enable tracking and check mock axis controllers
             await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
-            self.assertTrue(mock_azimuth.tracking_enabled)
-            self.assertTrue(mock_elevation.tracking_enabled)
 
             # Slew and track until both axes are in position.
             # Make the elevation move significantly smaller,
@@ -519,8 +527,6 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
 
             # Disable tracking and check axis controllers
             await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
-            self.assertFalse(mock_azimuth.tracking_enabled)
-            self.assertFalse(mock_elevation.tracking_enabled)
 
             # Check that both axes are no longer in position.
             # We don't yet know the details of Tekniker's InPosition message
@@ -545,8 +551,6 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         mock_elevation = self.mock_controller.device_dict[
             MTMount.DeviceId.ELEVATION_AXIS
         ]
-        self.assertTrue(mock_azimuth.tracking_enabled)
-        self.assertTrue(mock_elevation.tracking_enabled)
         azimuth_actuator = mock_azimuth.actuator
         elevation_actuator = mock_elevation.actuator
 
