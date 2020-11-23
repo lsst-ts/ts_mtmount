@@ -6,6 +6,27 @@
 Version History
 ###############
 
+v0.8.0
+======
+
+Changes:
+
+* Update to use and require ts_xml 7.
+
+    * Use MTRotator's ``rotation`` telemetry topic instead of Rotator's ``Application`` telemetry topic
+      (in the camera cable wrap following code).
+    * Improve use of MTMount telemetry in the same code.
+      Adjust the camera cable wrap position to match the camera rotator timestamp,
+      and use what are likely better fields for that position.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for NewMTMount, MTMount, and MTRotator from ts_xml 7
+
 v0.7.4
 ======
 
@@ -19,7 +40,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 2
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.7.3
 ======
@@ -35,7 +56,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 2
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.7.2
 ======
@@ -51,7 +72,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 2
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.7.1
 ======
@@ -66,7 +87,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 2
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.7.0
 ======
@@ -83,7 +104,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 2
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.6.1
 ======
@@ -99,7 +120,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 1 (with salobj 5) or 2 (with salobj 6)
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.6.0
 ======
@@ -121,7 +142,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 1
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.5.0
 ======
@@ -137,7 +158,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm
 * ts_idl
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.4.0
 ======
@@ -152,7 +173,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm
 * ts_idl
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.3.0
 ======
@@ -167,7 +188,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm
 * ts_idl
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.2.0
 ======
@@ -186,7 +207,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm
 * ts_idl
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.1.0
 ======
@@ -199,4 +220,4 @@ Requires:
 * ts_simactuators 1
 * ts_hexrotcomm
 * ts_idl
-* IDL files for NewMTMount and MTMount from ts_xml 4.8
+* IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
