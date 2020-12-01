@@ -25,6 +25,7 @@ __all__ = [
     "DeviceId",
     "EnabledState",
     "ReplyCode",
+    "Commander",
     "Source",
     "SubsystemId",
 ]
@@ -243,6 +244,19 @@ class ReplyCode(enum.IntEnum):
     WARNING = 4
     ON_STATE_INFO = 5
     IN_POSITION = 6
+
+
+class Commander(enum.IntEnum):
+    """Values for the AskForCommand command.
+
+    Note: these values may change in Tekniker's upgrade.
+    1 was originally TCS (Tekniker's CSC).
+    """
+
+    NONE = 0
+    CSC = 1
+    EUI = 2
+    HHD = 3
 
 
 class Source(enum.IntEnum):
