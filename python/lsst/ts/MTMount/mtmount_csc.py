@@ -112,6 +112,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.command_lock = asyncio.Lock()
 
+        # Does the CSC have control of the mount?
+        # Once the low-level controller reports this in an event,
+        # add a SAL event and get the value from that.
+        self.has_control = False
+
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = salobj.make_done_future()
 
@@ -174,6 +179,52 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.mtmount = salobj.Remote(
             domain=self.domain, name="MTMount", include=["Camera_Cable_Wrap"]
         )
+
+    async def begin_enable(self, data):
+        """Take control of the mount and initialize devices.
+
+        If taking control fails, raise an exception to leave the state
+        as DISABLED.
+        If initializing fails, go to FAULT state (in enable_devices).
+        """
+        await super().begin_enable(data)
+        if not self.has_control:
+            try:
+                self.log.info("Ask for permission to command the mount.")
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.CSC)
+                )
+                self.has_control = True
+            except Exception as e:
+                raise salobj.ExpectedError(
+                    f"The CSC was not allowed to command the mount: {e}"
+                )
+
+        self.enable_task.cancel()
+        self.enable_task = asyncio.create_task(self.enable_devices())
+        await self.enable_task
+
+    async def begin_disable(self, data):
+        try:
+            await super().begin_disable(data)
+            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
+            if self.has_control and self.connected:
+                self.disable_task.cancel()
+                self.disable_task = asyncio.create_task(self.disable_devices())
+                await self.disable_task
+
+            try:
+                self.log.info("Give up command of the mount.")
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.NONE)
+                )
+                self.has_control = True
+            except Exception as e:
+                self.log.warning(
+                    f"The CSC was not able to give up command of the mount: {e}"
+                )
+        finally:
+            self.has_control = False
 
     @property
     def connected(self):
@@ -413,17 +464,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.connect_task.cancel()
                 self.connect_task = asyncio.create_task(self.connect())
                 await self.connect_task
-
-            if self.enabled_state is not enums.EnabledState.ENABLED:
-                self.enable_task.cancel()
-                self.enable_task = asyncio.create_task(self.enable_devices())
-                await self.enable_task
         else:
-            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
-            if self.enabled_state is not enums.EnabledState.DISABLED:
-                self.disable_task.cancel()
-                self.disable_task = asyncio.create_task(self.disable_devices())
-                await self.disable_task
             await self.close_communication()
 
     async def send_command(self, command, do_lock=True):
