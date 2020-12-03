@@ -6,6 +6,22 @@
 Version History
 ###############
 
+v0.8.1
+======
+
+Changes:
+
+* Update Jenkinsfile.conda to use the shared library.
+* Pin the versions of ts_idl and ts_salobj in conda/meta.yaml.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for NewMTMount, MTMount, and MTRotator from ts_xml 7
+
 v0.8.0
 ======
 
