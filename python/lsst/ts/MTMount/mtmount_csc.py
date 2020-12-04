@@ -112,13 +112,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.command_lock = asyncio.Lock()
 
+        # Does the CSC have control of the mount?
+        # Once the low-level controller reports this in an event,
+        # add a SAL event and get the value from that.
+        self.has_control = False
+
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = salobj.make_done_future()
 
         # Task to track enabling and disabling
         self.enable_task = salobj.make_done_future()
         self.disable_task = salobj.make_done_future()
-        self.enabled_state = enums.EnabledState.DISABLED
 
         # Task for self.camera_cable_wrap_loop
         self.camera_cable_wrap_task = salobj.make_done_future()
@@ -174,6 +178,52 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.mtmount = salobj.Remote(
             domain=self.domain, name="MTMount", include=["Camera_Cable_Wrap"]
         )
+
+    async def begin_enable(self, data):
+        """Take control of the mount and initialize devices.
+
+        If taking control fails, raise an exception to leave the state
+        as DISABLED.
+        If initializing fails, go to FAULT state (in enable_devices).
+        """
+        await super().begin_enable(data)
+        if not self.has_control:
+            try:
+                self.log.info("Ask for permission to command the mount.")
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.CSC)
+                )
+                self.has_control = True
+            except Exception as e:
+                raise salobj.ExpectedError(
+                    f"The CSC was not allowed to command the mount: {e}"
+                )
+
+        self.enable_task.cancel()
+        self.enable_task = asyncio.create_task(self.enable_devices())
+        await self.enable_task
+
+    async def begin_disable(self, data):
+        try:
+            await super().begin_disable(data)
+            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
+            if self.has_control and self.connected:
+                self.disable_task.cancel()
+                self.disable_task = asyncio.create_task(self.disable_devices())
+                await self.disable_task
+
+            try:
+                self.log.info("Give up command of the mount.")
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.NONE)
+                )
+                self.has_control = True
+            except Exception as e:
+                self.log.warning(
+                    f"The CSC was not able to give up command of the mount: {e}"
+                )
+        finally:
+            self.has_control = False
 
     @property
     def connected(self):
@@ -342,7 +392,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def enable_devices(self):
         self.log.info("Enable devices")
         self.disable_task.cancel()
-        self.enabled_state = enums.EnabledState.ENABLING
         try:
             enable_commands = [
                 commands.TopEndChillerResetAlarm(),
@@ -362,9 +411,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.CameraCableWrapEnableTracking(on=True),
             ]
             await self.send_commands(*enable_commands)
-            self.enabled_state = enums.EnabledState.ENABLED
         except Exception as e:
-            self.enabled_state = enums.EnabledState.ENABLE_FAILED
             err_msg = "Failed to enable one or more devices"
             self.log.exception(err_msg)
             self.fault(
@@ -378,34 +425,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def disable_devices(self):
         self.log.info("Disable devices")
         self.enable_task.cancel()
-        if self.enabled_state in (
-            enums.EnabledState.DISABLING,
-            enums.EnabledState.DISABLED,
-            enums.EnabledState.DISABLE_FAILED,
-        ):
-            return
         if not self.connected:
-            self.enabled_state = enums.EnabledState.DISABLED
-        else:
-            self.enabled_state = enums.EnabledState.DISABLING
-            try:
-                disable_commands = [
-                    commands.BothAxesStop(),
-                    commands.CameraCableWrapStop(),
-                    commands.AzimuthAxisPower(on=False),
-                    commands.ElevationAxisPower(on=False),
-                    commands.CameraCableWrapPower(on=False),
-                ]
-                await self.send_commands(*disable_commands)
-                self.enabled_state = enums.EnabledState.DISABLED
-            except Exception as e:
-                self.enabled_state = enums.EnabledState.DISABLE_FAILED
-                err_msg = "Failed to disable one or more devices"
-                self.log.exception(err_msg)
-                self.fault(
-                    code=enums.CscErrorCode.ACTUATOR_DISABLE_ERROR,
-                    report=f"{err_msg}: {e}",
-                )
+            return
+        try:
+            disable_commands = [
+                commands.BothAxesStop(),
+                commands.CameraCableWrapStop(),
+                commands.AzimuthAxisPower(on=False),
+                commands.ElevationAxisPower(on=False),
+                commands.CameraCableWrapPower(on=False),
+            ]
+            await self.send_commands(*disable_commands)
+        except Exception as e:
+            err_msg = "Failed to disable one or more devices"
+            self.log.exception(err_msg)
+            self.fault(
+                code=enums.CscErrorCode.ACTUATOR_DISABLE_ERROR,
+                report=f"{err_msg}: {e}",
+            )
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
@@ -413,17 +450,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.connect_task.cancel()
                 self.connect_task = asyncio.create_task(self.connect())
                 await self.connect_task
-
-            if self.enabled_state is not enums.EnabledState.ENABLED:
-                self.enable_task.cancel()
-                self.enable_task = asyncio.create_task(self.enable_devices())
-                await self.enable_task
         else:
-            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
-            if self.enabled_state is not enums.EnabledState.DISABLED:
-                self.disable_task.cancel()
-                self.disable_task = asyncio.create_task(self.disable_devices())
-                await self.disable_task
             await self.close_communication()
 
     async def send_command(self, command, do_lock=True):

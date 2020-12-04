@@ -38,16 +38,7 @@ import enum
 
 import astropy.time
 
-from . import constants
 from . import enums
-
-# Temporary hack until the CSC has a dedicated port.
-if constants.CSC_COMMAND_PORT == constants.EUI_COMMAND_PORT:
-    SOURCE_ID = enums.Source.EUI
-elif constants.CSC_COMMAND_PORT == constants.HHD_COMMAND_PORT:
-    SOURCE_ID = enums.Source.HHD
-else:
-    raise RuntimeError("Unknown constants.CSC_COMMAND_PORT; cannot set SOURCE_ID")
 
 
 class BaseFieldInfo(metaclass=abc.ABCMeta):
@@ -260,6 +251,9 @@ class IntFieldInfo(BaseFieldInfo):
             raise ValueError("Blank string and empty_is_default False")
         return int(strval)
 
+    def str_from_value(self, value):
+        return f"{int(value)}"
+
 
 class StrFieldInfo(BaseFieldInfo):
     """A str field.
@@ -383,7 +377,7 @@ class SourceFieldInfo(EnumFieldInfo):
             doc=f"Source of the {what}; a `Source`",
             dtype=enums.Source,
             # TODO: change this when we have a value for the CSC
-            default=SOURCE_ID,
+            default=enums.Source.CSC,
         )
 
 

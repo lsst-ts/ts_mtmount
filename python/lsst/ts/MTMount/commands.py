@@ -23,6 +23,7 @@ __all__ = [
     "NUM_HEADER_FIELDS",
     "AckOnlyCommandCodes",
     "Command",
+    "AskForCommand",
     "AzimuthAxisDriveEnable",
     "AzimuthAxisDriveReset",
     "AzimuthAxisEnableTracking",
@@ -70,6 +71,7 @@ __all__ = [
     "OilSupplySystemPowerMainPump",
     "OilSupplySystemPowerOil",
     "OilSupplySystemResetAlarm",
+    "SafetyReset",
     "TopEndChillerPower",
     "TopEndChillerResetAlarm",
     "TopEndChillerTrackAmbient",
@@ -208,6 +210,20 @@ Other elevation and azimuth axis commands:
 * <AXIS>_AXIS_HOME
 * <AXIS>_AXIS_RESET_ALARM
 """
+
+
+class AskForCommand(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ASK_FOR_COMMAND,
+        (
+            field_info.EnumFieldInfo(
+                name="commander",
+                doc="Who should have command",
+                dtype=enums.Commander,
+                default=enums.Commander.CSC,
+            ),
+        ),
+    )
 
 
 class AzimuthAxisDriveEnable(Command):
@@ -622,6 +638,10 @@ class OilSupplySystemResetAlarm(Command):
     )
 
 
+class SafetyReset(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.SAFETY_RESET,)
+
+
 class TopEndChillerPower(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.TOP_END_CHILLER_POWER, _OnOffParameters,
@@ -642,6 +662,7 @@ class TopEndChillerTrackAmbient(Command):
 
 
 Commands = (
+    AskForCommand,
     AzimuthAxisDriveEnable,
     AzimuthAxisDriveReset,
     AzimuthAxisEnableTracking,
@@ -689,6 +710,7 @@ Commands = (
     OilSupplySystemPowerMainPump,
     OilSupplySystemPowerOil,
     OilSupplySystemResetAlarm,
+    SafetyReset,
     TopEndChillerPower,
     TopEndChillerResetAlarm,
     TopEndChillerTrackAmbient,

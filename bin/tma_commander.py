@@ -38,6 +38,7 @@ import argparse
 import asyncio
 import logging
 import sys
+import traceback
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
@@ -129,17 +130,33 @@ class Commander:
         )
         self.command_loop_task = asyncio.create_task(self.command_loop())
         self.command_dict = dict(
+            ask_for_command=MTMount.commands.AskForCommand,
+            az_drive_enable=MTMount.commands.AzimuthAxisDriveEnable,
+            az_drive_reset=MTMount.commands.AzimuthAxisDriveReset,
+            az_enable_tracking=MTMount.commands.AzimuthAxisEnableTracking,
+            az_home=MTMount.commands.AzimuthAxisHome,
+            az_move=MTMount.commands.AzimuthAxisMove,
             az_power=MTMount.commands.AzimuthAxisPower,
             az_reset_alarm=MTMount.commands.AzimuthAxisResetAlarm,
+            az_stop=MTMount.commands.AzimuthAxisStop,
+            az_track=MTMount.commands.AzimuthAxisTrack,
             ccw_drive_enable=MTMount.commands.CameraCableWrapDriveEnable,
+            ccw_drive_reset=MTMount.commands.CameraCableWrapDriveReset,
             ccw_enable_tracking=MTMount.commands.CameraCableWrapEnableTracking,
             ccw_move=MTMount.commands.CameraCableWrapMove,
             ccw_power=MTMount.commands.CameraCableWrapPower,
             ccw_reset_alarm=MTMount.commands.CameraCableWrapResetAlarm,
             ccw_stop=MTMount.commands.CameraCableWrapStop,
             ccw_track=MTMount.commands.CameraCableWrapTrack,
+            el_drive_enable=MTMount.commands.ElevationAxisDriveEnable,
+            el_drive_reset=MTMount.commands.ElevationAxisDriveReset,
+            el_enable_tracking=MTMount.commands.ElevationAxisEnableTracking,
+            el_home=MTMount.commands.ElevationAxisHome,
+            el_move=MTMount.commands.ElevationAxisMove,
             el_power=MTMount.commands.ElevationAxisPower,
             el_reset_alarm=MTMount.commands.ElevationAxisResetAlarm,
+            el_stop=MTMount.commands.ElevationAxisStop,
+            el_track=MTMount.commands.ElevationAxisTrack,
             mc_deploy=MTMount.commands.MirrorCoversDeploy,
             mc_power=MTMount.commands.MirrorCoversPower,
             mc_reset_alarm=MTMount.commands.MirrorCoversResetAlarm,
@@ -151,6 +168,7 @@ class Commander:
             mps_reset_alarm=MTMount.commands.MainPowerSupplyResetAlarm,
             oss_power=MTMount.commands.OilSupplySystemPower,
             oss_reset_alarm=MTMount.commands.OilSupplySystemResetAlarm,
+            safety_reset=MTMount.commands.SafetyReset,
             tec_power=MTMount.commands.TopEndChillerPower,
             tec_reset_alarm=MTMount.commands.TopEndChillerResetAlarm,
         )
@@ -290,6 +308,7 @@ help  # Print this help
                         await self.handle_command(cmd_name, args)
                 except Exception as e:
                     print(f"Command {cmd_name} failed: {e}")
+                    print(traceback.format_exc())
                     continue
         finally:
             await self.close()

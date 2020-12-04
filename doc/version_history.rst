@@ -6,6 +6,23 @@
 Version History
 ###############
 
+v0.9.0
+======
+
+Changes:
+
+* Update the `MTMountCsc` to send the ``ASK_FOR_COMMAND`` low-level command when going to ``ENABLED`` state.
+  Only send device initialization and shutdown commands if the CSC has command.
+* Add more commands to the TMA commander.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for NewMTMount, MTMount, and MTRotator from ts_xml 7
+
 v0.8.1
 ======
 
