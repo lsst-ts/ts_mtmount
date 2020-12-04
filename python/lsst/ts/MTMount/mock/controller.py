@@ -56,7 +56,8 @@ class Controller:
     """Simulate the most basic responses from the low-level controller
     (Operation Manager).
 
-    Acknowledge all commands and mark as done.
+    If the commander is `Commander.CSC` then acknowledge all commands and mark
+    as done. If not, then reject all commands except `Command.ASK_FOR_COMMAND`.
     Also output a few other replies, to exercise the code.
 
     Parameters
@@ -69,12 +70,25 @@ class Controller:
     reconnect : `bool`, optional
         Try to reconnect if the connection is lost?
         Defaults to False for unit tests.
+    commander : `Commander`, optional
+        Who initially has command. Defaults to `Commander.NONE`,
+        which matches the real controller. Two values are special:
+
+        * `Commander.CSC`: there is no need to issue `Command.ASK_FOR_COMMAND`
+          before issuing other commands. This can simplify unit tests.
+        * `Commander.HHD`: `Command.ASK_FOR_COMMAND` is rejected for any
+          other commander. This reflects the real system, because nobody
+          can take command from the handheld device. This offers a convenient
+          way to test `Command.ASK_FOR_COMMAND` failures.
     """
 
-    def __init__(self, command_port, log, reconnect=False):
+    def __init__(
+        self, command_port, log, reconnect=False, commander=enums.Commander.NONE
+    ):
         self.command_port = command_port
         self.log = log.getChild("Controller")
         self.reconnect = reconnect
+        self.commander = commander
         self.closing = False
         self.telemetry_interval = 0.2  # Seconds
         # Maximum position and velocity error,
@@ -97,9 +111,11 @@ class Controller:
         # Dict of DeviceId: mock device
         self.device_dict = {}
         self.add_all_devices()
+        self.command_dict[enums.CommandCode.ASK_FOR_COMMAND] = self.do_ask_for_command
         self.command_dict[enums.CommandCode.BOTH_AXES_MOVE] = self.do_both_axes_move
         self.command_dict[enums.CommandCode.BOTH_AXES_STOP] = self.do_both_axes_stop
         self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
+        self.command_dict[enums.CommandCode.SAFETY_RESET] = self.do_safety_reset
 
         self.sal_controller = salobj.Controller(name="MTMount")
         self.read_loop_task = asyncio.Future()
@@ -322,6 +338,16 @@ class Controller:
                 self.done_task.set_result(None)
 
     async def handle_command(self, command):
+        if (
+            self.commander != enums.Commander.CSC
+            and command.command_code != enums.CommandCode.ASK_FOR_COMMAND
+        ):
+            await self.write_noack(
+                command=command,
+                explanation=f"The commander is {self.commander!r}, not the CSC.",
+            )
+            return
+
         command_func = self.command_dict.get(command.command_code)
         if command_func is None:
             await self.write_noack(
@@ -385,6 +411,25 @@ class Controller:
         state_str = "connected to" if server.connected else "disconnected from"
         self.log.info(f"Mock controller {state_str} the CSC")
 
+    def do_ask_for_command(self, command):
+        """Handle ASK_FOR_COMMAND.
+
+        For this mock controller to accept other commands,
+        the commander must be `enums.Commander.CSC`.
+
+        If the HHD has command then no other commander is allowed.
+        This reflects reality and offers a nice way to test what happens
+        if ASK_FOR_COMMAND fails.
+        """
+        if (
+            command.commander != enums.Commander.HHD
+            and self.commander == enums.Commander.HHD
+        ):
+            raise RuntimeError(
+                f"HHD has command; cannot give command to to {command.commander!r}"
+            )
+        self.commander = command.commander
+
     def do_both_axes_move(self, command):
         azimuth_command = commands.AzimuthAxisMove(
             sequence_id=command.sequence_id, position=command.azimuth,
@@ -423,6 +468,10 @@ class Controller:
         )
         self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_track(azimuth_command)
         self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_track(elevation_command)
+
+    def do_safety_reset(self, command):
+        """This is presently a no-op."""
+        pass
 
     async def monitor_command(self, command, task):
         try:

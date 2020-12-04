@@ -58,7 +58,24 @@ class MockControllerTestCase(asynctest.TestCase):
         del MTMount.commands.CommandDict[UNSUPPORTED_COMMAND_CODE]
 
     @contextlib.asynccontextmanager
-    async def make_controller(self):
+    async def make_controller(self, commander=MTMount.Commander.CSC):
+        """Make a mock controller as self.controller.
+
+        Parameters
+        ----------
+    commander : `Commander`, optional
+        Who initially has command. Defaults to `Commander.CSC`,
+        so tests need not issue the ``ASK_FOR_COMMAND`` command
+        before issuing other commands.
+
+        Other special values:
+
+        * `Commander.NONE`: this is now the real system starts up.
+        * `Commander.HHD`: the ``ASK_FOR_COMMAND`` command is rejected
+          for any other commander. This reflects the real system, because
+          nobody can take command from the handheld device. This offers
+          a convenient way to test ``ASK_FOR_COMMAND`` failures.
+        """
         log = logging.getLogger()
         command_port = next(port_generator)
         self.communicator = MTMount.Communicator(
@@ -73,7 +90,9 @@ class MockControllerTestCase(asynctest.TestCase):
             connect=False,
             connect_callback=None,
         )
-        self.controller = MTMount.mock.Controller(command_port=command_port, log=log)
+        self.controller = MTMount.mock.Controller(
+            command_port=command_port, log=log, commander=commander
+        )
         connect_task = asyncio.create_task(self.communicator.connect())
         t0 = time.monotonic()
         await asyncio.wait_for(
@@ -231,6 +250,41 @@ class MockControllerTestCase(asynctest.TestCase):
         else:
             self.assertEqual(len(nonack_replies), len(noack_reply_types))
         return nonack_replies
+
+    async def test_ask_for_command_ok(self):
+        async with self.make_controller(commander=MTMount.Commander.NONE):
+            # Until AskForCommand is issued, all other commands should fail;
+            # try a sampling of commands.
+            sample_commands = (
+                MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
+                MTMount.commands.AzimuthAxisPower(on=True),
+                MTMount.commands.ElevationAxisPower(on=True),
+            )
+            for command in sample_commands:
+                await self.run_command(command, should_fail=True, use_read_loop=True)
+            await self.run_command(MTMount.commands.AskForCommand(), use_read_loop=True)
+            for command in sample_commands:
+                await self.run_command(command, use_read_loop=True)
+
+    async def test_ask_for_command_fail(self):
+        async with self.make_controller(commander=MTMount.Commander.HHD):
+            # commander=HHD prevents assigning command to any other commander.
+            sample_commands = (
+                MTMount.commands.AskForCommand(commander=MTMount.Commander.NONE),
+                MTMount.commands.AskForCommand(commander=MTMount.Commander.CSC),
+                MTMount.commands.AskForCommand(commander=MTMount.Commander.EUI),
+                MTMount.commands.AskForCommand(),  # defaults to CSC
+                MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
+                MTMount.commands.AzimuthAxisPower(on=True),
+                MTMount.commands.ElevationAxisPower(on=True),
+            )
+            for command in sample_commands:
+                await self.run_command(command, should_fail=True, use_read_loop=True)
+            # Asking for command by the HHD should work, though it is a no-op.
+            await self.run_command(
+                MTMount.commands.AskForCommand(commander=MTMount.Commander.HHD),
+                use_read_loop=True,
+            )
 
     async def test_read_loop(self):
         await self.check_command_sequence(use_read_loop=True)
