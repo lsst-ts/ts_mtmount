@@ -26,6 +26,7 @@ __all__ = [
     "AskForCommand",
     "AzimuthAxisDriveEnable",
     "AzimuthAxisDriveReset",
+    "AzimuthAxisEnableTracking",
     "AzimuthAxisHome",
     "AzimuthAxisMove",
     "AzimuthAxisPower",
@@ -37,6 +38,7 @@ __all__ = [
     "BothAxesTrack",
     "CameraCableWrapDriveEnable",
     "CameraCableWrapDriveReset",
+    "CameraCableWrapEnableTracking",
     "CameraCableWrapMove",
     "CameraCableWrapPower",
     "CameraCableWrapResetAlarm",
@@ -46,6 +48,7 @@ __all__ = [
     "Enable",
     "ElevationAxisDriveEnable",
     "ElevationAxisDriveReset",
+    "ElevationAxisEnableTracking",
     "ElevationAxisHome",
     "ElevationAxisMove",
     "ElevationAxisPower",
@@ -213,10 +216,11 @@ class AskForCommand(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.ASK_FOR_COMMAND,
         (
-            field_info.IntFieldInfo(
+            field_info.EnumFieldInfo(
                 name="commander",
-                doc="Which commander to request ownership for? 2 = EUI, 3 = HDD",
-                default=2,
+                doc="Who should have command",
+                dtype=enums.Commander,
+                default=enums.Commander.HHD,
             ),
         ),
     )
@@ -244,6 +248,12 @@ class AzimuthAxisDriveReset(Command):
                 name="drive", doc="Drive index: one of -1 (all), ?", default=-1
             ),
         ),
+    )
+
+
+class AzimuthAxisEnableTracking(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.AZIMUTH_AXIS_ENABLE_TRACKING, _OnOffParameters
     )
 
 
@@ -361,6 +371,12 @@ class CameraCableWrapDriveReset(Command):
     )
 
 
+class CameraCableWrapEnableTracking(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING, _OnOffParameters
+    )
+
+
 class CameraCableWrapMove(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_MOVE, _MoveParameters
@@ -419,6 +435,12 @@ class ElevationAxisDriveReset(Command):
                 name="drive", doc="Drive index: one of -1 (all), ?", default=-1
             ),
         ),
+    )
+
+
+class ElevationAxisEnableTracking(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_AXIS_ENABLE_TRACKING, _OnOffParameters
     )
 
 
@@ -643,6 +665,7 @@ Commands = (
     AskForCommand,
     AzimuthAxisDriveEnable,
     AzimuthAxisDriveReset,
+    AzimuthAxisEnableTracking,
     AzimuthAxisHome,
     AzimuthAxisMove,
     AzimuthAxisPower,
@@ -654,6 +677,7 @@ Commands = (
     BothAxesTrack,
     CameraCableWrapDriveEnable,
     CameraCableWrapDriveReset,
+    CameraCableWrapEnableTracking,
     CameraCableWrapMove,
     CameraCableWrapPower,
     CameraCableWrapResetAlarm,
@@ -663,6 +687,7 @@ Commands = (
     Enable,
     ElevationAxisDriveEnable,
     ElevationAxisDriveReset,
+    ElevationAxisEnableTracking,
     ElevationAxisHome,
     ElevationAxisMove,
     ElevationAxisPower,

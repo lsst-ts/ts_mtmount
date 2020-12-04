@@ -25,6 +25,7 @@ __all__ = [
     "DeviceId",
     "EnabledState",
     "ReplyCode",
+    "Commander",
     "Source",
     "SubsystemId",
 ]
@@ -129,8 +130,6 @@ class CommandCode(enum.IntEnum):
     CAMERA_CABLE_WRAP_DRIVE_ENABLE = 1006
     CAMERA_CABLE_WRAP_DRIVE_RESET = 1007
     CAMERA_CABLE_WRAP_MOVE_VELOCITY = 1008
-    # Turn on or off automatic following of the camera rotator
-    # in the PXI/operation manager. We don't use this.
     CAMERA_CABLE_WRAP_ENABLE_TRACKING = 1009
     BALANCE_POWER = 1101
     BALANCE_STOP = 1102
@@ -245,6 +244,19 @@ class ReplyCode(enum.IntEnum):
     WARNING = 4
     ON_STATE_INFO = 5
     IN_POSITION = 6
+
+
+class Commander(enum.IntEnum):
+    """Values for the AskForCommand command.
+
+    Note: EUI is called MCS in Tekniker's communication protocol
+    documentation.
+    """
+
+    NONE = 0
+    TCS = 1
+    EUI = 2
+    HHD = 3
 
 
 class Source(enum.IntEnum):

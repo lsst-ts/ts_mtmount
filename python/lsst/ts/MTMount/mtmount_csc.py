@@ -116,13 +116,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.command_lock = asyncio.Lock()
 
+        # Does the CSC have control of the mount?
+        # Once the low-level controller reports this in an event,
+        # add a SAL event and get the value from that.
+        self.has_control = False
+
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = salobj.make_done_future()
 
         # Task to track enabling and disabling
         self.enable_task = salobj.make_done_future()
         self.disable_task = salobj.make_done_future()
-        self.enabled_state = enums.EnabledState.DISABLED
 
         # Task for self.camera_cable_wrap_loop
         self.camera_cable_wrap_task = salobj.make_done_future()
@@ -177,6 +181,52 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.mtmount = salobj.Remote(
             domain=self.domain, name="MTMount", include=["Camera_Cable_Wrap"]
         )
+
+    async def begin_enable(self, data):
+        """Take control of the mount and initialize devices.
+
+        If taking control fails, raise an exception to leave the state
+        as DISABLED.
+        If initializing fails, go to FAULT state (in enable_devices).
+        """
+        await super().begin_enable(data)
+        if not self.has_control:
+            try:
+                self.log.info("Ask for permission to command the mount.")
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.HHD)
+                )
+                self.has_control = True
+            except Exception as e:
+                raise salobj.ExpectedError(
+                    f"The CSC was not allowed to command the mount: {e}"
+                )
+
+        self.enable_task.cancel()
+        self.enable_task = asyncio.create_task(self.enable_devices())
+        await self.enable_task
+
+    async def begin_disable(self, data):
+        try:
+            await super().begin_disable(data)
+            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
+            if self.has_control and self.connected:
+                self.disable_task.cancel()
+                self.disable_task = asyncio.create_task(self.disable_devices())
+                await self.disable_task
+
+            try:
+                self.log.info("Give up command of the mount.")
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.NONE)
+                )
+                self.has_control = True
+            except Exception as e:
+                self.log.warning(
+                    f"The CSC was not able to give up command of the mount: {e}"
+                )
+        finally:
+            self.has_control = False
 
     @property
     def connected(self):
@@ -345,17 +395,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def enable_devices(self):
         self.log.info("Enable devices")
         self.disable_task.cancel()
-        self.enabled_state = enums.EnabledState.ENABLING
         try:
             enable_commands = [
-                commands.AskForCommand(commander=3),
                 # commands.TopEndChillerResetAlarm(),
                 # commands.MainPowerSupplyResetAlarm(),
                 # commands.MirrorCoverLocksResetAlarm(),
                 # commands.MirrorCoversResetAlarm(),
                 # commands.AzimuthAxisResetAlarm(),
                 # commands.ElevationAxisResetAlarm(),
-                # commands.CameraCableWrapResetAlarm(),
+                commands.CameraCableWrapResetAlarm(),
                 # commands.TopEndChillerPower(on=True),
                 # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
                 # commands.MainPowerSupplyPower(on=True),
@@ -363,11 +411,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 # commands.AzimuthAxisPower(on=True),
                 # commands.ElevationAxisPower(on=True),
                 commands.CameraCableWrapPower(on=True),
+                # commands.CameraCableWrapEnableTracking(on=True),
             ]
             await self.send_commands(*enable_commands)
-            self.enabled_state = enums.EnabledState.ENABLED
         except Exception as e:
-            self.enabled_state = enums.EnabledState.ENABLE_FAILED
             err_msg = "Failed to enable one or more devices"
             self.log.exception(err_msg)
             self.fault(
@@ -381,35 +428,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def disable_devices(self):
         self.log.info("Disable devices")
         self.enable_task.cancel()
-        if self.enabled_state in (
-            enums.EnabledState.DISABLING,
-            enums.EnabledState.DISABLED,
-            enums.EnabledState.DISABLE_FAILED,
-        ):
-            return
         if not self.connected:
-            self.enabled_state = enums.EnabledState.DISABLED
-        else:
-            self.enabled_state = enums.EnabledState.DISABLING
-            try:
-                disable_commands = [
-                    # commands.BothAxesStop(),
-                    # commands.CameraCableWrapStop(),
-                    # commands.AzimuthAxisPower(on=False),
-                    # commands.ElevationAxisPower(on=False),
-                    # commands.CameraCableWrapPower(on=False),
-                    commands.AskForCommand(commander=2),
-                ]
-                await self.send_commands(*disable_commands)
-                self.enabled_state = enums.EnabledState.DISABLED
-            except Exception as e:
-                self.enabled_state = enums.EnabledState.DISABLE_FAILED
-                err_msg = "Failed to disable one or more devices"
-                self.log.exception(err_msg)
-                self.fault(
-                    code=enums.CscErrorCode.ACTUATOR_DISABLE_ERROR,
-                    report=f"{err_msg}: {e}",
-                )
+            return
+        try:
+            disable_commands = [
+                # commands.BothAxesStop(),
+                commands.CameraCableWrapStop(),
+                # commands.AzimuthAxisPower(on=False),
+                # commands.ElevationAxisPower(on=False),
+                commands.CameraCableWrapPower(on=False),
+            ]
+            await self.send_commands(*disable_commands)
+        except Exception as e:
+            err_msg = "Failed to disable one or more devices"
+            self.log.exception(err_msg)
+            self.fault(
+                code=enums.CscErrorCode.ACTUATOR_DISABLE_ERROR,
+                report=f"{err_msg}: {e}",
+            )
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
@@ -417,17 +453,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.connect_task.cancel()
                 self.connect_task = asyncio.create_task(self.connect())
                 await self.connect_task
-
-            if self.enabled_state is not enums.EnabledState.ENABLED:
-                self.enable_task.cancel()
-                self.enable_task = asyncio.create_task(self.enable_devices())
-                await self.enable_task
         else:
-            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
-            if self.enabled_state is not enums.EnabledState.DISABLED:
-                self.disable_task.cancel()
-                self.disable_task = asyncio.create_task(self.disable_devices())
-                await self.disable_task
             await self.close_communication()
 
     async def send_command(self, command, do_lock=True):
@@ -686,9 +712,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_disableCameraCableWrapTracking(self, data):
         self.assert_enabled()
         self.camera_cable_wrap_task.cancel()
+        await self.send_command(commands.CameraCableWrapEnableTracking(on=False))
 
     async def do_enableCameraCableWrapTracking(self, data):
         self.assert_enabled()
+        await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
         if self.camera_cable_wrap_task.done():
             self.camera_cable_wrap_task = asyncio.create_task(
                 self.camera_cable_wrap_loop()
@@ -728,6 +756,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         self.assert_enabled()
         raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
+        # TODO DM-24783 remove this "if" block once Tekniker's TMA code
+        # supports the xAxisEnableTracking commands.
+        if self.simulation_mode == 0:
+            self.log.info(
+                "Ignoring the startTracking command "
+                "because Tekniker's code does not yet support it"
+            )
+            return
+        await self.send_commands(
+            commands.ElevationAxisEnableTracking(on=True),
+            commands.AzimuthAxisEnableTracking(on=True),
+        )
 
     async def do_stop(self, data):
         self.assert_enabled()
@@ -738,3 +778,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stopTracking(self, data):
         self.assert_enabled()
         raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
+        # TODO DM-24783 remove this "if" block once Tekniker's TMA code
+        # supports the xAxisEnableTracking commands.
+        if self.simulation_mode == 0:
+            self.log.info(
+                "Issuing BothAxesStop instead of disabling tracking "
+                "because Tekniker's code does not yet support the latter"
+            )
+            await self.send_command(commands.BothAxesStop(),)
+        else:
+            await self.send_commands(
+                commands.ElevationAxisEnableTracking(on=False),
+                commands.AzimuthAxisEnableTracking(on=False),
+            )
