@@ -286,6 +286,7 @@ class MockDevicesTestCase(asynctest.TestCase):
         short_command_names = [
             "drive_enable",
             "drive_reset",
+            "enable_tracking",
             "move",
             "power",
             "stop",
@@ -308,6 +309,8 @@ class MockDevicesTestCase(asynctest.TestCase):
         drive_enable_off_command = command_classes["drive_enable"](drive=-1, on=False)
         drive_enable_on_command = command_classes["drive_enable"](drive=-1, on=True)
         drive_reset_command = command_classes["drive_reset"](drive=-1)
+        enable_tracking_off_command = command_classes["enable_tracking"](on=False)
+        enable_tracking_on_command = command_classes["enable_tracking"](on=True)
         home_command = command_classes["home"]() if has_home_command else None
         power_off_command = command_classes["power"](on=False)
         power_on_command = command_classes["power"](on=True)
@@ -316,25 +319,31 @@ class MockDevicesTestCase(asynctest.TestCase):
         # drive_reset fails if off
         self.assertFalse(device.power_on)
         self.assertFalse(device.enabled)
+        self.assertFalse(device.tracking_enabled)
         with self.assertRaises(RuntimeError):
             await self.run_command(drive_reset_command)
         self.assertFalse(device.power_on)
         self.assertFalse(device.enabled)
+        self.assertFalse(device.tracking_enabled)
 
         # Power on the device; this should not enable the drive.
         await self.run_command(power_on_command)
         self.assertTrue(device.power_on)
         self.assertTrue(device.enabled)
+        self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
         # Disable the drive
         await self.run_command(drive_enable_off_command)
         self.assertTrue(device.power_on)
         self.assertFalse(device.enabled)
+        self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
         # Most commands should fail if drive not enabled.
         fail_if_not_enabled_commands = [
+            enable_tracking_off_command,
+            enable_tracking_on_command,
             stop_command,
             home_command,
             command_classes["move"](position=device.actuator.min_position + 1),
@@ -353,12 +362,14 @@ class MockDevicesTestCase(asynctest.TestCase):
                     await self.run_command(command, min_timeout=min_timeout)
                 self.assertTrue(device.power_on)
                 self.assertFalse(device.enabled)
+                self.assertFalse(device.tracking_enabled)
                 self.assertFalse(device.has_target)
 
         # Enable the drives
         await self.run_command(drive_enable_on_command)
         self.assertTrue(device.power_on)
         self.assertTrue(device.enabled)
+        self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
         # Do a point to point move
@@ -402,6 +413,36 @@ class MockDevicesTestCase(asynctest.TestCase):
         await asyncio.sleep(stop_duration)
         self.assertFalse(device.has_target)
 
+        # The tracking command should fail when not in tracking mode.
+        track_command = command_classes["track"](
+            position=device.actuator.min_position + 1,
+            velocity=0,
+            tai=salobj.current_tai(),
+        )
+        with self.assertRaises(RuntimeError):
+            await self.run_command(track_command)
+
+        # Turn on tracking mode and confirm that non-tracking mode
+        # commands are rejected.
+        self.assertFalse(device.tracking_enabled)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        await self.run_command(enable_tracking_on_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertTrue(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
+        non_tracking_mode_commands = [
+            home_command,
+            move_command,
+        ]
+        for command in non_tracking_mode_commands:
+            if command is None:
+                continue
+            with self.assertRaises(RuntimeError):
+                await self.run_command(command, min_timeout=0)
+
         # Issue a few tracking commands; confirm that the actuator path
         # is updated accordingly.
         tai0 = salobj.current_tai()
@@ -425,38 +466,76 @@ class MockDevicesTestCase(asynctest.TestCase):
             self.assertTrue(device.has_target)
             await asyncio.sleep(0.1)
 
-        # Check that stop halts tracking but does not disable the axis.
+        # Disable tracking and check state
+        await self.run_command(enable_tracking_off_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertFalse(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
+        # Check that stop disable tracking
+        await self.run_command(enable_tracking_on_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertTrue(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
         await self.run_command(stop_command)
         self.assertTrue(device.power_on)
         self.assertTrue(device.enabled)
+        self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
-        # Check that drive_disable halts tracking but does not turn off power.
+        # Check that drive_disable disables tracking
+        # but does not turn off power.
+        await self.run_command(enable_tracking_on_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertTrue(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
         await self.run_command(drive_enable_off_command)
         self.assertTrue(device.power_on)
         self.assertFalse(device.enabled)
+        self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
         # Check that drive_reset disables the drive and tracking
         await self.run_command(drive_enable_on_command)
         self.assertTrue(device.power_on)
         self.assertTrue(device.enabled)
+        self.assertFalse(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
+        await self.run_command(enable_tracking_on_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertTrue(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
         await self.run_command(drive_reset_command)
         self.assertTrue(device.power_on)
         self.assertFalse(device.enabled)
+        self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
         # Check that power off disables everything
         await self.run_command(power_on_command)
         self.assertTrue(device.power_on)
         self.assertTrue(device.enabled)
+        self.assertFalse(device.tracking_enabled)
+        self.assertFalse(device.has_target)
+
+        await self.run_command(enable_tracking_on_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertTrue(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
         await self.run_command(power_off_command)
         self.assertFalse(device.power_on)
         self.assertFalse(device.enabled)
+        self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.has_target)
 
     async def check_base_commands(self, device, drive=None):
