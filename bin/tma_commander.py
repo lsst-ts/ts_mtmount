@@ -468,7 +468,7 @@ async def amain():
     )
     namespace = parser.parse_args()
     commander = Commander(
-        host=namespace.host, log_level=namespace.log_level, simulate=namespace.simulate,
+        host=namespace.host, log_level=namespace.loglevel, simulate=namespace.simulate,
     )
     await commander.done_task
 
