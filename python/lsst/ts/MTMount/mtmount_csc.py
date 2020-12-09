@@ -40,6 +40,8 @@ TIMEOUT_BUFFER = 5
 # beyond which rotator velocity will not be estimated.
 MAX_ROTATOR_APPLICATION_GAP = 1.0
 
+MOCK_CTRL_START_TIME = 20
+
 NOT_SUPPORTED_MESSAGE = (
     "Not supported in this camera-cable-wrap-only version of the CSC"
 )
@@ -241,9 +243,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def close_tasks(self):
         """Shut down pending tasks. Called by `close`."""
         await super().close_tasks()
-        if self.mock_controller_process is not None:
-            self.mock_controller_process.terminate()
-        await self.close_communication()
+        await self.disconnect()
 
     async def get_camera_cable_wrap_demand(self):
         """Get camera cable wrap tracking command data.
@@ -325,28 +325,35 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
-    async def close_communication(self):
-        """Close and delete the communicator, if present.
-        """
-        self.should_be_connected = False
-        if self.communicator is not None:
-            await self.communicator.close()
-            self.communicator = None
-
     async def connect(self):
         """Connect to the low-level controller.
 
-        Start the mock controller, if simulating.
+        Start the mock controller, if simulating and run_mock_controller true.
         """
         self.log.debug("Connect to the low-level controller")
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
             raise RuntimeError("Already connected")
+        connection_timeout = self.config.connection_timeout
         if self.simulation_mode:
             client_host = salobj.LOCAL_HOST
             server_host = salobj.LOCAL_HOST
             command_port = self.mock_command_port
+
+            if self.run_mock_controller:
+                self.log.debug("Starting the mock controller")
+                try:
+                    self.mock_controller_process = await asyncio.create_subprocess_exec(
+                        "run_mock_tma.py",
+                        f"--command-port={self.mock_command_port}",
+                        f"--loglevel={self.log.level}",
+                    )
+                except Exception:
+                    self.log.exception("Could not start the mock controller")
+                    raise
+                else:
+                    connection_timeout += MOCK_CTRL_START_TIME
         else:
             client_host = self.config.host
             server_host = None
@@ -367,7 +374,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         try:
             self.log.info("Connecting to the low-level controller")
             await asyncio.wait_for(
-                self.communicator.connect(), timeout=self.config.connection_timeout
+                self.communicator.connect(), timeout=connection_timeout
             )
             self.should_be_connected = True
             self.read_loop_task = asyncio.create_task(self.read_loop())
@@ -391,6 +398,27 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 code=enums.CscErrorCode.CONNECTION_LOST,
                 report="Lost connection to low-level controller",
             )
+
+    async def disconnect(self):
+        """Disconnect from the low-level controller.
+
+        Close and delete the communicator, if present,
+        and stop the mock controller process, if running.
+        """
+        self.should_be_connected = False
+
+        if self.communicator is not None:
+            self.log.debug("Close the communicator")
+            await self.communicator.close()
+            self.communicator = None
+
+        if (
+            self.mock_controller_process is not None
+            and self.mock_controller_process.returncode is None
+        ):
+            self.log.debug("Terminate the mock controller process")
+            self.mock_controller_process.terminate()
+            self.mock_controller_process = None
 
     async def enable_devices(self):
         self.log.info("Enable devices")
@@ -454,7 +482,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.connect_task = asyncio.create_task(self.connect())
                 await self.connect_task
         else:
-            await self.close_communication()
+            await self.disconnect()
 
     async def send_command(self, command, do_lock=True):
         """Send a command to the operation manager
@@ -657,17 +685,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def start(self):
         await super().start()
-
-        if self.simulation_mode == 1 and self.run_mock_controller:
-            self.log.debug("Starting the mock controller")
-            try:
-                self.mock_controller_process = await asyncio.create_subprocess_exec(
-                    "run_mock_tma.py",
-                    f"--command-port={self.mock_command_port}",
-                    "--noreconnect",
-                )
-            except Exception:
-                self.log.exception("Could not start the mock controller")
 
         self.log.debug("Waiting for the MTRotator remote to start")
         await self.rotator.start_task
