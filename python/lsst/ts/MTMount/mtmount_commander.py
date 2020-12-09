@@ -43,6 +43,9 @@ class RampArgs:
 class MTMountCommander(salobj.CscCommander):
     def __init__(self, enable):
         super().__init__(name="NewMTMount", enable=enable)
+        for command_to_ignore in ("abort", "setValue"):
+            del self.command_dict[command_to_ignore]
+
         # Remote for telemetry
         self.mtmount_remote = salobj.Remote(
             domain=self.remote.salinfo.domain, name="MTMount"
