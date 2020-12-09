@@ -322,7 +322,7 @@ async def amain():
         "--host", default="127.0.0.1", help="TMA operation manager IP address."
     )
     parser.add_argument(
-        "--log-level",
+        "--loglevel",
         type=int,
         default=logging.INFO,
         help="Log level (DEBUG=10, INFO=20, WARNING=30).",
@@ -332,7 +332,7 @@ async def amain():
     )
     namespace = parser.parse_args()
     commander = Commander(
-        host=namespace.host, log_level=namespace.log_level, simulate=namespace.simulate,
+        host=namespace.host, log_level=namespace.loglevel, simulate=namespace.simulate,
     )
     await commander.done_task
 
