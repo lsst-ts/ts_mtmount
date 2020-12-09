@@ -105,7 +105,7 @@ class ClientServerPair:
         )
         if connect:
             self.connect_task = asyncio.create_task(self.connect())
-        self.log.debug(
+        self.log.info(
             "Constructed with "
             f"client_port={self.client_port}; "
             f"client_host={self.client_host}; "
@@ -213,6 +213,10 @@ class ClientServerPair:
                 break
             except ConnectionError:
                 await asyncio.sleep(self.connect_retry_interval)
+        if self._server.connected_task.done():
+            self.log.info("Client connected; server was already connected")
+        else:
+            self.log.info("Client connected; waiting for server to be connected")
         self.client_connected_task.set_result(None)
         await self._server.connected_task
 

@@ -342,12 +342,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
             command_port = self.mock_command_port
 
             if self.run_mock_controller:
-                self.log.debug("Starting the mock controller")
+                args = [
+                    "run_mock_tma.py",
+                    f"--command-port={self.mock_command_port}",
+                    f"--loglevel={self.log.level}",
+                ]
+                self.log.debug(f"Starting the mock controller with args {args}")
                 try:
                     self.mock_controller_process = await asyncio.create_subprocess_exec(
-                        "run_mock_tma.py",
-                        f"--command-port={self.mock_command_port}",
-                        f"--loglevel={self.log.level}",
+                        *args
                     )
                 except Exception:
                     self.log.exception("Could not start the mock controller")
@@ -360,7 +363,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             command_port = constants.CSC_COMMAND_PORT
         if self.communicator is None:
             self.communicator = communicator.Communicator(
-                name="communicator",
+                name="MTMountCsc",
                 client_host=client_host,
                 client_port=command_port,
                 server_host=server_host,
@@ -408,7 +411,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.should_be_connected = False
 
         if self.communicator is not None:
-            self.log.debug("Close the communicator")
+            self.log.info("Disconnect from the low-level controller")
             await self.communicator.close()
             self.communicator = None
 
@@ -416,7 +419,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.mock_controller_process is not None
             and self.mock_controller_process.returncode is None
         ):
-            self.log.debug("Terminate the mock controller process")
+            self.log.info("Terminate the mock controller process")
             self.mock_controller_process.terminate()
             self.mock_controller_process = None
 

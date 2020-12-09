@@ -68,8 +68,10 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         if internal_mock_controller:
             self.mock_controller = csc.mock_controller
         elif simulation_mode != 0:
+            mock_ctrl_log = logging.getLogger()
+            mock_ctrl_log.setLevel(csc.log.level)
             self.mock_controller = MTMount.mock.Controller(
-                command_port=mock_command_port, log=csc.log
+                command_port=mock_command_port, log=mock_ctrl_log
             )
         return csc
 

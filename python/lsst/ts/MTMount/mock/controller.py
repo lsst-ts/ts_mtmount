@@ -82,7 +82,7 @@ class Controller:
         self, command_port, log, reconnect=False, commander=enums.Commander.NONE
     ):
         self.command_port = command_port
-        self.log = log.getChild("Controller")
+        self.log = log.getChild("MockController")
         self.reconnect = reconnect
         self.commander = commander
         self.closing = False
@@ -276,7 +276,7 @@ class Controller:
         self.log.debug("Waiting for the SAL controller to start")
         await self.sal_controller.start_task
         self.communicator = communicator.Communicator(
-            name="Controller",
+            name="MockController",
             client_host=salobj.LOCAL_HOST,
             # Tekniker uses repy port = command port + 1
             client_port=self.command_port + 1,
