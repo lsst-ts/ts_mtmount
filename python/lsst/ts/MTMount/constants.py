@@ -24,7 +24,7 @@ EUI_COMMAND_PORT = 60005
 HHD_COMMAND_PORT = 40005
 # An arbitrary value; update when Tekniker adds a dedicated
 # pair of ports for the CSC.
-CSC_COMMAND_PORT = 30005
+CSC_COMMAND_PORT = 50005
 
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
