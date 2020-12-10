@@ -58,21 +58,21 @@ class MockControllerTestCase(asynctest.TestCase):
         del MTMount.commands.CommandDict[UNSUPPORTED_COMMAND_CODE]
 
     @contextlib.asynccontextmanager
-    async def make_controller(self, commander=MTMount.Commander.HHD):
+    async def make_controller(self, commander=MTMount.Source.HHD):
         """Make a mock controller as self.controller.
 
         Parameters
         ----------
-    commander : `Commander`, optional
-        Who initially has command. Defaults to `Commander.HHD`,
+    commander : `Source`, optional
+        Who initially has command. Defaults to `Source.HHD`,
         so tests need not issue the ``ASK_FOR_COMMAND`` command
         before issuing other commands.
 
         Other special values:
 
-        * `Commander.NONE`: this is now the real system starts up.
-        * `Commander.HHD`: the ``ASK_FOR_COMMAND`` command is rejected
-          for any other commander. This reflects the real system, because
+        * `Source.NONE`: this is now the real system starts up.
+        * `Source.HHD`: the ``ASK_FOR_COMMAND`` command is rejected
+          from any other source. This reflects the real system, because
           nobody can take command from the handheld device. This offers
           a convenient way to test ``ASK_FOR_COMMAND`` failures.
         """
@@ -252,7 +252,7 @@ class MockControllerTestCase(asynctest.TestCase):
         return nonack_replies
 
     async def test_ask_for_command_ok(self):
-        async with self.make_controller(commander=MTMount.Commander.NONE):
+        async with self.make_controller(commander=MTMount.Source.NONE):
             # Until AskForCommand is issued, all other commands should fail;
             # try a sampling of commands.
             sample_commands = (

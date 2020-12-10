@@ -25,7 +25,6 @@ __all__ = [
     "DeviceId",
     "EnabledState",
     "ReplyCode",
-    "Commander",
     "Source",
     "SubsystemId",
 ]
@@ -246,26 +245,14 @@ class ReplyCode(enum.IntEnum):
     IN_POSITION = 6
 
 
-class Commander(enum.IntEnum):
-    """Values for the AskForCommand command.
+class Source(enum.IntEnum):
+    """Values for the ``source`` field of a message and AskForCommand command.
 
     Note: EUI is called MCS in Tekniker's communication protocol
     documentation.
     """
 
     NONE = 0
-    TCS = 1
-    EUI = 2
-    HHD = 3
-
-
-class Source(enum.IntEnum):
-    """Values for the ``source`` field of a message.
-
-    Note: EUI is called MCS in Tekniker's communication protocol
-    documentation.
-    """
-
     TCS = 1
     EUI = 2
     HHD = 3

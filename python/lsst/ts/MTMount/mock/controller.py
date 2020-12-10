@@ -56,7 +56,7 @@ class Controller:
     """Simulate the most basic responses from the low-level controller
     (Operation Manager).
 
-    If the commander is `Commander.HHD` then acknowledge all commands and mark
+    If the commander is `Source.HHD` then acknowledge all commands and mark
     as done. If not, then reject all commands except `Command.ASK_FOR_COMMAND`.
     Also output a few other replies, to exercise the code.
 
@@ -70,21 +70,19 @@ class Controller:
     reconnect : `bool`, optional
         Try to reconnect if the connection is lost?
         Defaults to False for unit tests.
-    commander : `Commander`, optional
-        Who initially has command. Defaults to `Commander.NONE`,
+    commander : `Source`, optional
+        Who initially has command. Defaults to `Source.NONE`,
         which matches the real controller. Two values are special:
 
-        * `Commander.HHD`: there is no need to issue `Command.ASK_FOR_COMMAND`
+        * `Source.HHD`: there is no need to issue `Command.ASK_FOR_COMMAND`
           before issuing other commands. This can simplify unit tests.
     """
 
-    def __init__(
-        self, command_port, log, reconnect=False, commander=enums.Commander.NONE
-    ):
+    def __init__(self, command_port, log, reconnect=False, commander=enums.Source.NONE):
         self.command_port = command_port
         self.log = log.getChild("MockController")
         self.reconnect = reconnect
-        self.commander = commander
+        self.commander = enums.Source(commander)
         self.closing = False
         self.telemetry_interval = 0.2  # Seconds
         # Maximum position and velocity error,
@@ -335,12 +333,12 @@ class Controller:
 
     async def handle_command(self, command):
         if (
-            self.commander != enums.Commander.HHD
+            self.commander != enums.Source.HHD
             and command.command_code != enums.CommandCode.ASK_FOR_COMMAND
         ):
             await self.write_noack(
                 command=command,
-                explanation=f"The commander is {self.commander!r}, not the CSC.",
+                explanation=f"The commander is {self.commander!r}, not the CSC/HHD.",
             )
             return
 
@@ -410,10 +408,22 @@ class Controller:
     def do_ask_for_command(self, command):
         """Handle ASK_FOR_COMMAND.
 
-        Note: the real system treats HHD specially; once HHD has control
-        only HHD can give it up. But the CSC is pretending to the HHD
-        in this branch, so skip that code here.
+        For this mock controller to accept other commands,
+        the commander must be `enums.Source.HHD`.
+
+        If the HHD has command then no other commander can change it.
+        This reflects reality and offers a nice way to test what happens
+        if ASK_FOR_COMMAND fails.
         """
+        if (
+            self.commander == enums.Source.HHD
+            and command.commander != enums.Source.HHD
+            and command.source != enums.Source.HHD
+        ):
+            raise RuntimeError(
+                f"HHD has command; cannot give command to {command.commander!r}; "
+                f"from source={command.source}"
+            )
         self.commander = command.commander
 
     def do_both_axes_move(self, command):
