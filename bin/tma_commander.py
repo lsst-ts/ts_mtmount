@@ -107,6 +107,7 @@ class Commander:
         self.log.setLevel(log_level)
 
         self.done_task = asyncio.Future()
+        self.command_loop_task = salobj.make_done_future()
         self.read_loop_task = salobj.make_done_future()
 
         self.simulator = None
@@ -128,7 +129,6 @@ class Commander:
             connect=True,
             connect_callback=self.connect_callback,
         )
-        self.command_loop_task = asyncio.create_task(self.command_loop())
         self.command_dict = dict(
             ask_for_command=MTMount.commands.AskForCommand,
             az_drive_enable=MTMount.commands.AzimuthAxisDriveEnable,
@@ -181,6 +181,7 @@ Other commands:
 exit  # Exit from this commander
 help  # Print this help
 """
+        self.start_task = asyncio.create_task(self.start())
 
     async def close(self):
         """Shut down this TMA commander."""
@@ -270,6 +271,10 @@ help  # Print this help
         except Exception as e:
             print(f"tma_commander read loop failed with {e!r}")
 
+    async def start(self):
+        await self.communicator.start_task
+        self.command_loop_task = asyncio.create_task(self.command_loop())
+
     def connect_callback(self, communicator):
         """Callback function for changes in communicator connection state.
 
@@ -334,6 +339,7 @@ async def amain():
     commander = Commander(
         host=namespace.host, log_level=namespace.loglevel, simulate=namespace.simulate,
     )
+    await commander.start_task
     await commander.done_task
 
 

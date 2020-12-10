@@ -358,20 +358,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
             client_host = self.config.host
             server_host = None
             command_port = constants.CSC_COMMAND_PORT
-        if self.communicator is None:
-            self.communicator = communicator.Communicator(
-                name="MTMountCsc",
-                client_host=client_host,
-                client_port=command_port,
-                server_host=server_host,
-                # Tekniker uses repy port = command port + 1
-                server_port=command_port + 1,
-                log=self.log,
-                read_replies=True,
-                connect=False,
-                connect_callback=self.connect_callback,
-            )
         try:
+            if self.communicator is None:
+                self.log.debug("Construct communicator")
+                self.communicator = communicator.Communicator(
+                    name="MTMountCsc",
+                    client_host=client_host,
+                    client_port=command_port,
+                    server_host=server_host,
+                    # Tekniker uses repy port = command port + 1
+                    server_port=command_port + 1,
+                    log=self.log,
+                    read_replies=True,
+                    connect=False,
+                    connect_callback=self.connect_callback,
+                )
+                await self.communicator.start_task
             self.log.info("Connecting to the low-level controller")
             await asyncio.wait_for(
                 self.communicator.connect(), timeout=connection_timeout
@@ -688,6 +690,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.log.debug("Waiting for the MTRotator remote to start")
         await self.rotator.start_task
+
         self.log.debug("Started")
 
     async def do_clearError(self, data):
