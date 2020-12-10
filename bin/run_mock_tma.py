@@ -63,7 +63,9 @@ async def amain():
         print("Mock TMA controller running")
         await mock_controller.done_task
     except asyncio.CancelledError:
-        pass
+        print("Mock TMA controller done")
+    except Exception as e:
+        print(f"Mock TMA controller failed: {e}")
 
 
 asyncio.run(amain())

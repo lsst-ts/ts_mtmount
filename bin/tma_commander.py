@@ -113,6 +113,7 @@ class Commander:
         self.log.setLevel(log_level)
 
         self.done_task = asyncio.Future()
+        self.command_loop_task = salobj.make_done_future()
         self.read_loop_task = salobj.make_done_future()
         self.tracking_task = salobj.make_done_future()
 
@@ -135,7 +136,6 @@ class Commander:
             connect=True,
             connect_callback=self.connect_callback,
         )
-        self.command_loop_task = asyncio.create_task(self.command_loop())
         self.command_dict = dict(
             ask_for_command=MTMount.commands.AskForCommand,
             az_drive_enable=MTMount.commands.AzimuthAxisDriveEnable,
@@ -190,6 +190,7 @@ ccw_sine start_position amplitude  # make CCW track one cycle of a sine wave
 exit  # Exit from this commander
 help  # Print this help
 """
+        self.start_task = asyncio.create_task(self.start())
 
     async def close(self):
         """Shut down this TMA commander."""
@@ -281,6 +282,10 @@ help  # Print this help
             pass
         except Exception as e:
             print(f"tma_commander read loop failed with {e!r}")
+
+    async def start(self):
+        await self.communicator.start_task
+        self.command_loop_task = asyncio.create_task(self.command_loop())
 
     async def write_command(self, command):
         print(f"Write {command}")
@@ -470,6 +475,7 @@ async def amain():
     commander = Commander(
         host=namespace.host, log_level=namespace.loglevel, simulate=namespace.simulate,
     )
+    await commander.start_task
     await commander.done_task
 
 
