@@ -136,8 +136,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task for self.read_loop
         self.read_loop_task = salobj.make_done_future()
 
-        # CCW - MTRotator synchronization limits.
-        # The goto limit is the distance between the CCW and the MTRotator
+        # Camera cable wrap (CCW) - camera rotator (rotator) synchronization
+        # limits.
+        # The goto limit is the distance between the CCW and the rotator
         # demand position after which the CCW will blindly go to the demand,
         # as long as the distance between the ccw and rot are less then
         # half the max limit.
