@@ -6,6 +6,30 @@
 Version History
 ###############
 
+v0.10.0
+=======
+
+Changes:
+
+* Rename ``bin/zrun_mtmount_commander.py`` to ``bin/command_mtmount.py`` to match naming in other packages.
+* Change the ``--log-level`` command-line argument to ``--loglevel`` for ``bin/run_mock_tma.py`` and ``bin/tma_commander.py``, to match the command-line argument for running CSCs.
+* In simulation mode start the mock controller process just before connecting to the low-level controller, and terminate it just after disconnecting.
+  This slows down the `start` command but allows recovery if something goes wrong with the mock controller.
+* Improve error handling if a TCP/IP server cannot be constructed.
+  This fixes a source of silent errors and a failure mode where ``run_mock_tma.py`` could not be terminated.
+* Log more information in `Communicator` connection monitoring.
+* Removed ``Commander`` enum; use ``Source`` instead with the `AskForCommand` command.
+* Use ``pre-commit`` instead of a custom git pre-commit hook.
+  See ``README.rst`` for instructions.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for NewMTMount, MTMount, and MTRotator from ts_xml 7
+
 v0.9.0
 ======
 

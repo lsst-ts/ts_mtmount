@@ -78,7 +78,7 @@ class ClientServerPairTestCase(asynctest.TestCase):
         self.assertFalse(self.pair1.client_connected)
         self.assertFalse(self.pair1.connected)
         # Wait for pair1 server to start, so its port is assigned
-        await asyncio.wait_for(self.pair1.wait_server_port(), timeout=STD_TIMEOUT)
+        await asyncio.wait_for(self.pair1.start_task, timeout=STD_TIMEOUT)
         self.assertNotEqual(self.pair1.server_port, 0)
         self.assertFalse(self.pair1.server_connected)
         self.assertFalse(self.pair1.client_connected)
@@ -98,7 +98,7 @@ class ClientServerPairTestCase(asynctest.TestCase):
         self.assertFalse(self.pair2.server_connected)
         self.assertFalse(self.pair2.client_connected)
         self.assertFalse(self.pair2.connected)
-        await asyncio.wait_for(self.pair2.wait_server_port(), timeout=STD_TIMEOUT)
+        await asyncio.wait_for(self.pair2.start_task, timeout=STD_TIMEOUT)
         self.assertNotEqual(self.pair2.server_port, 0)
         self.assertFalse(self.pair2.server_connected)
         self.assertFalse(self.pair2.client_connected)

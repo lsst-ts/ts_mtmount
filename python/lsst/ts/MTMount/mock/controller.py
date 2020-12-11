@@ -56,7 +56,7 @@ class Controller:
     """Simulate the most basic responses from the low-level controller
     (Operation Manager).
 
-    If the commander is `Commander.CSC` then acknowledge all commands and mark
+    If the commander is `Source.CSC` then acknowledge all commands and mark
     as done. If not, then reject all commands except `Command.ASK_FOR_COMMAND`.
     Also output a few other replies, to exercise the code.
 
@@ -70,25 +70,23 @@ class Controller:
     reconnect : `bool`, optional
         Try to reconnect if the connection is lost?
         Defaults to False for unit tests.
-    commander : `Commander`, optional
-        Who initially has command. Defaults to `Commander.NONE`,
+    commander : `Source`, optional
+        Who initially has command. Defaults to `Source.NONE`,
         which matches the real controller. Two values are special:
 
-        * `Commander.CSC`: there is no need to issue `Command.ASK_FOR_COMMAND`
+        * `Source.CSC`: there is no need to issue `Command.ASK_FOR_COMMAND`
           before issuing other commands. This can simplify unit tests.
-        * `Commander.HHD`: `Command.ASK_FOR_COMMAND` is rejected for any
+        * `Source.HHD`: `Command.ASK_FOR_COMMAND` is rejected for any
           other commander. This reflects the real system, because nobody
           can take command from the handheld device. This offers a convenient
           way to test `Command.ASK_FOR_COMMAND` failures.
     """
 
-    def __init__(
-        self, command_port, log, reconnect=False, commander=enums.Commander.NONE
-    ):
+    def __init__(self, command_port, log, reconnect=False, commander=enums.Source.NONE):
         self.command_port = command_port
-        self.log = log.getChild("Controller")
+        self.log = log.getChild("MockController")
         self.reconnect = reconnect
-        self.commander = commander
+        self.commander = enums.Source(commander)
         self.closing = False
         self.telemetry_interval = 0.2  # Seconds
         # Maximum position and velocity error,
@@ -120,7 +118,7 @@ class Controller:
         self.sal_controller = salobj.Controller(name="MTMount")
         self.read_loop_task = asyncio.Future()
         self.telemetry_task = asyncio.Future()
-        self.start_task = asyncio.create_task(self.connect())
+        self.start_task = asyncio.create_task(self.start())
         self.reconnect_task = salobj.make_done_future()
         self.done_task = asyncio.Future()
         loop = asyncio.get_running_loop()
@@ -210,6 +208,7 @@ class Controller:
         except ConnectionResetError:
             self.log.warning("Disconnected")
         except asyncio.CancelledError:
+            self.log.info("Telemetry loop cancelled")
             pass
         except Exception:
             self.log.exception("Telemetry loop failed")
@@ -274,31 +273,49 @@ class Controller:
         """
         self.command_queue = None
 
+    async def start(self):
+        self.log.debug("Waiting for the SAL controller to start")
+        await self.sal_controller.start_task
+        self.connect_task = asyncio.create_task(self.connect())
+
     async def connect(self):
         self.read_loop_task.cancel()
         self.telemetry_task.cancel()
-        self.log.debug("Waiting for the SAL controller to start")
-        await self.sal_controller.start_task
-        self.communicator = communicator.Communicator(
-            name="Controller",
-            client_host=salobj.LOCAL_HOST,
-            # Tekniker uses repy port = command port + 1
-            client_port=self.command_port + 1,
-            server_host=salobj.LOCAL_HOST,
-            server_port=self.command_port,
-            log=self.log,
-            read_replies=False,
-            connect=False,
-            connect_callback=self.connect_callback,
-        )
+        try:
+            self.communicator = communicator.Communicator(
+                name="MockController",
+                client_host=salobj.LOCAL_HOST,
+                # Tekniker uses repy port = command port + 1
+                client_port=self.command_port + 1,
+                server_host=salobj.LOCAL_HOST,
+                server_port=self.command_port,
+                log=self.log,
+                read_replies=False,
+                connect=False,
+                connect_callback=self.connect_callback,
+            )
+            self.log.debug("Waiting for the communicator to start")
+            await self.communicator.start_task
+        except Exception as e:
+            await self.close(cancel_reconnect=False, exception=e)
+            return
 
-        self.log.debug("Connecting to the CSC")
-        await self.communicator.connect()
-        self.log.debug("Connected")
-        self.read_loop_task = asyncio.create_task(self.read_loop())
-        self.telemetry_task = asyncio.create_task(self.telemetry_loop())
+        try:
+            self.log.debug("Connecting to the CSC")
+            await self.communicator.connect()
+            self.log.debug("Connected")
+            self.read_loop_task = asyncio.create_task(self.read_loop())
+            self.telemetry_task = asyncio.create_task(self.telemetry_loop())
+        except Exception:
+            self.log.exception("Could not connect")
 
-    async def close(self, cancel_read_loop=True, shutdown=True):
+    async def close(
+        self,
+        cancel_read_loop=True,
+        cancel_reconnect=True,
+        shutdown=True,
+        exception=None,
+    ):
         """Close the controller.
 
         Parameters
@@ -306,10 +323,15 @@ class Controller:
         cancel_read_loop : `bool`, optional
             If True (default) then cancel the read loop task.
             Set False if calling from read_loop.
+        cancel_reconnect : `bool`, optional
+            If True (default) then cancel the reconnect task.
         shutdown : `bool`, optional
             Set done_task result? True by default.
             Use False if reconnecting.
+        exception : `Exception` or `None`
+            Exception to which to set done_task, or None.
         """
+        self.log.info("Closing")
         if self.closing:
             if not self.done_task.done():
                 await self.done_task
@@ -320,12 +342,14 @@ class Controller:
             if cancel_read_loop:
                 self.read_loop_task.cancel()
             self.telemetry_task.cancel()
-            self.reconnect_task.cancel()
+            if cancel_reconnect:
+                self.reconnect_task.cancel()
             self.start_task.cancel()
-            try:
-                await self.sal_controller.close()
-            except Exception:
-                self.log.exception("Failed to close controller")
+            if shutdown:
+                try:
+                    await self.sal_controller.close()
+                except Exception:
+                    self.log.exception("Failed to close controller")
             for device in self.device_dict.values():
                 await device.close()
             if self.communicator is not None:
@@ -335,11 +359,14 @@ class Controller:
         finally:
             self.closing = False
             if shutdown and not self.done_task.done():
-                self.done_task.set_result(None)
+                if exception:
+                    self.done_task.set_exception(exception)
+                else:
+                    self.done_task.set_result(None)
 
     async def handle_command(self, command):
         if (
-            self.commander != enums.Commander.CSC
+            self.commander != enums.Source.CSC
             and command.command_code != enums.CommandCode.ASK_FOR_COMMAND
         ):
             await self.write_noack(
@@ -415,18 +442,20 @@ class Controller:
         """Handle ASK_FOR_COMMAND.
 
         For this mock controller to accept other commands,
-        the commander must be `enums.Commander.CSC`.
+        the commander must be `enums.Source.CSC`.
 
-        If the HHD has command then no other commander is allowed.
+        If the HHD has command then no other commander can change it.
         This reflects reality and offers a nice way to test what happens
         if ASK_FOR_COMMAND fails.
         """
         if (
-            command.commander != enums.Commander.HHD
-            and self.commander == enums.Commander.HHD
+            self.commander == enums.Source.HHD
+            and command.commander != enums.Source.HHD
+            and command.source != enums.Source.HHD
         ):
             raise RuntimeError(
-                f"HHD has command; cannot give command to to {command.commander!r}"
+                f"HHD has command; cannot give command to {command.commander!r}; "
+                f"from source={command.source}"
             )
         self.commander = command.commander
 

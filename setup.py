@@ -31,7 +31,7 @@ setuptools.setup(
     scripts=[
         "bin/run_mtmount.py",
         "bin/tma_commander.py",
-        "bin/zrun_mtmount_commander.py",
+        "bin/command_mtmount.py",
         "bin/run_mock_tma.py",
     ],
     tests_require=tests_require,
