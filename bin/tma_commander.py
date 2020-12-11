@@ -187,8 +187,12 @@ TMA Commands (omit the tai argument, if shown):
 Other commands:
 ccw_ramp start_position end_position velocity  # make CCW track a ramp
 ccw_sine start_position amplitude  # make CCW track one cycle of a sine wave
+stop  # stop ccw_ramp or ccw_sine
 exit  # Exit from this commander
 help  # Print this help
+
+Before commanding the TMA you must take control with:
+ask_for_command 3
 """
         self.start_task = asyncio.create_task(self.start())
 
@@ -196,7 +200,7 @@ help  # Print this help
         """Shut down this TMA commander."""
         try:
             print("Closing")
-            self.tracking_task.cancel()
+            await self.stop_tracking(verbose=False)
             self.read_loop_task.cancel()
             self.command_loop_task.cancel()
             if self.simulator is not None:
@@ -329,6 +333,8 @@ help  # Print this help
                         await self.start_ccw_ramp(args)
                     elif cmd_name == "ccw_sine":
                         await self.start_ccw_sine(args)
+                    elif cmd_name == "stop":
+                        await self.stop_tracking(verbose=True)
                     else:
                         await self.handle_command(cmd_name, args)
                 except Exception as e:
@@ -365,6 +371,15 @@ help  # Print this help
         args = [float(arg) for arg in args]
         kwargs = {name: arg for name, arg in zip(arg_names, args)}
         self.tracking_task = asyncio.ensure_future(self._ccw_sine(**kwargs))
+
+    async def stop_tracking(self, verbose):
+        if not self.tracking_task.done():
+            print("Stop tracking")
+            self.tracking_task.cancel()
+            # Give time for the axis to be stopped
+            await asyncio.sleep(0.5)
+        elif verbose:
+            print("Tracking not running; nothing done")
 
     async def _ccw_ramp(self, start_position, end_position, velocity):
         """Make the camera cable wrap track a linear ramp.
