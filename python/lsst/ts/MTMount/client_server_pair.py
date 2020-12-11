@@ -103,15 +103,14 @@ class ClientServerPair:
             log=log,
             connect_callback=self.call_connect_callback,
         )
-        if connect:
-            self.connect_task = asyncio.create_task(self.connect())
-        self.log.debug(
+        self.log.info(
             "Constructed with "
             f"client_port={self.client_port}; "
             f"client_host={self.client_host}; "
             f"server_port={self.server_port}; "
             f"server_host={self.server_host}; "
         )
+        self.start_task = asyncio.create_task(self.start(connect=connect))
 
     @property
     def client_connected(self):
@@ -213,8 +212,19 @@ class ClientServerPair:
                 break
             except ConnectionError:
                 await asyncio.sleep(self.connect_retry_interval)
+        if self._server.connected_task.done():
+            self.log.info("Client connected; server was already connected")
+        else:
+            self.log.info("Client connected; waiting for server to be connected")
         self.client_connected_task.set_result(None)
         await self._server.connected_task
+
+    async def start(self, connect):
+        """Start the server and optionally connect.
+        """
+        await self._server.start_task
+        if connect:
+            self.connect_task = asyncio.create_task(self.connect())
 
     async def wait_server_port(self):
         """Wait for the server to start, then return the port.

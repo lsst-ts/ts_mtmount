@@ -150,7 +150,7 @@ class Communicator(client_server_pair.ClientServerPair):
         try:
             fields = read_str.split("\n")
             message = self.parse_read_fields(fields)
-            self.log.debug("Read %s", message)
+            self.log.debug("Read %s; bytes %s", message, read_bytes)
             return message
         except Exception:
             self.log.exception(f"Could not parse read data: {read_bytes}")
@@ -174,12 +174,11 @@ class Communicator(client_server_pair.ClientServerPair):
         """
         if not self.client_connected:
             raise RuntimeError("Client not connected")
-        self.log.debug("Write message %s", message)
         message_bytes = message.encode()
-        self.log.debug("Write bytes %s", message_bytes)
         try:
             async with self.write_lock:
-                self.client_writer.write(message.encode())
+                self.log.debug("Write %s; bytes=%s", message, message_bytes)
+                self.client_writer.write(message_bytes)
                 await self.client_writer.drain()
         except ConnectionResetError:
             self.log.error(
@@ -198,15 +197,20 @@ class Communicator(client_server_pair.ClientServerPair):
         # if some comes in.
         try:
             while True:
-                await self.client_reader.read(1000)
+                data = await self.client_reader.read(1000)
                 if self.client_reader.at_eof():
+                    self.log.info("Client reader at eof; closing client")
                     break
                 else:
-                    self.log.warning("Unexpected data read from the command socket.")
+                    self.log.warning(
+                        f"Unexpected data {data!r} read from the client reader; "
+                        "ignoring the data."
+                    )
                     await asyncio.sleep(0.01)
         except asyncio.CancelledError:
             pass
         except (ConnectionResetError, asyncio.IncompleteReadError):
+            print("Client connection closed at the other end")
             pass
         except Exception as e:
             print(f"monitor_client_reader failed: {e}")

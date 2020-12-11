@@ -35,7 +35,7 @@ async def amain():
         help="TCP port for commands.",
     )
     parser.add_argument(
-        "--log-level",
+        "--loglevel",
         type=int,
         default=logging.INFO,
         help="Log level (DEBUG=10, INFO=20, WARNING=30).",
@@ -47,7 +47,7 @@ async def amain():
     )
     namespace = parser.parse_args()
     log = logging.getLogger("TMASimulator")
-    log.setLevel(namespace.log_level)
+    log.setLevel(namespace.loglevel)
     print(
         f"Mock TMA controller: command_port={namespace.command_port}"
         f"; reconnect={not namespace.noreconnect}"
@@ -63,7 +63,9 @@ async def amain():
         print("Mock TMA controller running")
         await mock_controller.done_task
     except asyncio.CancelledError:
-        pass
+        print("Mock TMA controller done")
+    except Exception as e:
+        print(f"Mock TMA controller failed: {e}")
 
 
 asyncio.run(amain())
