@@ -115,7 +115,7 @@ class Controller:
         self.read_loop_task = asyncio.Future()
         self.telemetry_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.start())
-        self.reconnect_task = salobj.make_done_future()
+        self.connect_task = salobj.make_done_future()
         self.done_task = asyncio.Future()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -329,7 +329,7 @@ class Controller:
         """
         self.log.info("Closing")
         if self.closing:
-            if not self.done_task.done():
+            if shutdown and not self.done_task.done():
                 await self.done_task
             return
 
@@ -339,7 +339,7 @@ class Controller:
                 self.read_loop_task.cancel()
             self.telemetry_task.cancel()
             if cancel_reconnect:
-                self.reconnect_task.cancel()
+                self.connect_task.cancel()
             self.start_task.cancel()
             if shutdown:
                 try:
@@ -350,6 +350,7 @@ class Controller:
                 await device.close()
             if self.communicator is not None:
                 await self.communicator.close()
+                self.communicator = None
         except Exception:
             self.log.exception("close failed")
         finally:
@@ -410,7 +411,8 @@ class Controller:
             if not self.done_task.done():
                 await self.close(shutdown=not self.reconnect, cancel_read_loop=False)
             if self.reconnect and not self.done_task.done():
-                self.reconnect_task = asyncio.create_task(self.connect())
+                self.log.info("Trying to reconnect")
+                self.connect_task = asyncio.create_task(self.connect())
         self.log.debug("Read loop ends")
 
     async def reply_to_command(self, command):
