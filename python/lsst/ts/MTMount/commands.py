@@ -219,8 +219,8 @@ class AskForCommand(Command):
             field_info.EnumFieldInfo(
                 name="commander",
                 doc="Who should have command",
-                dtype=enums.Commander,
-                default=enums.Commander.HHD,
+                dtype=enums.Source,
+                default=enums.Source.HHD,
             ),
         ),
     )

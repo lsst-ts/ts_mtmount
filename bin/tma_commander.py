@@ -37,6 +37,7 @@ tma_commander.py --help
 import argparse
 import asyncio
 import logging
+import math
 import sys
 import traceback
 
@@ -44,6 +45,11 @@ from lsst.ts import salobj
 from lsst.ts import MTMount
 
 logging.basicConfig()
+
+TRACK_INTERVAL = 0.1  # interval between tracking updates (seconds)
+
+# How far in advance to set the time field of tracking commands (seconds)
+TRACK_ADVANCE_TIME = 0.05
 
 
 async def stdin_generator():
@@ -107,7 +113,9 @@ class Commander:
         self.log.setLevel(log_level)
 
         self.done_task = asyncio.Future()
+        self.command_loop_task = salobj.make_done_future()
         self.read_loop_task = salobj.make_done_future()
+        self.tracking_task = salobj.make_done_future()
 
         self.simulator = None
         if simulate:
@@ -128,7 +136,6 @@ class Commander:
             connect=True,
             connect_callback=self.connect_callback,
         )
-        self.command_loop_task = asyncio.create_task(self.command_loop())
         self.command_dict = dict(
             ask_for_command=MTMount.commands.AskForCommand,
             az_drive_enable=MTMount.commands.AzimuthAxisDriveEnable,
@@ -178,19 +185,29 @@ TMA Commands (omit the tai argument, if shown):
 {self.get_command_help()}
 
 Other commands:
+ccw_ramp start_position end_position velocity  # make CCW track a ramp
+ccw_sine start_position amplitude  # make CCW track one cycle of a sine wave
+stop  # stop ccw_ramp or ccw_sine
 exit  # Exit from this commander
 help  # Print this help
+
+Before commanding the TMA you must take control with:
+ask_for_command 3
 """
+        self.start_task = asyncio.create_task(self.start())
 
     async def close(self):
         """Shut down this TMA commander."""
         try:
+            print("Closing")
+            await self.stop_tracking(verbose=False)
             self.read_loop_task.cancel()
             self.command_loop_task.cancel()
             if self.simulator is not None:
                 await self.simulator.close()
             await self.communicator.close()
             self.done_task.set_result(None)
+            print("Done")
         except Exception as e:
             self.done_task.set_exception(e)
 
@@ -255,7 +272,7 @@ help  # Print this help
             kwargs["tai"] = salobj.current_tai()
 
         cmd = CommandClass(**kwargs)
-        await self.communicator.write(cmd)
+        await self.write_command(cmd)
 
     async def read_loop(self):
         """Read replies from the operations manager.
@@ -264,11 +281,19 @@ help  # Print this help
             await self.communicator.connect_task
             while True:
                 read_message = await self.communicator.read()
-                print(f"read {read_message}")
+                print(f"Read {read_message}")
         except asyncio.CancelledError:
             pass
         except Exception as e:
             print(f"tma_commander read loop failed with {e!r}")
+
+    async def start(self):
+        await self.communicator.start_task
+        self.command_loop_task = asyncio.create_task(self.command_loop())
+
+    async def write_command(self, command):
+        print(f"Write {command}")
+        await self.communicator.write(command)
 
     def connect_callback(self, communicator):
         """Callback function for changes in communicator connection state.
@@ -304,6 +329,12 @@ help  # Print this help
                         break
                     elif cmd_name == "help":
                         print(self.help_text)
+                    elif cmd_name == "ccw_ramp":
+                        await self.start_ccw_ramp(args)
+                    elif cmd_name == "ccw_sine":
+                        await self.start_ccw_sine(args)
+                    elif cmd_name == "stop":
+                        await self.stop_tracking(verbose=True)
                     else:
                         await self.handle_command(cmd_name, args)
                 except Exception as e:
@@ -312,6 +343,131 @@ help  # Print this help
                     continue
         finally:
             await self.close()
+
+    async def start_ccw_ramp(self, args):
+        """Start the camera cable wrap tracking a linear ramp.
+        """
+        self.tracking_task.cancel()
+        arg_names = ("start_position", "end_position", "velocity")
+        if len(args) != len(arg_names):
+            arg_names_str = ", ".join(arg_names)
+            raise ValueError(
+                f"need {len(arg_names)} arguments: {arg_names_str}; got {args}"
+            )
+        args = [float(arg) for arg in args]
+        kwargs = {name: arg for name, arg in zip(arg_names, args)}
+        self.tracking_task = asyncio.ensure_future(self._ccw_ramp(**kwargs))
+
+    async def start_ccw_sine(self, args):
+        """Start the camera cable wrap tracking one cycle of a sine wave.
+        """
+        self.tracking_task.cancel()
+        arg_names = ("start_position", "amplitude", "period")
+        if len(args) != len(arg_names):
+            arg_names_str = ", ".join(arg_names)
+            raise ValueError(
+                f"need {len(arg_names)} arguments: {arg_names_str}; got {args}"
+            )
+        args = [float(arg) for arg in args]
+        kwargs = {name: arg for name, arg in zip(arg_names, args)}
+        self.tracking_task = asyncio.ensure_future(self._ccw_sine(**kwargs))
+
+    async def stop_tracking(self, verbose):
+        if not self.tracking_task.done():
+            print("Stop tracking")
+            self.tracking_task.cancel()
+            # Give time for the axis to be stopped
+            await asyncio.sleep(0.5)
+        elif verbose:
+            print("Tracking not running; nothing done")
+
+    async def _ccw_ramp(self, start_position, end_position, velocity):
+        """Make the camera cable wrap track a linear ramp.
+
+        Parameters
+        ----------
+        start_position : `float`
+            Starting position of ramp (deg).
+        end_position : `float`
+            Ending position of ramp (deg).
+        velocity : `float`
+            Velocity of motion along the ramp (deg/sec).
+        """
+        try:
+            if velocity == 0:
+                raise ValueError(f"velocity {velocity} must be nonzero")
+            dt = (end_position - start_position) / velocity
+            if dt < 0:
+                raise ValueError(f"velocity {velocity} has the wrong sign")
+            print(
+                f"starting tracking a ramp from {start_position} to {end_position} at velocity {velocity}; "
+                f"this will take {dt:0.2f} seconds"
+            )
+            dpos = velocity * TRACK_INTERVAL
+            nelts = int(dt / TRACK_INTERVAL)
+            await self.write_command(
+                MTMount.commands.CameraCableWrapEnableTracking(on=True)
+            )
+            for i in range(nelts):
+                position = start_position + i * dpos
+                track_command = MTMount.commands.CameraCableWrapTrack(
+                    position=position,
+                    velocity=velocity,
+                    tai=salobj.current_tai() + TRACK_ADVANCE_TIME,
+                )
+                await self.write_command(track_command)
+                await asyncio.sleep(TRACK_INTERVAL)
+        except asyncio.CancelledError:
+            print("ccw_ramp cancelled")
+        except Exception as e:
+            print(f"ccw_ramp failed: {e}")
+        finally:
+            await self.write_command(MTMount.commands.CameraCableWrapStop())
+
+    async def _ccw_sine(self, start_position, amplitude, period):
+        """Make the camera cable wrap track one cycle of a sine wave.
+
+        The range of motion is period - amplitude to period + amplitude,
+        plus whatever motion is required to slew to the path.
+
+        Parameters
+        ----------
+        start_position : `float`
+            Midpoint of sine wave (deg).
+        amplitude : `float`
+            Amplitude of sine wave (deg).
+        period : `float`
+            Duration of motion: one full wave (sec).
+        """
+        try:
+            if period <= 0:
+                raise ValueError(f"period {period} must be positive")
+            print(
+                f"starting tracking one cycle of a sine wave centered at {start_position} "
+                f"with amplitude {amplitude} and a period of {period}"
+            )
+            nelts = int(period / TRACK_INTERVAL)
+            vmax = amplitude * 2 * math.pi / period
+            await self.write_command(
+                MTMount.commands.CameraCableWrapEnableTracking(on=True)
+            )
+            for i in range(nelts):
+                angle_rad = 2 * math.pi * i / nelts
+                position = amplitude * math.sin(angle_rad) + start_position
+                velocity = vmax * math.cos(angle_rad)
+                track_command = MTMount.commands.CameraCableWrapTrack(
+                    position=position,
+                    velocity=velocity,
+                    tai=salobj.current_tai() + TRACK_ADVANCE_TIME,
+                )
+                await self.write_command(track_command)
+                await asyncio.sleep(TRACK_INTERVAL)
+        except asyncio.CancelledError:
+            print("ccw_sine cancelled")
+        except Exception as e:
+            print(f"ccw_sine failed: {e}")
+        finally:
+            await self.write_command(MTMount.commands.CameraCableWrapStop())
 
 
 async def amain():
@@ -322,7 +478,7 @@ async def amain():
         "--host", default="127.0.0.1", help="TMA operation manager IP address."
     )
     parser.add_argument(
-        "--log-level",
+        "--loglevel",
         type=int,
         default=logging.INFO,
         help="Log level (DEBUG=10, INFO=20, WARNING=30).",
@@ -332,8 +488,9 @@ async def amain():
     )
     namespace = parser.parse_args()
     commander = Commander(
-        host=namespace.host, log_level=namespace.log_level, simulate=namespace.simulate,
+        host=namespace.host, log_level=namespace.loglevel, simulate=namespace.simulate,
     )
+    await commander.start_task
     await commander.done_task
 
 
