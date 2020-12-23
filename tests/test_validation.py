@@ -40,7 +40,7 @@ class ValidationTestCase(unittest.TestCase):
         self.schema = yaml.safe_load(rawschema)
         self.validator = salobj.DefaultingValidator(schema=self.schema)
         self.default = dict(
-            host="127.0.0.1",
+            host="ccw-mgmt.cp.lsst.org",
             connection_timeout=10,
             ack_timeout=10,
             camera_cable_wrap_advance_time=0.02,
