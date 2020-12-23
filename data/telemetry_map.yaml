@@ -1,0 +1,73 @@
+# Mapping to translate telemetry from the low-level controller to SAL telemetry topics.
+# The structure is:
+# low-level controller topic ID: (SAL topic name, field translation dict)
+# where field translation dict is a dict of SAL field name: low-level controller field name
+# These IDs must match the entries in the TelemetryTopicId enum class.
+
+1: # ID and fields are a guess
+- azimuth
+- angleActual: azAngleActual
+  angleSet: azAngleSet
+  velocityActual: azVelocityActual
+  velocitySet: azVelocitySet
+  accelerationActual: azAccelerationActual
+  torqueActual: azTorqueActual
+  timestamp: timestamp
+
+2: # ID and fields are a guess
+- azimuthDrives
+- current1: azCurrent1
+  current2: azCurrent2
+  current3: azCurrent3
+  current4: azCurrent4
+  current5: azCurrent5
+  current6: azCurrent6
+  current7: azCurrent7
+  current8: azCurrent8
+  current9: azCurrent9
+  current10: azCurrent10
+  current11: azCurrent11
+  current12: azCurrent12
+  current13: azCurrent13
+  current14: azCurrent14
+  current15: azCurrent15
+  current16: azCurrent16
+  timestamp: timestamp
+
+3: # ID and fields are a guess
+- elevation
+- angleActual: elAngleActual
+  angleSet: elAngleSet
+  velocityActual: elVelocityActual
+  velocitySet: elVelocitySet
+  accelerationActual: elAccelerationActual
+  torqueActual: elTorqueActual
+  timestamp: timestamp
+
+4: # ID and fields are a guess
+- elevationDrives
+- current1: elCurrent1
+  current2: elCurrent2
+  current3: elCurrent3
+  current4: elCurrent4
+  current5: elCurrent5
+  current6: elCurrent6
+  current7: elCurrent7
+  current8: elCurrent8
+  current9: elCurrent9
+  current10: elCurrent10
+  current11: elCurrent11
+  current12: elCurrent12
+  timestamp: timestamp
+
+8:
+- cameraCableWrap
+- driveState1: cCWStatusDrive1
+  driveState2: cCWStatusDrive2
+  angle1: cCWAngle1
+  angle2: cCWAngle2
+  speed1: cCWSpeed1
+  speed2: cCWSpeed2
+  current1: cCWCurrent1
+  current2: cCWCurrent2
+  timestamp: timestamp
