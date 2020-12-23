@@ -10,6 +10,11 @@ properties:
     type: string
     format: hostname
     default: "127.0.0.1"
+  telemetry_host:
+    description: IP address of the telemetry server.
+    type: string
+    format: hostname
+    default: "127.0.0.1"
   connection_timeout:
     description: Time limit for connecting to the TCP/IP command interface (sec)
     type: number
