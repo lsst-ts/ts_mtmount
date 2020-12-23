@@ -26,5 +26,7 @@ HHD_COMMAND_PORT = 40005
 # pair of ports for the CSC.
 CSC_COMMAND_PORT = 50005
 
+TELEMETRY_PORT = 50035
+
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
