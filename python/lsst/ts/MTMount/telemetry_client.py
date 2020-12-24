@@ -111,6 +111,10 @@ class TelemetryClient:
         self.host = host
         self.port = port
         self.controller = salobj.Controller(name="NewMTMount")
+        # Cancel the controller read loop; do not want this controller
+        # to acknowledge commands and we do not need the read loop
+        # in order to write messages.
+        self.controller.start_task.cancel()
         self.log = self.controller.log.getChild("TelemetryClient")
 
         self.connection_timeout = connection_timeout
@@ -186,7 +190,6 @@ class TelemetryClient:
         """Connect to the telemetry port and start the read loop.
         """
         self.log.debug("start")
-        await self.controller.start_task
         if self.connected:
             raise RuntimeError("Already connected")
         try:
