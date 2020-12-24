@@ -27,6 +27,7 @@ __all__ = [
     "ReplyCode",
     "Source",
     "SubsystemId",
+    "TelemetryTopicId",
 ]
 
 import enum
@@ -284,3 +285,17 @@ class SubsystemId(enum.IntEnum):
     ELEVATION_THERMAL = 1700
     INTERLOCK = 1800
     TOP_END_CHILLER = 2200
+
+
+class TelemetryTopicId(enum.IntEnum):
+    """Telemetry topic ID values.
+
+    These must match the data in telemetry_map.yaml
+    """
+
+    # All of these except CCW is a guess
+    AZIMUTH = 1
+    AZIMUTH_DRIVE = 2
+    ELEVATION = 3
+    ELEVATION_DRIVE = 4
+    CAMERA_CABLE_WRAP = 8
