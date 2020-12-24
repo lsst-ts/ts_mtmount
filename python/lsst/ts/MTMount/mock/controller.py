@@ -53,8 +53,7 @@ async def wait_tasks(*tasks):
 
 
 class Controller:
-    """Simulate the most basic responses from the low-level controller
-    (Operation Manager).
+    """Simulate the TMA controller (Operation Manager).
 
     If the commander is `Source.CSC` then acknowledge all commands and mark
     as done. If not, then reject all commands except `Command.ASK_FOR_COMMAND`.
@@ -128,6 +127,49 @@ class Controller:
     @property
     def connected(self):
         return self.communicator is not None and self.communicator.connected
+
+    @classmethod
+    async def amain(cls):
+        parser = argparse.ArgumentParser("Simulate the TMA controller")
+        parser.add_argument(
+            "--command-port",
+            type=int,
+            default=constants.CSC_COMMAND_PORT,
+            help="TCP/IP port for commands.",
+        )
+        parser.add_argument(
+            "--loglevel",
+            type=int,
+            default=logging.INFO,
+            help="Log level (DEBUG=10, INFO=20, WARNING=30).",
+        )
+        parser.add_argument(
+            "--noreconnect",
+            action="store_true",
+            help="Shut down when the the CSC disconnects?",
+        )
+        namespace = parser.parse_args()
+        log = logging.getLogger("TMASimulator")
+        log.setLevel(namespace.loglevel)
+        print(
+            "Mock TMA controller: "
+            f"command_port={namespace.command_port}; "
+            f"reconnect={not namespace.noreconnect}"
+        )
+        mock_controller = cls(
+            command_port=namespace.command_port,
+            log=log,
+            reconnect=not namespace.noreconnect,
+        )
+        try:
+            print("Mock TMA controller starting")
+            await mock_controller.start_task
+            print("Mock TMA controller running")
+            await mock_controller.done_task
+        except asyncio.CancelledError:
+            print("Mock TMA controller done")
+        except Exception as e:
+            print(f"Mock TMA controller failed: {e}")
 
     async def put_axis_telemetry(self, device_id, tai):
         """Warning: this minimal and simplistic."""
@@ -306,6 +348,8 @@ class Controller:
             self.log.debug("Connected")
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.telemetry_task = asyncio.create_task(self.telemetry_loop())
+        except asyncio.CancelledError:
+            self.log.info("Connection cancelled")
         except Exception:
             self.log.exception("Could not connect")
 
