@@ -1,6 +1,7 @@
+#!/usr/bin/env python
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -19,26 +20,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# Set __version__ before importing the CSC
-try:
-    from .version import *
-except ImportError:
-    __version__ = "?"
+"""A simple command-line script that sends commands to
+the low-level controller (Operation Manager).
 
-from .constants import *
-from .enums import *
-from .utils import *
-from .limits import *
-from . import field_info
-from . import base_message
-from . import commands
-from . import replies
-from .client_server_pair import *
-from .communicator import *
-from .command_futures import *
-from .telemetry_client import *
-from .mtmount_commander import *
-from .mtmount_csc import *
-from .tma_commander import *
-from . import mock
-from . import testutils
+Must be connected to a low-level port on the Operation Manger.
+At this time the only available port is for the hand-held device,
+but Tekniker plans to make an additional port available for our CSC.
+
+Warning: this should not be used while the CSC is running.
+
+For more information:
+
+tma_commander.py --help
+"""
+
+import asyncio
+
+from lsst.ts import MTMount
+
+
+asyncio.run(MTMount.TmaCommander.amain())
