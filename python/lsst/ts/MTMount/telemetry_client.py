@@ -110,7 +110,7 @@ class TelemetryClient:
     ):
         self.host = host
         self.port = port
-        self.controller = salobj.Controller(name="NewMTMount")
+        self.controller = salobj.Controller(name="MTMount")
         # Cancel the controller read loop; do not want this controller
         # to acknowledge commands and we do not need the read loop
         # in order to write messages.

@@ -113,7 +113,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
 
     async def test_bin_script(self):
         await self.check_bin_script(
-            name="NewMTMount", index=None, exe_name="run_mtmount.py",
+            name="MTMount", index=None, exe_name="run_mtmount.py",
         )
 
     def test_class_attributes(self):

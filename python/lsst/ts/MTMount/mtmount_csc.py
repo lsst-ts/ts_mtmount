@@ -188,7 +188,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.should_be_connected = False
 
         super().__init__(
-            name="NewMTMount",
+            name="MTMount",
             index=0,
             schema_path=schema_path,
             config_dir=config_dir,
@@ -201,7 +201,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
         self.mtmount_remote = salobj.Remote(
-            domain=self.domain, name="NewMTMount", include=["cameraCableWrap"]
+            domain=self.domain, name="MTMount", include=["cameraCableWrap"]
         )
 
         loop = asyncio.get_running_loop()

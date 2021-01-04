@@ -41,7 +41,7 @@ class RampArgs:
 
 class MTMountCommander(salobj.CscCommander):
     def __init__(self, enable):
-        super().__init__(name="NewMTMount", enable=enable)
+        super().__init__(name="MTMount", enable=enable)
         for command_to_ignore in ("abort", "setValue"):
             self.command_dict.pop(command_to_ignore, None)
 
