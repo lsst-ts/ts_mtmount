@@ -84,7 +84,7 @@ class TelemetryClientTestCase(asynctest.TestCase):
         ]
         telemetry_client_process = await asyncio.create_subprocess_exec(*args)
         domain = salobj.Domain()
-        self.remote = salobj.Remote(domain=domain, name="NewMTMount")
+        self.remote = salobj.Remote(domain=domain, name="MTMount")
         await asyncio.gather(self.server.connected_task, self.remote.start_task)
         try:
             yield
