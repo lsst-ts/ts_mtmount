@@ -30,6 +30,7 @@ import argparse
 import asyncio
 import json
 import logging
+import math
 import pathlib
 
 import yaml
@@ -220,10 +221,17 @@ class TelemetryClient:
 
     def get_preprocessor(self, sal_topic_name):
         """Get the preprocessor for this topic, if it exists, else None.
+
+        Parameters
+        ----------
+        sal_topic_name : str
+            Name of SAL telemetry topic, e.g. "tel_azimuthDrives".
         """
         return getattr(self, f"_preprocess_{sal_topic_name}", None)
 
     async def read_loop(self):
+        """Read and process status from the low-level controller.
+        """
         while True:
             try:
                 data = await self.reader.readuntil(b"\r\n")
@@ -251,24 +259,57 @@ class TelemetryClient:
             except Exception:
                 self.log.exception(f"read_loop could not handle {data}; continuing.")
 
-    def _convert_drive_states(self, llv_data, prefix, ndrives):
-        for n in range(1, ndrives + 1):
-            key = f"{prefix}StatusDrive{n}"
-            # Use UNKNOWN if the key is absent or the value is unrecognized.
-            llv_value = llv_data.get(key, "Unknown")
-            llv_data[key] = DriveStateDict.get(llv_value, DriveState.UNKNOWN)
+    def _convert_drive_measurements(self, llv_data, keys, ndrives):
+        """Convert per-drive measurements or other items numbered from 1
 
-    def _convert_axis_state(self, llv_data, prefix):
-        key = f"{prefix}Status"
-        # Use UNKNOWN if the key is absent or the value is unrecognized.
-        llv_value = llv_data.get(key, "Unknown")
-        llv_data[key] = AxisStateDict.get(llv_value, AxisState.UNKNOWN)
+        Parameters
+        ----------
+        llv_data : dict
+            Data from the low-level controller. Modified in place.
+        keys : list [str]
+            Prefix for named items; full names have the drive number appended.
+            For example "azCurrent" refers to "azCurrent1" - "azCurrent16".
+        ndrives : int
+            The number of drives.
+        """
+        for key in keys:
+            llv_data[key] = [
+                llv_data.pop(f"{key}{n}", math.nan) for n in range(1, ndrives + 1)
+            ]
+
+    def _convert_drive_states(self, llv_data, key, ndrives):
+        """Convert drive state strings.
+
+        Parameters
+        ----------
+        llv_data : dict
+            Data from the low-level controller. Modified in place.
+        key : str
+            Prefix for named items; one of "azStatusDrive",
+            "cCWStatusDrive", or "elStatusDrive".
+        ndrives : int
+            The number of drives.
+        """
+        llv_data[key] = [
+            DriveStateDict.get(llv_data.pop(f"{key}{n}", "Unknown"), DriveState.UNKNOWN)
+            for n in range(1, ndrives + 1)
+        ]
 
     def _preprocess_azimuthDrives(self, llv_data):
-        self._convert_drive_states(llv_data=llv_data, prefix="az", ndrives=16)
+        """Preprocess status for the tel_azimuthDrives topic."""
+        self._convert_drive_measurements(
+            llv_data=llv_data, keys=["azCurrent"], ndrives=16
+        )
 
     def _preprocess_cameraCableWrap(self, llv_data):
-        self._convert_drive_states(llv_data=llv_data, prefix="cCW", ndrives=2)
+        """Preprocess status for the tel_cameraCableWrap topic."""
+        self._convert_drive_states(llv_data=llv_data, key="cCWStatusDrive", ndrives=2)
+        self._convert_drive_measurements(
+            llv_data=llv_data, keys=["cCWAngle", "cCWSpeed", "cCWCurrent"], ndrives=2
+        )
 
     def _preprocess_elevationDrives(self, llv_data):
-        self._convert_drive_states(llv_data=llv_data, prefix="el", ndrives=12)
+        """Preprocess status for the tel_elevationDrives topic."""
+        self._convert_drive_measurements(
+            llv_data=llv_data, keys=["elCurrent"], ndrives=12
+        )

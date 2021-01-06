@@ -27,6 +27,7 @@ import time
 import unittest
 
 import asynctest
+import numpy as np
 
 from lsst.ts.idl.enums.MTMount import DriveState
 from lsst.ts import salobj
@@ -158,14 +159,10 @@ class TelemetryClientTestCase(asynctest.TestCase):
 
             # Arbitrary values
             desired_ccw_dds_data = dict(
-                driveState1=DriveState.MOVING,
-                driveState2=DriveState.OFF,
-                angle1=55.1,
-                angle2=55.2,
-                speed1=1.3,
-                speed2=1.4,
-                current1=50.1,
-                current2=50.2,
+                driveState=[DriveState.MOVING, DriveState.OFF],
+                angle=[55.1, 55.2],
+                speed=[1.3, 1.4],
+                current=[50.1, 50.2],
                 timestamp=time.time(),
             )
             ccw_llv_data = self.convert_dds_data_to_llv(
@@ -205,6 +202,11 @@ class TelemetryClientTestCase(asynctest.TestCase):
                     error_msgs.append(
                         f"{key} {value} - {desired_value} = {value - desired_value}"
                     )
+            elif isinstance(value, list):
+                if isinstance(value[0], float):
+                    np.testing.assert_allclose(value, desired_value, atol=delta)
+                else:
+                    assert value == desired_value
             else:
                 if value != desired_value:
                     error_msgs.append(f"{key} {value} != {desired_value}")
@@ -228,36 +230,45 @@ class TelemetryClientTestCase(asynctest.TestCase):
         llv_data : `dict`
             Dict of low-level field name: value telemetry data.
         """
-        data = dict(
-            self.convert_dds_item_to_llv(key=key, value=value, prefix=prefix)
-            for key, value in dds_data.items()
-        )
-        data["topicID"] = topic_id
-        return data
+        llv_data = dict(topicID=topic_id)
+        for key, value in dds_data.items():
+            self.convert_dds_item_to_llv(
+                llv_data=llv_data, key=key, value=value, prefix=prefix
+            )
+        llv_data["topicID"] = topic_id
+        return llv_data
 
-    def convert_dds_item_to_llv(self, key, value, prefix):
+    def convert_dds_item_to_llv(self, llv_data, key, value, prefix):
         """Convert one telemetry item from DDS to low-level controller format.
 
         This usually adds a prefix and in some cases modifies the value.
 
         Parameters
         ----------
+        llv_data : dict
+            Dict of low-level data. Modified in place.
         key : `str`
             DDS field name.
         value : `str`
             DDS value.
         prefix : `str`
             Prefix for low-level data, e.g. "az" for Azimuth.
-
-        Returns
-        -------
-        (field name, value) low-level telemetry item.
         """
-        if key == "timestamp":
-            return key, value
         if key.startswith("driveState"):
-            return prefix + "StatusDrive" + key[10:], self.driveStateToStr[value]
-        return prefix + key[0].upper() + key[1:], value
+            llv_key = prefix + "StatusDrive"
+            for i, item in enumerate(value):
+                llv_data[llv_key + str(i + 1)] = self.driveStateToStr[item]
+            return
+
+        if key == "timestamp":
+            llv_key = key
+        else:
+            llv_key = prefix + key[0].upper() + key[1:]
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                llv_data[llv_key + str(i + 1)] = item
+        else:
+            llv_data[llv_key] = value
 
     def make_elaz_drives_dds_data(self, naxes):
         """Make telemetry data for elevation or azimuth drives.
@@ -272,9 +283,9 @@ class TelemetryClientTestCase(asynctest.TestCase):
         dds_data : `dict`
             DDS telemetry data, as field name: value.
         """
-        dds_data = {f"current{n}": n * 0.1 for n in range(1, naxes + 1)}
-        dds_data["timestamp"] = time.time()
-        return dds_data
+        return dict(
+            current=[n * 0.1 for n in range(1, naxes + 1)], timestamp=time.time(),
+        )
 
     async def publish_data(self, llv_data):
         """Write telemetry data to the telemetry TCP/IP port.

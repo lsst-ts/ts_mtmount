@@ -165,10 +165,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             await self.assert_next_sample(
                 topic=self.remote.tel_cameraCableWrap,
                 flush=False,
-                angle1=0,
-                angle2=0,
-                speed1=0,
-                speed2=0,
+                angle=[0, 0],
+                speed=[0, 0],
             )
 
     async def test_standard_state_transitions(self):
@@ -296,10 +294,10 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     )
                     actual_segment = ccw_actuator.path.at(tel_ccw_data.timestamp)
                     self.assertAlmostEqual(
-                        tel_ccw_data.angle1, actual_segment.position, delta=0.1
+                        tel_ccw_data.angle[0], actual_segment.position, delta=0.1
                     )
                     self.assertAlmostEqual(
-                        tel_ccw_data.speed1, actual_segment.velocity, delta=0.1
+                        tel_ccw_data.speed[0], actual_segment.velocity, delta=0.1
                     )
 
                     await asyncio.sleep(0.1)
