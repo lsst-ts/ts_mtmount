@@ -295,8 +295,8 @@ class TelemetryTopicId(enum.IntEnum):
     """
 
     # All of these except CCW is a guess
-    AZIMUTH = 1
-    AZIMUTH_DRIVE = 2
-    ELEVATION = 3
-    ELEVATION_DRIVE = 4
+    AZIMUTH = 6
+    AZIMUTH_DRIVE = 5
+    ELEVATION = 15
+    ELEVATION_DRIVE = 14
     CAMERA_CABLE_WRAP = 8

@@ -23,10 +23,12 @@ import asyncio
 import contextlib
 import json
 import logging
+import pathlib
 import time
 import unittest
 
 import asynctest
+import yaml
 import numpy as np
 
 from lsst.ts.idl.enums.MTMount import DriveState
@@ -46,6 +48,15 @@ class TelemetryClientTestCase(asynctest.TestCase):
         self.driveStateToStr = {
             value: key for key, value in MTMount.DriveStateDict.items()
         }
+
+        telemetry_map_path = (
+            pathlib.Path(__file__).parents[1] / "data" / "telemetry_map.yaml"
+        )
+        with open(telemetry_map_path, "r") as f:
+            raw_translation_data = f.read()
+        # Dict of topic ID: [SAL telemetry topic name, field dict]
+        # where field dict is SAL field name: low-level controller field name
+        self.translation_dict = yaml.safe_load(raw_translation_data)
 
         self.log = logging.getLogger()
         self.log.setLevel(logging.INFO)
@@ -117,7 +128,6 @@ class TelemetryClientTestCase(asynctest.TestCase):
             # topic_id is from telemetry_map.yaml
             azimuth_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elaz_dds_data,
-                prefix="az",
                 topic_id=MTMount.TelemetryTopicId.AZIMUTH,
             )
             await self.publish_data(azimuth_llv_data)
@@ -127,7 +137,6 @@ class TelemetryClientTestCase(asynctest.TestCase):
 
             elevation_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elaz_dds_data,
-                prefix="el",
                 topic_id=MTMount.TelemetryTopicId.ELEVATION,
             )
             await self.publish_data(elevation_llv_data)
@@ -138,7 +147,6 @@ class TelemetryClientTestCase(asynctest.TestCase):
             desired_azimuth_drives_dds_data = self.make_elaz_drives_dds_data(naxes=16)
             azimuth_drives_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_azimuth_drives_dds_data,
-                prefix="az",
                 topic_id=MTMount.TelemetryTopicId.AZIMUTH_DRIVE,
             )
             await self.publish_data(azimuth_drives_llv_data)
@@ -149,7 +157,6 @@ class TelemetryClientTestCase(asynctest.TestCase):
             desired_elevation_drives_dds_data = self.make_elaz_drives_dds_data(naxes=12)
             elevation_drives_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elevation_drives_dds_data,
-                prefix="el",
                 topic_id=MTMount.TelemetryTopicId.ELEVATION_DRIVE,
             )
             await self.publish_data(elevation_drives_llv_data)
@@ -167,7 +174,6 @@ class TelemetryClientTestCase(asynctest.TestCase):
             )
             ccw_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_ccw_dds_data,
-                prefix="cCW",
                 topic_id=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
             )
             await self.publish_data(ccw_llv_data)
@@ -213,15 +219,13 @@ class TelemetryClientTestCase(asynctest.TestCase):
         if error_msgs:
             self.fail(", ".join(error_msgs))
 
-    def convert_dds_data_to_llv(self, dds_data, prefix, topic_id):
+    def convert_dds_data_to_llv(self, dds_data, topic_id):
         """Convert a telemetry dict from DDS to low-level controller format.
 
         Parameters
         ----------
         dds_data : `dict`
             Dict of dds field name: value telemetry data.
-        prefix : `str`
-            Prefix for low-level data, e.g. "az" for Azimuth.
         topic_id : `TelemetryTopicId`:
             Topic ID for low-level data.
 
@@ -231,14 +235,16 @@ class TelemetryClientTestCase(asynctest.TestCase):
             Dict of low-level field name: value telemetry data.
         """
         llv_data = dict(topicID=topic_id)
+        field_dict = self.translation_dict[topic_id][1]
         for key, value in dds_data.items():
+            llv_key = field_dict[key]
             self.convert_dds_item_to_llv(
-                llv_data=llv_data, key=key, value=value, prefix=prefix
+                llv_data=llv_data, llv_key=llv_key, value=value,
             )
         llv_data["topicID"] = topic_id
         return llv_data
 
-    def convert_dds_item_to_llv(self, llv_data, key, value, prefix):
+    def convert_dds_item_to_llv(self, llv_data, llv_key, value):
         """Convert one telemetry item from DDS to low-level controller format.
 
         This usually adds a prefix and in some cases modifies the value.
@@ -247,23 +253,16 @@ class TelemetryClientTestCase(asynctest.TestCase):
         ----------
         llv_data : dict
             Dict of low-level data. Modified in place.
-        key : `str`
-            DDS field name.
+        llv_key : `str`
+            Low-level field name (or field name prefix for array values).
         value : `str`
             DDS value.
-        prefix : `str`
-            Prefix for low-level data, e.g. "az" for Azimuth.
         """
-        if key.startswith("driveState"):
-            llv_key = prefix + "StatusDrive"
+        if llv_key.endswith("StatusDrive"):
             for i, item in enumerate(value):
                 llv_data[llv_key + str(i + 1)] = self.driveStateToStr[item]
             return
 
-        if key == "timestamp":
-            llv_key = key
-        else:
-            llv_key = prefix + key[0].upper() + key[1:]
         if isinstance(value, list):
             for i, item in enumerate(value):
                 llv_data[llv_key + str(i + 1)] = item

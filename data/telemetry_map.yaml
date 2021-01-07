@@ -6,7 +6,7 @@
 # If the value is an array in SAL then list it without the indices; for example:
 # list elCurrent1 - elCurrent12 as ``current: elCurrent``.
 
-1: # ID and fields are a guess
+6: # fields are in flux
 - azimuth
 - angleActual: azAngleActual
   angleSet: azAngleSet
@@ -14,14 +14,14 @@
   velocitySet: azVelocitySet
   accelerationActual: azAccelerationActual
   torqueActual: azTorqueActual
-  timestamp: timestamp
+  timestamp: azTimeStamp
 
-2: # ID and fields are a guess
+5:
 - azimuthDrives
 - current: azCurrent
   timestamp: timestamp
 
-3: # ID and fields are a guess
+15: # fields are in flux
 - elevation
 - angleActual: elAngleActual
   angleSet: elAngleSet
@@ -29,9 +29,9 @@
   velocitySet: elVelocitySet
   accelerationActual: elAccelerationActual
   torqueActual: elTorqueActual
-  timestamp: timestamp
+  timestamp: elTimeStamp
 
-4: # ID and fields are a guess
+14:
 - elevationDrives
 - current: elCurrent
   timestamp: timestamp

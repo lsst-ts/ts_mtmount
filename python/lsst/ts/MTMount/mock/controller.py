@@ -225,8 +225,10 @@ class Controller:
             f"{prefix}VelocityActual": actual.velocity,
             f"{prefix}VelocitySet": target.velocity,
             f"{prefix}AccelerationActual": actual.acceleration,
+            # Torque is arbitrary; I have no idea
+            # what realistic values are.
             f"{prefix}TorqueActual": actual.acceleration / 10,
-            "timestamp": tai,
+            f"{prefix}TimeStamp": tai,
         }
         await self.write_telemetry(data_dict)
 

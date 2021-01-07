@@ -462,7 +462,7 @@ class MockControllerTestCase(asynctest.TestCase):
                     self.assertAlmostEqual(
                         axis_telem[full_name], desired_value, msg=full_name
                     )
-                self.assertGreater(axis_telem["timestamp"], tai0)
+                self.assertGreater(axis_telem[f"{prefix}TimeStamp"], tai0)
 
             # Work around Docker time issues on macOS with an offset
             tai0 = salobj.current_tai() - 0.1
