@@ -77,7 +77,7 @@ class CommandFutures:
         """
         if not self.ack.done():
             self.ack.set_exception(salobj.ExpectedError(explanation))
-        else:
+        elif not self.done.done():
             self.done.set_exception(salobj.ExpectedError(explanation))
 
     def setdone(self):
