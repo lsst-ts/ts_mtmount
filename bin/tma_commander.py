@@ -400,7 +400,7 @@ ask_for_command 3
             if dt < 0:
                 raise ValueError(f"velocity {velocity} has the wrong sign")
             print(
-                f"starting tracking a ramp from {start_position} to {end_position} at velocity {velocity}; "
+                f"Tracking a ramp from {start_position} to {end_position} at velocity {velocity}; "
                 f"this will take {dt:0.2f} seconds"
             )
             dpos = velocity * TRACK_INTERVAL
@@ -443,7 +443,7 @@ ask_for_command 3
             if period <= 0:
                 raise ValueError(f"period {period} must be positive")
             print(
-                f"starting tracking one cycle of a sine wave centered at {start_position} "
+                f"Tracking one cycle of a sine wave centered at {start_position} "
                 f"with amplitude {amplitude} and a period of {period}"
             )
             nelts = int(period / TRACK_INTERVAL)
