@@ -527,12 +527,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 # commands.CameraCableWrapEnableTracking(on=True),
             ]
             await self.send_commands(*enable_commands)
-        except Exception as e:
-            err_msg = "Failed to enable one or more devices"
-            self.log.exception(err_msg)
-            self.fault(
-                code=enums.CscErrorCode.ACTUATOR_ENABLE_ERROR, report=f"{err_msg}: {e}",
-            )
+        except Exception:
+            self.log.exception("Failed to enable one or more devices")
+            raise
         # if self.camera_cable_wrap_task.done():
         #     self.camera_cable_wrap_task = asyncio.create_task(
         #         self.camera_cable_wrap_loop()
@@ -552,13 +549,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.CameraCableWrapPower(on=False),
             ]
             await self.send_commands(*disable_commands)
-        except Exception as e:
-            err_msg = "Failed to disable one or more devices"
-            self.log.exception(err_msg)
-            self.fault(
-                code=enums.CscErrorCode.ACTUATOR_DISABLE_ERROR,
-                report=f"{err_msg}: {e}",
-            )
+        except Exception:
+            self.log.exception("Failed to disable one or more devices")
+            raise
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
