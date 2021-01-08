@@ -593,6 +593,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
                 )
             except asyncio.TimeoutError:
+                self.command_dict.pop(command.sequence_id, None)
                 raise asyncio.TimeoutError(
                     f"Timed out after {futures.timeout + TIMEOUT_BUFFER} seconds "
                     f"waiting for the Done reply to {command}"
@@ -615,25 +616,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
         futures_list : `List` [`CommandFutures`]
             Command future for each command.
         """
-        futures_list = []
+        future = None
         try:
             if do_lock:
                 async with self.command_lock:
                     for command in commands:
-                        futures_list.append(
-                            await self.send_command(command, do_lock=False)
-                        )
+                        future = await self.send_command(command, do_lock=False)
+                        await future.done
             else:
                 for command in commands:
-                    futures_list.append(await self.send_command(command, do_lock=False))
-            return futures_list
+                    future = await self.send_command(command, do_lock=False)
+                    await future.done
         except ConnectionResetError:
-            for future in futures_list:
+            if future is not None:
                 future.setnoack("Connection lost")
-            raise
         except Exception as e:
             self.log.exception("send_commands failed")
-            for future in futures_list:
+            # The future is probably done, but in case not...
+            if future is not None:
                 future.setnoack(f"send_commands failed: {e}")
             raise
 

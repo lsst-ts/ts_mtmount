@@ -85,7 +85,8 @@ class CommandFutures:
         """
         if not self.ack.done():
             self.ack.set_result(0)
-        self.done.set_result(None)
+        if not self.done.done():
+            self.done.set_result(None)
 
     @property
     def timeout(self):
