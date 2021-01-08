@@ -274,6 +274,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def close_tasks(self):
         """Shut down pending tasks. Called by `close`."""
+        while self.command_dict:
+            command = self.command_dict.popitem()[1]
+            command.setnoack("Connection closed before command finished")
         await super().close_tasks()
         await self.disconnect()
 
