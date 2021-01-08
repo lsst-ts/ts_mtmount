@@ -226,6 +226,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.send_command(
                     commands.AskForCommand(commander=enums.Source.HHD)
                 )
+                self.log.info(
+                    "Wait 1 second before sending any other commands, to work around a TMA bug."
+                )
+                await asyncio.sleep(1)
                 self.has_control = True
             except Exception as e:
                 raise salobj.ExpectedError(
@@ -555,8 +559,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.disconnect()
 
     async def send_command(self, command, do_lock=True):
-        """Send a command to the operation manager
-        and add it to command_dict.
+        """Send a command to the operation manager and wait for it to finish.
 
         Parameters
         ----------
@@ -615,6 +618,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def send_commands(self, *commands, do_lock=True):
         """Run a set of operation manager commands.
+
+        Wait for each command to finish before issuing the next.
 
         Parameters
         ----------
