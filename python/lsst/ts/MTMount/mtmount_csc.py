@@ -523,18 +523,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.enable_task.cancel()
         if not self.connected:
             return
-        try:
-            disable_commands = [
-                commands.BothAxesStop(),
-                commands.CameraCableWrapStop(),
-                commands.AzimuthAxisPower(on=False),
-                commands.ElevationAxisPower(on=False),
-                commands.CameraCableWrapPower(on=False),
-            ]
-            await self.send_commands(*disable_commands)
-        except Exception:
-            self.log.exception("Failed to disable one or more devices")
-            raise
+        for command in [
+            commands.BothAxesStop(),
+            commands.CameraCableWrapStop(),
+            commands.AzimuthAxisPower(on=False),
+            commands.ElevationAxisPower(on=False),
+            commands.CameraCableWrapPower(on=False),
+        ]:
+            try:
+                await self.send_command(command, do_lock=False)
+            except Exception as e:
+                self.log.warning(f"Command {command} failed; continuing: {e}")
+                raise
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
