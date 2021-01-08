@@ -74,7 +74,7 @@ async def stdin_generator():
         line = await reader.readline()
         if not line:  # EOF.
             break
-        yield line.decode("utf-8").strip()
+        yield line.decode(errors="ignore").strip()
 
 
 def print_connected(descr, communicator):

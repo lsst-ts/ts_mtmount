@@ -134,7 +134,7 @@ class Communicator(client_server_pair.ClientServerPair):
             raise RuntimeError("Server not connected")
         try:
             read_bytes = await self.server_reader.readuntil(b"\r\n")
-            read_str = read_bytes.decode()[:-2]
+            read_str = read_bytes.decode(errors="ignore")[:-2]
         except asyncio.CancelledError:
             raise
         except ConnectionResetError:
