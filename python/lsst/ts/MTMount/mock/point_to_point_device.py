@@ -107,7 +107,9 @@ class PointToPointDevice(base_device.BaseDevice):
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command.
         """
-        await asyncio.sleep(self.actuator.remaining_time())
+        # Provide some slop for non-monotonic clocks, which are
+        # sometimes seen when running Docker on macOS.
+        await asyncio.sleep(self.actuator.remaining_time() + 0.2)
 
     def supersede_move_command(self):
         """Report the current move command (if any) as superseded.
