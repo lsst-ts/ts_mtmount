@@ -408,6 +408,7 @@ ask_for_command 3
             await self.write_command(
                 MTMount.commands.CameraCableWrapEnableTracking(on=True)
             )
+            await asyncio.sleep(0.5)
             for i in range(nelts):
                 position = start_position + i * dpos
                 track_command = MTMount.commands.CameraCableWrapTrack(
@@ -451,6 +452,7 @@ ask_for_command 3
             await self.write_command(
                 MTMount.commands.CameraCableWrapEnableTracking(on=True)
             )
+            await asyncio.sleep(0.5)
             for i in range(nelts):
                 angle_rad = 2 * math.pi * i / nelts
                 position = amplitude * math.sin(angle_rad) + start_position
