@@ -23,6 +23,7 @@ __all__ = ["MTMountCsc"]
 
 import asyncio
 import pathlib
+import signal
 
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import DriveState
@@ -206,6 +207,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.mtmount_remote = salobj.Remote(
             domain=self.domain, name="MTMount", include=["cameraCableWrap"]
         )
+
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self.signal_handler)
 
     async def begin_enable(self, data):
         """Take control of the mount and initialize devices.
@@ -490,20 +495,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.communicator.close()
             self.communicator = None
 
-        if (
-            self.mock_controller_process is not None
-            and self.mock_controller_process.returncode is None
-        ):
-            self.log.info("Terminate the mock controller process")
-            self.mock_controller_process.terminate()
-            self.mock_controller_process = None
-        if (
-            self.telemetry_client_process is not None
-            and self.telemetry_client_process.returncode is None
-        ):
-            self.log.info("Terminate the telemetry client process")
-            self.telemetry_client_process.terminate()
-            self.telemetry_client_process = None
+        self.terminate_background_processes()
 
     async def enable_devices(self):
         self.log.info("Enable devices")
@@ -658,6 +650,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 future.setnoack(f"send_commands failed: {e}")
             raise
 
+    def terminate_background_processes(self):
+        """Terminate the background processes with SIGTERM.
+        """
+        if (
+            self.mock_controller_process is not None
+            and self.mock_controller_process.returncode is None
+        ):
+            self.log.info("Terminate the mock controller process")
+            self.mock_controller_process.terminate()
+            self.mock_controller_process = None
+        if (
+            self.telemetry_client_process is not None
+            and self.telemetry_client_process.returncode is None
+        ):
+            self.log.info("Terminate the telemetry client process")
+            self.telemetry_client_process.terminate()
+            self.telemetry_client_process = None
+
     async def camera_cable_wrap_loop(self):
         self.log.info("Camera cable wrap control begins")
         try:
@@ -767,6 +777,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             report="Connection lost to low-level controller (noticed in read_loop)",
                         )
         self.log.debug("Read loop ends")
+
+    def signal_handler(self):
+        self.terminate_background_processes()
+        asyncio.create_task(self.close())
 
     async def start(self):
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
