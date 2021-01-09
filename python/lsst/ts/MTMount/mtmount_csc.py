@@ -25,6 +25,7 @@ import asyncio
 import pathlib
 
 from lsst.ts import salobj
+from lsst.ts.idl.enums.MTMount import DriveState
 from . import command_futures
 from . import commands
 from . import constants
@@ -41,6 +42,7 @@ TIMEOUT_BUFFER = 5
 MAX_ROTATOR_APPLICATION_GAP = 1.0
 
 MOCK_CTRL_START_TIME = 20
+TELEMETRY_START_TIME = 30
 
 NOT_SUPPORTED_MESSAGE = (
     "Not supported in this camera-cable-wrap-only version of the CSC"
@@ -60,7 +62,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         Simulation mode.
     mock_command_port : `int`, optional
         Port for mock controller TCP/IP interface. If `None` then use the
-        port specified by the configuration. Only used in simulation mode.
+        standard value. Only used in simulation mode.
+    mock_telemetry_port : `int`, optional
+        Port for mock controller telemetry server. If `None` then use the
+        standard value. Only used in simulation mode.
     run_mock_controller : `bool`, optional
         Run the mock controller? Ignored unless ``simulation_mode == 1``.
         This is used by unit tests which run the mock controller
@@ -96,6 +101,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         initial_state=salobj.State.STANDBY,
         simulation_mode=0,
         mock_command_port=None,
+        mock_telemetry_port=None,
         run_mock_controller=True,
     ):
         schema_path = (
@@ -106,10 +112,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
             if mock_command_port is not None
             else constants.CSC_COMMAND_PORT
         )
+        self.mock_telemetry_port = (
+            mock_telemetry_port
+            if mock_telemetry_port is not None
+            else constants.TELEMETRY_PORT
+        )
         self.run_mock_controller = run_mock_controller
         self.communicator = None
+
+        # Subprocess running the telemetry client
+        self.telemetry_client_process = None
+
         # Subprocess running the mock controller
         self.mock_controller_process = None
+
         # Dict of command sequence-id: (ack_task, done_task).
         # ack_task is set to the timeout (sec) when command is acknowledged.
         # done_task is set to to None when the command is done.
@@ -117,6 +133,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_dict = dict()
 
         self.command_lock = asyncio.Lock()
+
+        self.on_drive_states = set(
+            (DriveState.MOVING, DriveState.STOPPING, DriveState.STOPPED)
+        )
 
         # Does the CSC have control of the mount?
         # Once the low-level controller reports this in an event,
@@ -129,6 +149,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task to track enabling and disabling
         self.enable_task = salobj.make_done_future()
         self.disable_task = salobj.make_done_future()
+
+        self.monitor_telemetry_client_task = salobj.make_done_future()
 
         # Task for self.camera_cable_wrap_loop
         self.camera_cable_wrap_task = salobj.make_done_future()
@@ -181,8 +203,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             domain=self.domain, name="MTRotator", include=["rotation"]
         )
 
-        self.mtmount = salobj.Remote(
-            domain=self.domain, name="MTMount", include=["Camera_Cable_Wrap"]
+        self.mtmount_remote = salobj.Remote(
+            domain=self.domain, name="NewMTMount", include=["cameraCableWrap"]
         )
 
     async def begin_enable(self, data):
@@ -265,15 +287,23 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
 
         rot_data = await self.rotator.tel_rotation.next(flush=True)
-        ccw_data = await self.mtmount.tel_Camera_Cable_Wrap.aget()
+        ccw_data = await self.mtmount_remote.tel_cameraCableWrap.aget()
 
         # Adjust the camera cable wrap position to the timestamp
         # in the rotator telemetry.
         dt = rot_data.timestamp - ccw_data.timestamp
-        ccw_actual_velocity = (ccw_data.CCW_Speed_1 + ccw_data.CCW_Speed_2) / 2.0
-        ccw_unadjusted_actual_position = (
-            ccw_data.CCW_Angle_1 + ccw_data.CCW_Angle_2
-        ) / 2.0
+        if ccw_data.driveState1 in self.on_drive_states:
+            ccw_actual_velocity = ccw_data.speed1
+            ccw_unadjusted_actual_position = ccw_data.angle1
+        elif ccw_data.driveState2 in self.on_drive_states:
+            ccw_actual_velocity = ccw_data.speed2
+            ccw_unadjusted_actual_position = ccw_data.angle2
+        else:
+            self.log.error(
+                "Camera cable wrap drive not enabled; stop following rotator."
+            )
+            self.camera_cable_wrap_task.cancel()
+            return
         ccw_actual_position = ccw_actual_velocity * dt + ccw_unadjusted_actual_position
 
         distance_ccw_rot_actual = ccw_actual_position - rot_data.actualPosition
@@ -327,7 +357,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
-        """Connect to the low-level controller.
+        """Connect to the low-level controller and start the telemetry client.
 
         Start the mock controller, if simulating and run_mock_controller true.
         """
@@ -340,28 +370,39 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if self.simulation_mode:
             client_host = salobj.LOCAL_HOST
             server_host = salobj.LOCAL_HOST
+            telemetry_host = salobj.LOCAL_HOST
             command_port = self.mock_command_port
+            telemetry_port = self.mock_telemetry_port
 
             if self.run_mock_controller:
                 args = [
                     "run_mock_tma.py",
-                    f"--command-port={self.mock_command_port}",
+                    f"--command-port={command_port}",
+                    f"--telemetry-port={telemetry_port}",
                     f"--loglevel={self.log.level}",
                 ]
-                self.log.debug(f"Starting the mock controller with args {args}")
+                self.log.info(f"Starting the mock controller: {' '.join(args)}")
                 try:
                     self.mock_controller_process = await asyncio.create_subprocess_exec(
                         *args
                     )
-                except Exception:
-                    self.log.exception("Could not start the mock controller")
-                    raise
+                except Exception as e:
+                    cmdstr = " ".join(args)
+                    err_msg = f"Mock controller process command {cmdstr!r} failed"
+                    self.log.exception(err_msg)
+                    self.fault(
+                        code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR,
+                        report=f"{err_msg}: {e}",
+                    )
+                    return
                 else:
                     connection_timeout += MOCK_CTRL_START_TIME
         else:
             client_host = self.config.host
-            server_host = None
+            server_host = None  # Use all interfaces for the local server.
+            telemetry_host = self.config.telemetry_host
             command_port = constants.CSC_COMMAND_PORT
+            telemetry_port = constants.TELEMETRY_PORT
         try:
             if self.communicator is None:
                 self.log.debug("Construct communicator")
@@ -394,6 +435,36 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             return
 
+        # Run the telemetry client as a background process.
+        args = [
+            "run_mtmount_telemetry_client.py",
+            f"--host={telemetry_host}",
+            f"--port={telemetry_port}",
+            f"--loglevel={self.log.level}",
+        ]
+        self.log.info(f"Starting the telemetry client: {' '.join(args)!r}")
+        try:
+            self.telemetry_client_process = await asyncio.create_subprocess_exec(*args)
+        except Exception as e:
+            cmdstr = " ".join(args)
+            err_msg = f"Could not start MTMount telemetry client with {cmdstr!r}"
+            self.log.exception(err_msg)
+            self.fault(
+                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=f"{err_msg}: {e}"
+            )
+            return
+        try:
+            await self.mtmount_remote.tel_cameraCableWrap.next(
+                flush=False, timeout=TELEMETRY_START_TIME
+            )
+        except asyncio.TimeoutError:
+            err_msg = "The telemetry client is not producing telemetry"
+            self.log.error(err_msg)
+            self.fault(code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg)
+        self.monitor_telemetry_client_task = asyncio.create_task(
+            self.monitor_telemetry_client()
+        )
+
     def connect_callback(self, communicator):
         self.evt_connected.set_put(
             command=communicator.client_connected, replies=communicator.server_connected
@@ -413,6 +484,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         self.should_be_connected = False
 
+        self.monitor_telemetry_client_task.cancel()
+
         if self.communicator is not None:
             self.log.info("Disconnect from the low-level controller")
             await self.communicator.close()
@@ -425,6 +498,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Terminate the mock controller process")
             self.mock_controller_process.terminate()
             self.mock_controller_process = None
+        if (
+            self.telemetry_client_process is not None
+            and self.telemetry_client_process.returncode is None
+        ):
+            self.log.info("Terminate the telemetry client process")
+            self.telemetry_client_process.terminate()
+            self.telemetry_client_process = None
 
     async def enable_devices(self):
         self.log.info("Enable devices")
@@ -590,7 +670,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.info("Camera cable wrap control begins")
         try:
             while True:
-                position, velocity, tai = await self.get_camera_cable_wrap_demand()
+                position_velocity_tai = await self.get_camera_cable_wrap_demand()
+                if position_velocity_tai is None:
+                    return
+                position, velocity, tai = position_velocity_tai
 
                 command = commands.CameraCableWrapTrack(
                     position=position, velocity=velocity, tai=tai,
@@ -607,6 +690,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def configure(self, config):
         self.config = config
+
+    async def monitor_telemetry_client(self):
+        await self.telemetry_client_process.wait()
+        self.fail("Telemetry process exited prematurely")
 
     async def read_loop(self):
         """Read and process replies from the low-level controller.
@@ -690,12 +777,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.debug("Read loop ends")
 
     async def start(self):
+        await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         await super().start()
-
-        self.log.debug("Waiting for the MTRotator remote to start")
-        await self.rotator.start_task
-
-        self.log.debug("Started")
+        self.log.info("Started")
 
     async def do_clearError(self, data):
         self.assert_enabled()
@@ -780,14 +864,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         self.assert_enabled()
         raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
-        # TODO DM-24783 remove this "if" block once Tekniker's TMA code
-        # supports the xAxisEnableTracking commands.
-        if self.simulation_mode == 0:
-            self.log.info(
-                "Ignoring the startTracking command "
-                "because Tekniker's code does not yet support it"
-            )
-            return
         await self.send_commands(
             commands.ElevationAxisEnableTracking(on=True),
             commands.AzimuthAxisEnableTracking(on=True),
@@ -796,22 +872,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stop(self, data):
         self.assert_enabled()
         await self.send_commands(
-            commands.BothAxesStop(), commands.CameraCableWrapStop(), do_lock=False,
+            commands.CameraCableWrapStop(), do_lock=False,
         )
 
     async def do_stopTracking(self, data):
         self.assert_enabled()
         raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
-        # TODO DM-24783 remove this "if" block once Tekniker's TMA code
-        # supports the xAxisEnableTracking commands.
-        if self.simulation_mode == 0:
-            self.log.info(
-                "Issuing BothAxesStop instead of disabling tracking "
-                "because Tekniker's code does not yet support the latter"
-            )
-            await self.send_command(commands.BothAxesStop(),)
-        else:
-            await self.send_commands(
-                commands.ElevationAxisEnableTracking(on=False),
-                commands.AzimuthAxisEnableTracking(on=False),
-            )
+        await self.send_commands(
+            commands.ElevationAxisEnableTracking(on=False),
+            commands.AzimuthAxisEnableTracking(on=False),
+        )
