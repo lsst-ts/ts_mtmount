@@ -304,17 +304,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Adjust the camera cable wrap position to the timestamp
         # in the rotator telemetry.
         dt = rot_data.timestamp - ccw_data.timestamp
-        for ccw_drive_index in range(2):
-            if ccw_data.driveState[ccw_drive_index] in self.on_drive_states:
-                break
-        else:
-            self.log.error(
-                "Camera cable wrap drive not enabled; stop following rotator."
-            )
-            self.camera_cable_wrap_task.cancel()
-            return
-        ccw_actual_velocity = ccw_data.speed[ccw_drive_index]
-        ccw_unadjusted_actual_position = ccw_data.angle[ccw_drive_index]
+        ccw_actual_velocity = ccw_data.velocityActual
+        ccw_unadjusted_actual_position = ccw_data.angleActual
         ccw_actual_position = ccw_actual_velocity * dt + ccw_unadjusted_actual_position
 
         distance_ccw_rot_actual = ccw_actual_position - rot_data.actualPosition
