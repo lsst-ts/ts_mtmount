@@ -258,7 +258,7 @@ class AzimuthAxisEnableTracking(Command):
 
 
 class AzimuthAxisHome(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_HOME,)
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_HOME)
 
 
 class AzimuthAxisMove(Command):
@@ -274,7 +274,7 @@ class AzimuthAxisPower(Command):
 
 
 class AzimuthAxisResetAlarm(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_RESET_ALARM,)
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_RESET_ALARM)
 
 
 class AzimuthAxisStop(Command):
@@ -406,11 +406,11 @@ class CameraCableWrapTrack(Command):
 
 
 class Disable(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.DISABLE,)
+    field_infos = make_command_field_infos(enums.CommandCode.DISABLE)
 
 
 class Enable(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.ENABLE,)
+    field_infos = make_command_field_infos(enums.CommandCode.ENABLE)
 
 
 class ElevationAxisDriveEnable(Command):
@@ -445,7 +445,7 @@ class ElevationAxisEnableTracking(Command):
 
 
 class ElevationAxisHome(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_HOME,)
+    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_HOME)
 
 
 class ElevationAxisMove(Command):
@@ -639,7 +639,15 @@ class OilSupplySystemResetAlarm(Command):
 
 
 class SafetyReset(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.SAFETY_RESET,)
+    field_infos = make_command_field_infos(
+        enums.CommandCode.SAFETY_RESET,
+        (
+            field_info.StrFieldInfo(
+                name="what",
+                doc="Which systems to reset; a colon-separated list of integers.",
+            ),
+        ),
+    )
 
 
 class TopEndChillerPower(Command):
