@@ -209,9 +209,9 @@ class Controller:
 
     async def put_axis_telemetry(self, device_id, tai):
         """Warning: this minimal and simplistic."""
-        prefix, topic_id = {
-            enums.DeviceId.AZIMUTH_AXIS: ("az", enums.TelemetryTopicId.AZIMUTH),
-            enums.DeviceId.ELEVATION_AXIS: ("el", enums.TelemetryTopicId.ELEVATION),
+        topic_id = {
+            enums.DeviceId.AZIMUTH_AXIS: enums.TelemetryTopicId.AZIMUTH,
+            enums.DeviceId.ELEVATION_AXIS: enums.TelemetryTopicId.ELEVATION,
         }[device_id]
         device = self.device_dict[device_id]
         actuator = device.actuator
@@ -220,15 +220,15 @@ class Controller:
 
         data_dict = {
             "topicID": topic_id,
-            f"{prefix}AngleActual": actual.position,
-            f"{prefix}AngleSet": target.position,
-            f"{prefix}VelocityActual": actual.velocity,
-            f"{prefix}VelocitySet": target.velocity,
-            f"{prefix}AccelerationActual": actual.acceleration,
+            "angleActual": actual.position,
+            "angleSet": target.position,
+            "velocityActual": actual.velocity,
+            "velocitySet": target.velocity,
+            "accelerationActual": actual.acceleration,
             # Torque is arbitrary; I have no idea
             # what realistic values are.
-            f"{prefix}TorqueActual": actual.acceleration / 10,
-            f"{prefix}TimeStamp": tai,
+            "torqueActual": actual.acceleration / 10,
+            "timestamp": tai,
         }
         await self.write_telemetry(data_dict)
 
@@ -268,8 +268,8 @@ class Controller:
         data_dict = dict(
             topicID=enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
             cCWStatus="Enabled" if device.power_on else "Off",
-            cCWStatusDrive1=drive_status,
-            cCWStatusDrive2="Off",  # Only one drive is on; assume drive 1
+            cCWStatusDrive1="Off",  # Only one drive is on; assume drive 2
+            cCWStatusDrive2=drive_status,
             cCWAngle1=actual.position,
             cCWAngle2=actual.position,
             cCWSpeed1=actual.velocity,

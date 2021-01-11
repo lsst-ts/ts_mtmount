@@ -446,23 +446,20 @@ class MockControllerTestCase(asynctest.TestCase):
                 # Work around Docker time issues on macOS with an offset
                 tai0 = salobj.current_tai() - 0.1
                 axis_telem = await self.next_telemetry(topic_id)
-                for brief_name in (
-                    "AngleActual",
-                    "AngleSet",
-                    "VelocityActual",
-                    "VelocitySet",
-                    "AccelerationActual",
-                    "TorqueActual",
+                for name in (
+                    "angleActual",
+                    "angleSet",
+                    "velocityActual",
+                    "velocitySet",
+                    "accelerationActual",
+                    "torqueActual",
                 ):
-                    if brief_name.startswith("Angle"):
+                    if name.startswith("angle"):
                         desired_value = device.actuator.path.at(tai0).position
                     else:
                         desired_value = 0
-                    full_name = f"{prefix}{brief_name}"
-                    self.assertAlmostEqual(
-                        axis_telem[full_name], desired_value, msg=full_name
-                    )
-                self.assertGreater(axis_telem[f"{prefix}TimeStamp"], tai0)
+                    self.assertAlmostEqual(axis_telem[name], desired_value, msg=name)
+                self.assertGreater(axis_telem["timestamp"], tai0)
 
             # Work around Docker time issues on macOS with an offset
             tai0 = salobj.current_tai() - 0.1
@@ -605,22 +602,19 @@ class MockControllerTestCase(asynctest.TestCase):
 
             # Test telemetry after move
             axis_telem = await self.next_telemetry(MTMount.TelemetryTopicId.ELEVATION)
-            for brief_name in (
-                "AngleActual",
-                "AngleSet",
-                "VelocityActual",
-                "VelocitySet",
-                "AccelerationActual",
-                "TorqueActual",
+            for name in (
+                "angleActual",
+                "angleSet",
+                "velocityActual",
+                "velocitySet",
+                "accelerationActual",
+                "torqueActual",
             ):
-                if brief_name.startswith("Angle"):
+                if name.startswith("angle"):
                     desired_value = end_position
                 else:
                     desired_value = 0
-                full_name = f"el{brief_name}"
-                self.assertAlmostEqual(
-                    axis_telem[full_name], desired_value, msg=full_name
-                )
+                self.assertAlmostEqual(axis_telem[name], desired_value, msg=name)
 
 
 if __name__ == "__main__":
