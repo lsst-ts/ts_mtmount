@@ -103,6 +103,8 @@ class TelemetryTopicHandler:
 
 
 class TelemetryClient:
+    on_drive_states = frozenset(("Standstill", "Discrete Motion", "Stopping"))
+
     def __init__(
         self, host, port=constants.TELEMETRY_PORT, connection_timeout=10,
     ):
@@ -302,11 +304,28 @@ class TelemetryClient:
         )
 
     def _preprocess_cameraCableWrap(self, llv_data):
-        """Preprocess status for the tel_cameraCableWrap topic."""
-        self._convert_drive_states(llv_data=llv_data, key="cCWStatusDrive", ndrives=2)
-        self._convert_drive_measurements(
-            llv_data=llv_data, keys=["cCWAngle", "cCWSpeed", "cCWCurrent"], ndrives=2
-        )
+        """Preprocess status for the tel_cameraCableWrap topic.
+
+        This method is rather complicated because the data
+        output by the CCW as of 2021-01-11 does not look much like
+        the data that will be output by the final TMA.
+        For now the CCW outputs cCWAngle1, cCWAngle2, cCWSpeed1, and cCWSpeed2,
+        where the 1 values are only valid if drive 1 is on,
+        and the 2 values are only valid if drive 2 is on.
+        The positions are moderately close, the speeds less so.
+        For now I report the 1 values if drive 1 is on and the 2 values
+        otherwise, because we tend to use drive 2.
+        """
+        drive_state1 = llv_data.get("cCWStatusDrive1", None)
+        if drive_state1 in self.on_drive_states:
+            llv_data["angleActual"] = llv_data["cCWAngle1"]
+            llv_data["velocityActual"] = llv_data["cCWSpeed1"]
+        else:
+            llv_data["angleActual"] = llv_data["cCWAngle2"]
+            llv_data["velocityActual"] = llv_data["cCWSpeed2"]
+        llv_data["accelerationActual"] = math.nan
+        llv_data["angleSet"] = math.nan
+        llv_data["velocitySet"] = math.nan
 
     def _preprocess_elevationDrives(self, llv_data):
         """Preprocess status for the tel_elevationDrives topic."""

@@ -23,6 +23,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import pathlib
 import time
 import unittest
@@ -164,22 +165,34 @@ class TelemetryClientTestCase(asynctest.TestCase):
                 self.remote.tel_elevationDrives, desired_elevation_drives_dds_data
             )
 
-            # Arbitrary values
-            desired_ccw_dds_data = dict(
-                driveState=[DriveState.MOVING, DriveState.OFF],
-                angle=[55.1, 55.2],
-                speed=[1.3, 1.4],
-                current=[50.1, 50.2],
+            # CCW is tricky for now because the telemetry
+            # is heavily massaged and some fields are unknown.
+
+            DriveStateNameDict = {
+                value: key for key, value in MTMount.DriveStateDict.items()
+            }
+            ccw_llv_data = dict(
+                cCWStatusDrive1=DriveStateNameDict[DriveState.MOVING],
+                cCWStatusDrive2=DriveStateNameDict[DriveState.OFF],
+                cCWAngle1=12.3,
+                cCWAngle2=-34.5,
+                cCWSpeed1=1.23,
+                cCWSpeed2=-3.45,
                 timestamp=time.time(),
+                topicID=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
             )
-            ccw_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_ccw_dds_data,
-                topic_id=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
+            desired_ccw_dds_data = dict(
+                angleActual=ccw_llv_data["cCWAngle1"],
+                velocityActual=ccw_llv_data["cCWSpeed1"],
+                timestamp=ccw_llv_data["timestamp"],
             )
             await self.publish_data(ccw_llv_data)
-            await self.assert_next_telemetry(
+            ccw_dds_data = await self.assert_next_telemetry(
                 self.remote.tel_cameraCableWrap, desired_ccw_dds_data
             )
+            self.assertTrue(math.isnan(ccw_dds_data.accelerationActual))
+            self.assertTrue(math.isnan(ccw_dds_data.angleSet))
+            self.assertTrue(math.isnan(ccw_dds_data.velocitySet))
 
     async def assert_next_telemetry(
         self, topic, desired_data, delta=1e-7, timeout=STD_TIMEOUT
@@ -197,6 +210,11 @@ class TelemetryClientTestCase(asynctest.TestCase):
             Maximum allowed difference for float values.
         timeout : `float`, optional
             Maximum time to wait for a message (seconds).
+
+        Returns
+        -------
+        message
+            The telemetry message.
         """
         message = await topic.next(flush=False, timeout=timeout)
         data = vars(message)
@@ -218,6 +236,7 @@ class TelemetryClientTestCase(asynctest.TestCase):
                     error_msgs.append(f"{key} {value} != {desired_value}")
         if error_msgs:
             self.fail(", ".join(error_msgs))
+        return message
 
     def convert_dds_data_to_llv(self, dds_data, topic_id):
         """Convert a telemetry dict from DDS to low-level controller format.
