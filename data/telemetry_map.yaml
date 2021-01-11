@@ -8,13 +8,13 @@
 
 6: # fields are in flux
 - azimuth
-- angleActual: azAngleActual
-  angleSet: azAngleSet
-  velocityActual: azVelocityActual
-  velocitySet: azVelocitySet
-  accelerationActual: azAccelerationActual
-  torqueActual: azTorqueActual
-  timestamp: azTimeStamp
+- angleActual: angleActual
+  angleSet: angleSet
+  velocityActual: velocityActual
+  velocitySet: velocitySet
+  accelerationActual: accelerationActual
+  torqueActual: torqueActual
+  timestamp: timestamp
 
 5:
 - azimuthDrives
@@ -23,13 +23,13 @@
 
 15: # fields are in flux
 - elevation
-- angleActual: elAngleActual
-  angleSet: elAngleSet
-  velocityActual: elVelocityActual
-  velocitySet: elVelocitySet
-  accelerationActual: elAccelerationActual
-  torqueActual: elTorqueActual
-  timestamp: elTimeStamp
+- angleActual: angleActual
+  angleSet: angleSet
+  velocityActual: velocityActual
+  velocitySet: velocitySet
+  accelerationActual: accelerationActual
+  torqueActual: torqueActual
+  timestamp: timestamp
 
 14:
 - elevationDrives
@@ -38,8 +38,9 @@
 
 8:
 - cameraCableWrap
-- driveState: cCWStatusDrive
-  angle: cCWAngle
-  speed: cCWSpeed
-  current: cCWCurrent
+- angleActual: angleActual
+  angleSet: angleSet
+  velocityActual: velocityActual
+  velocitySet: velocitySet
+  accelerationActual: accelerationActual
   timestamp: timestamp
