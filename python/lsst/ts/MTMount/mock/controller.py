@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -21,10 +21,15 @@
 
 __all__ = ["Controller"]
 
+import argparse
 import asyncio
+import json
+import logging
 import signal
 
 from lsst.ts import salobj
+from lsst.ts import hexrotcomm
+from .. import constants
 from .. import commands
 from .. import enums
 from .. import replies
@@ -53,8 +58,7 @@ async def wait_tasks(*tasks):
 
 
 class Controller:
-    """Simulate the most basic responses from the low-level controller
-    (Operation Manager).
+    """Simulate the TMA controller (Operation Manager).
 
     If the commander is `Source.CSC` then acknowledge all commands and mark
     as done. If not, then reject all commands except `Command.ASK_FOR_COMMAND`.
@@ -65,6 +69,8 @@ class Controller:
     command_port : `int`
         Port for reading commands (that the CSC writes).
         The reply port is one greater than the command port.
+    telemetry_port : `int`
+        Port for the telemetry server.
     log : `logging.Logger`
         Logger.
     reconnect : `bool`, optional
@@ -82,13 +88,28 @@ class Controller:
           way to test `Command.ASK_FOR_COMMAND` failures.
     """
 
-    def __init__(self, command_port, log, reconnect=False, commander=enums.Source.NONE):
+    def __init__(
+        self,
+        command_port,
+        telemetry_port,
+        log,
+        reconnect=False,
+        commander=enums.Source.NONE,
+    ):
         self.command_port = command_port
         self.log = log.getChild("MockController")
         self.reconnect = reconnect
         self.commander = enums.Source(commander)
         self.closing = False
         self.telemetry_interval = 0.2  # Seconds
+        self.telemetry_server = hexrotcomm.OneClientServer(
+            name="MockControllerTelemetry",
+            host=salobj.LOCAL_HOST,
+            port=telemetry_port,
+            log=self.log,
+            connect_callback=self.telemetry_connect_callback,
+        )
+
         # Maximum position and velocity error,
         # below which an axis is considered in position
         self.max_position_error = 0.01  # degrees
@@ -115,11 +136,10 @@ class Controller:
         self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
         self.command_dict[enums.CommandCode.SAFETY_RESET] = self.do_safety_reset
 
-        self.sal_controller = salobj.Controller(name="MTMount")
         self.read_loop_task = asyncio.Future()
         self.telemetry_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.start())
-        self.reconnect_task = salobj.make_done_future()
+        self.connect_task = salobj.make_done_future()
         self.done_task = asyncio.Future()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -129,36 +149,95 @@ class Controller:
     def connected(self):
         return self.communicator is not None and self.communicator.connected
 
+    @classmethod
+    async def amain(cls):
+        parser = argparse.ArgumentParser("Simulate the TMA controller")
+        parser.add_argument(
+            "--command-port",
+            type=int,
+            default=constants.CSC_COMMAND_PORT,
+            help="TCP/IP port for commands.",
+        )
+        parser.add_argument(
+            "--telemetry-port",
+            type=int,
+            default=constants.TELEMETRY_PORT,
+            help="TCP/IP port for telemetry.",
+        )
+        parser.add_argument(
+            "--loglevel",
+            type=int,
+            default=logging.INFO,
+            help="Log level (DEBUG=10, INFO=20, WARNING=30).",
+        )
+        parser.add_argument(
+            "--noreconnect",
+            action="store_true",
+            help="Shut down when the the CSC disconnects?",
+        )
+        namespace = parser.parse_args()
+        log = logging.getLogger("TMASimulator")
+        log.setLevel(namespace.loglevel)
+        print(
+            "Mock TMA controller: "
+            f"command_port={namespace.command_port}; "
+            f"telemetry_port={namespace.telemetry_port}; "
+            f"reconnect={not namespace.noreconnect}"
+        )
+        mock_controller = cls(
+            command_port=namespace.command_port,
+            telemetry_port=namespace.telemetry_port,
+            log=log,
+            reconnect=not namespace.noreconnect,
+        )
+        try:
+            print("Mock TMA controller starting")
+            await mock_controller.start_task
+            print("Mock TMA controller running")
+            await mock_controller.done_task
+        except asyncio.CancelledError:
+            print("Mock TMA controller done")
+        except Exception as e:
+            print(f"Mock TMA controller failed: {e}")
+
+    def telemetry_connect_callback(self, server):
+        """Called when a client connects to or disconnects from
+        the telemetry port.
+        """
+        self.telemetry_task.cancel()
+        if server.connected:
+            self.log.info("Telemetry server connected; start telemetry loop")
+            self.telemetry_task = asyncio.create_task(self.telemetry_loop())
+        else:
+            self.log.info("Telemetry server disconnected; stop telemetry loop")
+
     async def put_axis_telemetry(self, device_id, tai):
         """Warning: this minimal and simplistic."""
-        prefix = {
-            enums.DeviceId.AZIMUTH_AXIS: "Azimuth",
-            enums.DeviceId.ELEVATION_AXIS: "Elevation",
+        topic_id = {
+            enums.DeviceId.AZIMUTH_AXIS: enums.TelemetryTopicId.AZIMUTH,
+            enums.DeviceId.ELEVATION_AXIS: enums.TelemetryTopicId.ELEVATION,
         }[device_id]
         device = self.device_dict[device_id]
         actuator = device.actuator
         target = actuator.target.at(tai)
         actual = actuator.path.at(tai)
 
-        # Write the SAL telemetry topic
-        topic = getattr(self.sal_controller, f"tel_{prefix}")
-        state_strs = [
-            "On" if device.power_on else "Off",
-            "DriveEnabled" if device.enabled else "DriveDisabled",
-            "TrackingEnabled" if device.tracking_enabled else "TrackingDisabled",
-        ]
-        kwargs = {
-            f"{prefix}_Status": "/".join(state_strs),
-            f"{prefix}_Angle_Set": target.position,
-            f"{prefix}_Velocity_Set": target.velocity,
-            f"{prefix}_Angle_Actual": actual.position,
-            f"{prefix}_Velocity_Actual": actual.velocity,
-            f"{prefix}_Aceleration_Actual": actual.acceleration,
+        data_dict = {
+            "topicID": topic_id,
+            "angleActual": actual.position,
+            "angleSet": target.position,
+            "velocityActual": actual.velocity,
+            "velocitySet": target.velocity,
+            "accelerationActual": actual.acceleration,
+            # Torque is arbitrary; I have no idea
+            # what realistic values are.
+            "torqueActual": actual.acceleration / 10,
             "timestamp": tai,
         }
-        topic.set_put(**kwargs)
+        await self.write_telemetry(data_dict)
 
-        # Write the InPosition TCP/IP message
+        # Write the InPosition TCP/IP message, if command/event
+        # communicator connected.
         in_position = (
             device.has_target
             and abs(target.position - actual.position) < self.max_position_error
@@ -169,33 +248,51 @@ class Controller:
             what = {enums.DeviceId.AZIMUTH_AXIS: 0, enums.DeviceId.ELEVATION_AXIS: 1}[
                 device_id
             ]
-            reply = replies.InPositionReply(what=what, in_position=in_position)
-            await self.communicator.write(reply)
+            if self.connected:
+                reply = replies.InPositionReply(what=what, in_position=in_position)
+                await self.communicator.write(reply)
 
     async def put_camera_cable_wrap_telemetry(self, tai):
         """Warning: this minimal and simplistic."""
         device = self.device_dict[enums.DeviceId.CAMERA_CABLE_WRAP]
         actuator = device.actuator
         actual = actuator.path.at(tai)
+        kind = actuator.kind(tai)
 
-        state_strs = [
-            "On" if device.power_on else "Off",
-            "DriveEnabled" if device.enabled else "DriveDisabled",
-            "TrackingEnabled" if device.tracking_enabled else "TrackingDisabled",
-        ]
-        self.sal_controller.tel_Camera_Cable_Wrap.set_put(
-            CCW_Status="/".join(state_strs),
-            CCW_Angle_1=actual.position,
-            CCW_Angle_2=actual.position,
-            CCW_Speed_1=actual.velocity,
-            CCW_Speed_2=actual.velocity,
+        if device.power_on:
+            drive_status = {
+                actuator.Kind.Stopped: "Standstill",
+                actuator.Kind.Tracking: "Discrete Motion",
+                actuator.Kind.Slewing: "Discrete Motion",
+                actuator.Kind.Stopping: "Stopping",
+            }.get(kind, "Unknown")
+        else:
+            drive_status = "Off"
+
+        data_dict = dict(
+            topicID=enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
+            cCWStatus="Enabled" if device.power_on else "Off",
+            cCWStatusDrive1="Off",  # Only one drive is on; assume drive 2
+            cCWStatusDrive2=drive_status,
+            cCWAngle1=actual.position,
+            cCWAngle2=actual.position,
+            cCWSpeed1=actual.velocity,
+            cCWSpeed2=actual.velocity,
+            cCWCurrent1=0,
+            cCWCurrent2=0,
             timestamp=tai,
         )
+        await self.write_telemetry(data_dict)
+
+    async def write_telemetry(self, data_dict):
+        data_str = json.dumps(data_dict)
+        self.telemetry_server.writer.write(data_str.encode() + b"\r\n")
+        await self.telemetry_server.writer.drain()
 
     async def telemetry_loop(self):
         """Warning: this minimal and simplistic."""
         try:
-            while True:
+            while self.telemetry_server.connected:
                 tai = salobj.current_tai()
                 await self.put_axis_telemetry(
                     device_id=enums.DeviceId.AZIMUTH_AXIS, tai=tai
@@ -274,13 +371,14 @@ class Controller:
         self.command_queue = None
 
     async def start(self):
-        self.log.debug("Waiting for the SAL controller to start")
-        await self.sal_controller.start_task
         self.connect_task = asyncio.create_task(self.connect())
 
     async def connect(self):
+        self.log.info("Connect to the CSC")
         self.read_loop_task.cancel()
-        self.telemetry_task.cancel()
+        if self.closing:
+            self.log.warning("Cannot connect: closing or closed")
+            return
         try:
             self.communicator = communicator.Communicator(
                 name="MockController",
@@ -297,7 +395,7 @@ class Controller:
             self.log.debug("Waiting for the communicator to start")
             await self.communicator.start_task
         except Exception as e:
-            await self.close(cancel_reconnect=False, exception=e)
+            asyncio.create_task(self.close(exception=e))
             return
 
         try:
@@ -305,29 +403,16 @@ class Controller:
             await self.communicator.connect()
             self.log.debug("Connected")
             self.read_loop_task = asyncio.create_task(self.read_loop())
-            self.telemetry_task = asyncio.create_task(self.telemetry_loop())
+        except asyncio.CancelledError:
+            self.log.info("Connection cancelled")
         except Exception:
             self.log.exception("Could not connect")
 
-    async def close(
-        self,
-        cancel_read_loop=True,
-        cancel_reconnect=True,
-        shutdown=True,
-        exception=None,
-    ):
+    async def close(self, exception=None):
         """Close the controller.
 
         Parameters
         ----------
-        cancel_read_loop : `bool`, optional
-            If True (default) then cancel the read loop task.
-            Set False if calling from read_loop.
-        cancel_reconnect : `bool`, optional
-            If True (default) then cancel the reconnect task.
-        shutdown : `bool`, optional
-            Set done_task result? True by default.
-            Use False if reconnecting.
         exception : `Exception` or `None`
             Exception to which to set done_task, or None.
         """
@@ -339,17 +424,10 @@ class Controller:
 
         try:
             self.closing = True
-            if cancel_read_loop:
-                self.read_loop_task.cancel()
+            self.read_loop_task.cancel()
             self.telemetry_task.cancel()
-            if cancel_reconnect:
-                self.reconnect_task.cancel()
+            self.connect_task.cancel()
             self.start_task.cancel()
-            if shutdown:
-                try:
-                    await self.sal_controller.close()
-                except Exception:
-                    self.log.exception("Failed to close controller")
             for device in self.device_dict.values():
                 await device.close()
             if self.communicator is not None:
@@ -357,8 +435,7 @@ class Controller:
         except Exception:
             self.log.exception("close failed")
         finally:
-            self.closing = False
-            if shutdown and not self.done_task.done():
+            if not self.done_task.done():
                 if exception:
                     self.done_task.set_exception(exception)
                 else:
@@ -411,10 +488,15 @@ class Controller:
             pass
         except (ConnectionResetError, asyncio.IncompleteReadError):
             self.log.warning("Connection lost")
-            if not self.done_task.done():
-                await self.close(shutdown=not self.reconnect, cancel_read_loop=False)
-            if self.reconnect and not self.done_task.done():
-                self.reconnect_task = asyncio.create_task(self.connect())
+            if self.closing:
+                return
+            if self.reconnect:
+                self.connect_task.cancel()
+                await self.communicator.close()
+                if not self.closing:
+                    self.connect_task = asyncio.create_task(self.connect())
+            else:
+                asyncio.create_task(self.close())
         self.log.debug("Read loop ends")
 
     async def reply_to_command(self, command):

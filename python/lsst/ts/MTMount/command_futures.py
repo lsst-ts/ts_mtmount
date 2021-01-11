@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -77,7 +77,7 @@ class CommandFutures:
         """
         if not self.ack.done():
             self.ack.set_exception(salobj.ExpectedError(explanation))
-        else:
+        elif not self.done.done():
             self.done.set_exception(salobj.ExpectedError(explanation))
 
     def setdone(self):
@@ -85,7 +85,8 @@ class CommandFutures:
         """
         if not self.ack.done():
             self.ack.set_result(0)
-        self.done.set_result(None)
+        if not self.done.done():
+            self.done.set_result(None)
 
     @property
     def timeout(self):

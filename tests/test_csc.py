@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -30,9 +30,9 @@ import asynctest
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
-STD_TIMEOUT = 5  # standard command timeout (sec)
-STARTUP_TIMEOUT = 60  # Remote startup time (sec)
-MIRROR_COVER_TIMEOUT = 5  # timeout for opening or closing mirror covers (sec)
+STD_TIMEOUT = 10  # standard command timeout (sec)
+# timeout for opening or closing mirror covers (sec)
+MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
 port_generator = salobj.index_generator(imin=3200)
@@ -42,12 +42,9 @@ logging.basicConfig()
 
 class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
     def setUp(self):
-        self.mtmount_remote = None
         self.mock_controller = None
 
     async def tearDown(self):
-        if self.mtmount_remote is not None:
-            await self.mtmount_remote.close()
         if self.mock_controller is not None:
             await self.mock_controller.close()
 
@@ -57,11 +54,13 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         mock_command_port = next(port_generator)
         # discard a value for the reply port
         next(port_generator)
+        mock_telemetry_port = next(port_generator)
         csc = MTMount.MTMountCsc(
             initial_state=initial_state,
             config_dir=config_dir,
             simulation_mode=simulation_mode,
             mock_command_port=mock_command_port,
+            mock_telemetry_port=mock_telemetry_port,
             run_mock_controller=internal_mock_controller,
         )
         if internal_mock_controller:
@@ -70,23 +69,23 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             mock_ctrl_log = logging.getLogger()
             mock_ctrl_log.setLevel(csc.log.level)
             self.mock_controller = MTMount.mock.Controller(
-                command_port=mock_command_port, log=mock_ctrl_log
+                command_port=mock_command_port,
+                telemetry_port=mock_telemetry_port,
+                log=mock_ctrl_log,
             )
         return csc
 
     @contextlib.asynccontextmanager
     async def make_csc(
         self,
-        initial_state=salobj.State.STANDBY,
+        initial_state,
         config_dir=None,
         simulation_mode=1,
         internal_mock_controller=False,
     ):
-        """Make and return a CSC, an mtmount_remote and possibly a mock
-        controller.
+        """Make CSC, and optionally a mock controller.
 
-        mtmount_remote is needed to read telemetry, which the mock controller
-        publishes using the MTMount telemetry topics, instead of NewMTMount.
+        This override exists to provide preferred defaults.
 
         Parameters
         ----------
@@ -110,17 +109,11 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             simulation_mode=simulation_mode,
             internal_mock_controller=internal_mock_controller,
         ):
-            self.mtmount_remote = salobj.Remote(
-                domain=self.csc.salinfo.domain, name="MTMount"
-            )
-            await asyncio.wait_for(
-                self.mtmount_remote.start_task, timeout=STARTUP_TIMEOUT
-            )
             yield
 
     async def test_bin_script(self):
         await self.check_bin_script(
-            name="NewMTMount", index=None, exe_name="run_mtmount.py",
+            name="MTMount", index=None, exe_name="run_mtmount.py",
         )
 
     def test_class_attributes(self):
@@ -131,56 +124,52 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         """Test that the CSC goes to FAULT state if it loses connection
         to the low-level controller.
         """
-        async with self.make_csc():
-            await salobj.set_summary_state(
-                remote=self.remote, state=salobj.State.ENABLED
-            )
-            await self.assert_next_summary_state(salobj.State.STANDBY)
-            await self.assert_next_summary_state(salobj.State.DISABLED)
+        async with self.make_csc(
+            initial_state=salobj.State.ENABLED, internal_mock_controller=False
+        ):
             await self.assert_next_summary_state(salobj.State.ENABLED)
             await self.mock_controller.close()
             await self.assert_next_summary_state(salobj.State.FAULT)
 
     async def test_initial_state(self):
-        async with self.make_csc():
-            await salobj.set_summary_state(
-                remote=self.remote, state=salobj.State.ENABLED
-            )
-
+        async with self.make_csc(
+            initial_state=salobj.State.ENABLED, internal_mock_controller=False
+        ):
             # Test initial telemetry
-            data = await self.mtmount_remote.tel_Azimuth.next(
-                flush=False, timeout=STD_TIMEOUT
+            await self.assert_next_sample(
+                topic=self.remote.tel_azimuth,
+                flush=False,
+                angleActual=0,
+                angleSet=0,
+                velocityActual=0,
+                velocitySet=0,
+                accelerationActual=0,
             )
-            self.assertEqual(data.Azimuth_Angle_Set, 0)
-            self.assertEqual(data.Azimuth_Velocity_Set, 0)
-            self.assertEqual(data.Azimuth_Angle_Actual, 0)
-            self.assertEqual(data.Azimuth_Velocity_Actual, 0)
-            self.assertEqual(data.Azimuth_Aceleration_Actual, 0)
 
-            data = await self.mtmount_remote.tel_Elevation.next(
-                flush=False, timeout=STD_TIMEOUT
+            data = await self.assert_next_sample(
+                topic=self.remote.tel_elevation,
+                flush=False,
+                velocitySet=0,
+                velocityActual=0,
+                accelerationActual=0,
             )
             min_elevation = (
                 MTMount.LimitsDict[MTMount.DeviceId.ELEVATION_AXIS]
                 .scaled()
                 .min_position
             )
-            self.assertAlmostEqual(data.Elevation_Angle_Set, min_elevation)
-            self.assertEqual(data.Elevation_Velocity_Set, 0)
-            self.assertAlmostEqual(data.Elevation_Angle_Actual, min_elevation)
-            self.assertEqual(data.Elevation_Velocity_Actual, 0)
-            self.assertEqual(data.Elevation_Aceleration_Actual, 0)
+            self.assertAlmostEqual(data.angleSet, min_elevation)
+            self.assertAlmostEqual(data.angleActual, min_elevation)
 
-            data = await self.mtmount_remote.tel_Camera_Cable_Wrap.next(
-                flush=False, timeout=STD_TIMEOUT
+            await self.assert_next_sample(
+                topic=self.remote.tel_cameraCableWrap,
+                flush=False,
+                angleActual=0,
+                velocityActual=0,
             )
-            self.assertEqual(data.CCW_Angle_1, 0)
-            self.assertEqual(data.CCW_Angle_1, 0)
-            self.assertEqual(data.CCW_Speed_1, 0)
-            self.assertEqual(data.CCW_Speed_1, 0)
 
     async def test_standard_state_transitions(self):
-        async with self.make_csc():
+        async with self.make_csc(initial_state=salobj.State.STANDBY):
             await self.check_standard_state_transitions(
                 enabled_commands=(
                     "closeMirrorCovers",
@@ -229,10 +218,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         )
 
     async def test_camera_cable_wrap_tracking(self):
-        async with self.make_csc():
-            await salobj.set_summary_state(
-                remote=self.remote, state=salobj.State.ENABLED
-            )
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
             self.mock_controller.set_command_queue(maxsize=0)
             ccw_device = self.mock_controller.device_dict[
                 MTMount.DeviceId.CAMERA_CABLE_WRAP
@@ -294,25 +280,26 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                             command.velocity, velocity, delta=max_vel_error
                         )
 
-                    # Check camera cable wrap telemetry
-                    tel_ccw_data = await self.mtmount_remote.tel_Camera_Cable_Wrap.next(
+                    # Check camera cable wrap telemetry;
+                    # use a crude comparison because a new CCW tracking
+                    # command will alter the path.
+                    tel_ccw_data = await self.remote.tel_cameraCableWrap.next(
                         flush=True, timeout=STD_TIMEOUT
                     )
                     actual_segment = ccw_actuator.path.at(tel_ccw_data.timestamp)
                     self.assertAlmostEqual(
-                        tel_ccw_data.CCW_Angle_1, actual_segment.position, delta=1.0e-4
+                        tel_ccw_data.angleActual, actual_segment.position, delta=0.1
                     )
                     self.assertAlmostEqual(
-                        tel_ccw_data.CCW_Speed_1, actual_segment.velocity, delta=1.0e-4
+                        tel_ccw_data.velocityActual, actual_segment.velocity, delta=0.1
                     )
-                    self.assertEqual(tel_ccw_data.CCW_Angle_1, tel_ccw_data.CCW_Angle_2)
-                    self.assertEqual(tel_ccw_data.CCW_Speed_1, tel_ccw_data.CCW_Speed_2)
 
                     await asyncio.sleep(0.1)
                     prev_position = position
                     previous_tai = tai
                     previous_delay = delay
 
+                # Stop the camera cable wrap tracking loop.
                 await self.remote.cmd_disableCameraCableWrapTracking.start(
                     timeout=STD_TIMEOUT
                 )
@@ -341,10 +328,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 self.assertTrue(self.mock_controller.command_queue.empty())
 
     async def test_mirror_covers(self):
-        async with self.make_csc():
-            await salobj.set_summary_state(
-                remote=self.remote, state=salobj.State.ENABLED
-            )
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
             self.mock_controller.set_command_queue(maxsize=0)
 
             mock_device = self.mock_controller.device_dict[
@@ -390,10 +374,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertFalse(actuator.moving())
 
     async def test_move_to_target(self):
-        async with self.make_csc():
-            await salobj.set_summary_state(
-                remote=self.remote, state=salobj.State.ENABLED
-            )
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
             await self.assert_next_sample(
                 self.remote.evt_axesInPosition, azimuth=False, elevation=False
             )
@@ -461,10 +442,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             )
 
     async def test_tracking(self):
-        async with self.make_csc():
-            await salobj.set_summary_state(
-                remote=self.remote, state=salobj.State.ENABLED
-            )
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
             await self.assert_next_sample(
                 self.remote.evt_axesInPosition, azimuth=False, elevation=False
             )
@@ -599,32 +577,24 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             await self.assert_next_sample(topic=self.remote.evt_target, **kwargs)
 
             # Check elevation and azimuth telemetry
-            tel_el_data = await self.mtmount_remote.tel_Elevation.next(
+            tel_el_data = await self.remote.tel_elevation.next(
                 flush=True, timeout=STD_TIMEOUT
             )
             el_actual = elevation_actuator.path.at(tel_el_data.timestamp)
             el_target = elevation_actuator.target.at(tel_el_data.timestamp)
-            self.assertAlmostEqual(tel_el_data.Elevation_Angle_Set, el_target.position)
-            self.assertAlmostEqual(
-                tel_el_data.Elevation_Velocity_Set, el_target.velocity
-            )
-            self.assertAlmostEqual(
-                tel_el_data.Elevation_Angle_Actual, el_actual.position
-            )
-            self.assertAlmostEqual(
-                tel_el_data.Elevation_Velocity_Actual, el_actual.velocity
-            )
+            self.assertAlmostEqual(tel_el_data.angleSet, el_target.position)
+            self.assertAlmostEqual(tel_el_data.velocitySet, el_target.velocity)
+            self.assertAlmostEqual(tel_el_data.angleActual, el_actual.position)
+            self.assertAlmostEqual(tel_el_data.velocityActual, el_actual.velocity)
 
-            tel_az_data = await self.mtmount_remote.tel_Azimuth.next(
+            tel_az_data = await self.remote.tel_azimuth.next(
                 flush=True, timeout=STD_TIMEOUT
             )
             az_actual = azimuth_actuator.path.at(tel_az_data.timestamp)
             az_target = azimuth_actuator.target.at(tel_az_data.timestamp)
-            self.assertAlmostEqual(tel_az_data.Azimuth_Angle_Set, az_target.position)
-            self.assertAlmostEqual(tel_az_data.Azimuth_Velocity_Set, az_target.velocity)
-            self.assertAlmostEqual(tel_az_data.Azimuth_Angle_Actual, az_actual.position)
-            self.assertAlmostEqual(
-                tel_az_data.Azimuth_Velocity_Actual, az_actual.velocity
-            )
+            self.assertAlmostEqual(tel_az_data.angleSet, az_target.position)
+            self.assertAlmostEqual(tel_az_data.velocitySet, az_target.velocity)
+            self.assertAlmostEqual(tel_az_data.angleActual, az_actual.position)
+            self.assertAlmostEqual(tel_az_data.velocityActual, az_actual.velocity)
 
             previous_tai = tai

@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -136,7 +136,7 @@ class BaseMessage:
 
     def __repr__(self):
         arglist = [
-            f"{finfo.name}={str(getattr(self, finfo.name))}"
+            f"{finfo.name}={repr(getattr(self, finfo.name))}"
             for finfo in self.field_infos
         ]
         argstr = ", ".join(arglist)

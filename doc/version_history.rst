@@ -6,6 +6,35 @@
 Version History
 ###############
 
+v0.11.0
+=======
+
+Changes:
+
+* Update to use MTMount instead of NewMTMount IDL files.
+  This requires ts_xml 7.1.
+* Update to read telemetry from a TCP/IP socket in the low-level controller.
+* Update TMA commander:
+
+    * Move the code to a new TmaCommander class.
+    * Rename the bin script to ``bin/command_tma.py``.
+    * Add two camera cable wrap tracking sequences.
+* Fix an error in `CommandFuture` that allowed it to try to set a done Future to a new state.
+* Improve the way `MtMountCsc` enables and disables the low-level controller, as follows:
+
+    * Leave the state at DISABLED if any command to enable the low-level systems fail, rather than going to a FAULT state.
+      This leaves the telemetry client running.
+    * Run all disable commands, even if one fails.
+* Work around a bug in the AskForCommand low-level command by pausing briefly after issuing it.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.1
+
 v0.10.0
 =======
 
