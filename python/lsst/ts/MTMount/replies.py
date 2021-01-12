@@ -143,6 +143,11 @@ class WarningReply(Reply):
             ),
             field_info.SubsystemFieldInfo(what="warning"),
             field_info.TimestampFieldInfo(),
+            # Warnings should all have a description but Julen is not
+            # confident that all do.
+            field_info.StrFieldInfo(
+                name="description", default="", doc="description of the problem"
+            ),
         ),
     )
     has_extra_data = True
@@ -162,6 +167,9 @@ class ErrorReply(Reply):
             ),
             field_info.SubsystemFieldInfo(what="error"),
             field_info.TimestampFieldInfo(),
+            field_info.StrFieldInfo(
+                name="description", doc="description of the problem"
+            ),
         ),
     )
     has_extra_data = True
@@ -172,7 +180,7 @@ class OnStateInfoReply(Reply):
         enums.ReplyCode.ON_STATE_INFO,
         (
             field_info.TimestampFieldInfo(),
-            field_info.StrFieldInfo(name="description", doc="?"),
+            field_info.StrFieldInfo(name="description", doc="description of the state"),
         ),
     )
 
