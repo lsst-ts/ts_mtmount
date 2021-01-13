@@ -573,6 +573,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 return await self._basic_send_command(command=command)
         except ConnectionResetError:
             raise
+        except salobj.ExpectedError as e:
+            self.log.error(f"Failed to send command {command}: {e}")
+            raise
         except Exception:
             self.log.exception(f"Failed to send command {command}")
             raise
