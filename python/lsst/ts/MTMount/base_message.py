@@ -21,6 +21,10 @@
 
 __all__ = ["BaseMessage"]
 
+import enum
+
+import astropy.time
+
 
 class BaseMessage:
     """BaseMessage data.
@@ -131,12 +135,20 @@ class BaseMessage:
             str_list += list(self.extra_data)
         return str_list
 
+    def _get_formatted_value(self, name):
+        value = getattr(self, name)
+        if isinstance(value, enum.Enum):
+            return repr(value)
+        elif isinstance(value, astropy.time.Time):
+            return value.isot
+        return str(value)
+
     def __eq__(self, other):
         return self.str_fields() == other.str_fields()
 
     def __repr__(self):
         arglist = [
-            f"{finfo.name}={repr(getattr(self, finfo.name))}"
+            f"{finfo.name}={self._get_formatted_value(finfo.name)}"
             for finfo in self.field_infos
         ]
         argstr = ", ".join(arglist)
