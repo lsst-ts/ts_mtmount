@@ -6,6 +6,27 @@
 Version History
 ###############
 
+v0.12.0
+=======
+
+Changes:
+
+* Add missing ``description`` field to `replies.WarningReply` and `replies.ErrorReply`.
+* Fix the enable tracking low-level commands:
+
+    * Only the command for camera cable wrap has a parameter: on=0/1.
+      Specify 0 to pause tracking: while paused the axis halts and tracking commands are ignored.
+      Specify 1 to enable tracking or resume paused tracking.
+      The use case is to reduce vibration during an exposure.
+      Note that `MTMountCsc` does not yet support pausing cable wrap tracking during an exposure.
+    * Exit tracking mode using the appropriate stop command, rather than enable tracking with on=0.
+* Improve logging when a low-level command fails by not printing a traceback.
+* `MTMountCommander`: improve output of the ``cameraCableWrap`` telemetry topic;
+  it was constantly output in v0.11.0 because of the ``nan`` values for some fields.
+* `TmaCommander`: improve error handling in the tracking sequences.
+  Output more information and pause briefly before halting the axis.
+
+
 v0.11.0
 =======
 
