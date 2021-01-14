@@ -253,7 +253,7 @@ class AzimuthAxisDriveReset(Command):
 
 class AzimuthAxisEnableTracking(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_ENABLE_TRACKING, _OnOffParameters
+        enums.CommandCode.AZIMUTH_AXIS_ENABLE_TRACKING
     )
 
 
@@ -440,7 +440,7 @@ class ElevationAxisDriveReset(Command):
 
 class ElevationAxisEnableTracking(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_ENABLE_TRACKING, _OnOffParameters
+        enums.CommandCode.ELEVATION_AXIS_ENABLE_TRACKING
     )
 
 

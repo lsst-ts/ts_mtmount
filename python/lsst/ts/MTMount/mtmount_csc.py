@@ -828,7 +828,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_disableCameraCableWrapTracking(self, data):
         self.assert_enabled()
         self.camera_cable_wrap_task.cancel()
-        await self.send_command(commands.CameraCableWrapEnableTracking(on=False))
+        await self.send_command(commands.CameraCableWrapStop())
 
     async def do_enableCameraCableWrapTracking(self, data):
         self.assert_enabled()
@@ -873,8 +873,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.assert_enabled()
         raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
         await self.send_commands(
-            commands.ElevationAxisEnableTracking(on=True),
-            commands.AzimuthAxisEnableTracking(on=True),
+            commands.ElevationAxisEnableTracking(),
+            commands.AzimuthAxisEnableTracking(),
         )
 
     async def do_stop(self, data):
@@ -886,7 +886,4 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stopTracking(self, data):
         self.assert_enabled()
         raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
-        await self.send_commands(
-            commands.ElevationAxisEnableTracking(on=False),
-            commands.AzimuthAxisEnableTracking(on=False),
-        )
+        await self.send_command(commands.BothAxesStop())

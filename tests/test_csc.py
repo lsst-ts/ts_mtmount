@@ -311,10 +311,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 )
                 command = await self.next_lowlevel_command()
                 self.assertEqual(
-                    command.command_code,
-                    MTMount.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING,
+                    command.command_code, MTMount.CommandCode.CAMERA_CABLE_WRAP_STOP,
                 )
-                self.assertFalse(command.on)
                 self.assertTrue(ccw_device.enabled)
                 self.assertFalse(ccw_device.tracking_enabled)
                 self.assertTrue(self.mock_controller.command_queue.empty())
