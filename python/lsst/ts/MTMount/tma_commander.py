@@ -511,8 +511,10 @@ ask_for_command 3
         except asyncio.CancelledError:
             print("ccw_ramp cancelled")
         except Exception as e:
-            print(f"ccw_ramp failed: {e}")
+            print(f"ccw_ramp failed: {e!r}")
         finally:
+            # Wait a bit in case there is a tracking command to be acked.
+            await asyncio.sleep(0.1)
             await self.write_command(commands.CameraCableWrapStop())
 
     async def _ccw_sine(self, start_position, amplitude, period):
@@ -556,6 +558,8 @@ ask_for_command 3
         except asyncio.CancelledError:
             print("ccw_sine cancelled")
         except Exception as e:
-            print(f"ccw_sine failed: {e}")
+            print(f"ccw_sine failed: {e!r}")
         finally:
+            # Wait a bit in case there is a tracking command to be acked.
+            await asyncio.sleep(0.1)
             await self.write_command(commands.CameraCableWrapStop())
