@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -23,7 +23,6 @@ __all__ = ["MTMountCommander"]
 
 import asyncio
 import dataclasses
-import functools
 
 from lsst.ts import salobj
 
@@ -42,47 +41,37 @@ class RampArgs:
 
 class MTMountCommander(salobj.CscCommander):
     def __init__(self, enable):
-        super().__init__(name="NewMTMount", enable=enable)
+        super().__init__(
+            name="MTMount",
+            enable=enable,
+            telemetry_fields_to_not_compare=("current", "timestamp"),
+        )
         for command_to_ignore in ("abort", "setValue"):
-            del self.command_dict[command_to_ignore]
-
-        # Remote for telemetry
-        self.mtmount_remote = salobj.Remote(
-            domain=self.remote.salinfo.domain, name="MTMount"
-        )
-        self.previous_tel_Azimuth = None
-        self.previous_tel_Elevation = None
-        self.mtmount_remote.tel_Azimuth.callback = functools.partial(
-            self.tel_axis_callback, name="Azimuth"
-        )
-        self.mtmount_remote.tel_Elevation.callback = functools.partial(
-            self.tel_axis_callback, name="Elevation"
-        )
+            self.command_dict.pop(command_to_ignore, None)
 
         ramp_arg_names = list(RampArgs.__dataclass_fields__)
         self.help_dict["ramp"] = " ".join(ramp_arg_names) + " # track a ramp"
         self.ramp_count = 0
 
-    def tel_axis_callback(self, data, name):
-        prev_name = f"previous_tel_{name}"
-        actual_pos = round(getattr(data, f"{name}_Angle_Actual"), 2)
-        actual_vel = round(getattr(data, f"{name}_Velocity_Actual"), 3)
-        set_pos = getattr(data, f"{name}_Angle_Set")
-        set_vel = getattr(data, f"{name}_Velocity_Set")
-        data_to_save = (actual_pos, actual_vel, set_pos, set_vel)
-        if data_to_save == getattr(self, prev_name, None):
-            return
-        setattr(self, prev_name, data_to_save)
-        print(
-            f"{name}: set_pos={set_pos}; "
-            f"actual_pos={actual_pos}; "
-            f"set_vel={set_vel}; "
-            f"actual_vel={actual_vel}"
-        )
-
     @property
     def ramp_arg_names(self):
         return
+
+    def tel_cameraCableWrap_callback(self, data):
+        """Handle NaN values.
+        """
+        name = "cameraCableWrap"
+        prev_value_name = f"previous_tel_{name}"
+        public_dict = self.get_rounded_public_data(data)
+        trimmed_dict = {
+            name: str(value)  # use str to handle nan
+            for name, value in public_dict.items()
+            if name not in self.telemetry_fields_to_not_compare
+        }
+        if trimmed_dict != getattr(self, prev_value_name):
+            setattr(self, prev_value_name, trimmed_dict)
+            formatted_data = self.format_dict(public_dict)
+            self.output(f"{data.private_sndStamp:0.3f}: {name}: {formatted_data}")
 
     async def do_ramp(self, args):
         ramp_arg_info = RampArgs.__dataclass_fields__

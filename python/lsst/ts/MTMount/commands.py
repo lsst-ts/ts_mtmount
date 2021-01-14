@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -253,12 +253,12 @@ class AzimuthAxisDriveReset(Command):
 
 class AzimuthAxisEnableTracking(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_ENABLE_TRACKING, _OnOffParameters
+        enums.CommandCode.AZIMUTH_AXIS_ENABLE_TRACKING
     )
 
 
 class AzimuthAxisHome(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_HOME,)
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_HOME)
 
 
 class AzimuthAxisMove(Command):
@@ -274,7 +274,7 @@ class AzimuthAxisPower(Command):
 
 
 class AzimuthAxisResetAlarm(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_RESET_ALARM,)
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_RESET_ALARM)
 
 
 class AzimuthAxisStop(Command):
@@ -406,11 +406,11 @@ class CameraCableWrapTrack(Command):
 
 
 class Disable(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.DISABLE,)
+    field_infos = make_command_field_infos(enums.CommandCode.DISABLE)
 
 
 class Enable(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.ENABLE,)
+    field_infos = make_command_field_infos(enums.CommandCode.ENABLE)
 
 
 class ElevationAxisDriveEnable(Command):
@@ -440,12 +440,12 @@ class ElevationAxisDriveReset(Command):
 
 class ElevationAxisEnableTracking(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_ENABLE_TRACKING, _OnOffParameters
+        enums.CommandCode.ELEVATION_AXIS_ENABLE_TRACKING
     )
 
 
 class ElevationAxisHome(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_HOME,)
+    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_HOME)
 
 
 class ElevationAxisMove(Command):
@@ -639,7 +639,15 @@ class OilSupplySystemResetAlarm(Command):
 
 
 class SafetyReset(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.SAFETY_RESET,)
+    field_infos = make_command_field_infos(
+        enums.CommandCode.SAFETY_RESET,
+        (
+            field_info.StrFieldInfo(
+                name="what",
+                doc="Which systems to reset; a colon-separated list of integers.",
+            ),
+        ),
+    )
 
 
 class TopEndChillerPower(Command):

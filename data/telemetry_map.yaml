@@ -1,0 +1,46 @@
+# Mapping to translate telemetry from the low-level controller to SAL telemetry topics.
+# The structure is:
+# low-level controller topic ID: (SAL topic name, field translation dict)
+# where field translation dict is a dict of SAL field name: low-level controller field name.
+# These IDs must match the entries in the TelemetryTopicId enum class.
+# If the value is an array in SAL then list it without the indices; for example:
+# list elCurrent1 - elCurrent12 as ``current: elCurrent``.
+
+6: # fields are in flux
+- azimuth
+- angleActual: angleActual
+  angleSet: angleSet
+  velocityActual: velocityActual
+  velocitySet: velocitySet
+  accelerationActual: accelerationActual
+  torqueActual: torqueActual
+  timestamp: timestamp
+
+5:
+- azimuthDrives
+- current: azCurrent
+  timestamp: timestamp
+
+15: # fields are in flux
+- elevation
+- angleActual: angleActual
+  angleSet: angleSet
+  velocityActual: velocityActual
+  velocitySet: velocitySet
+  accelerationActual: accelerationActual
+  torqueActual: torqueActual
+  timestamp: timestamp
+
+14:
+- elevationDrives
+- current: elCurrent
+  timestamp: timestamp
+
+8:
+- cameraCableWrap
+- angleActual: angleActual
+  angleSet: angleSet
+  velocityActual: velocityActual
+  velocitySet: velocitySet
+  accelerationActual: accelerationActual
+  timestamp: timestamp

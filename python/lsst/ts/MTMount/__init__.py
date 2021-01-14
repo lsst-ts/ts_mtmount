@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -36,7 +36,9 @@ from . import replies
 from .client_server_pair import *
 from .communicator import *
 from .command_futures import *
+from .telemetry_client import *
 from .mtmount_commander import *
 from .mtmount_csc import *
+from .tma_commander import *
 from . import mock
 from . import testutils

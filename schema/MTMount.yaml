@@ -1,15 +1,20 @@
 $schema: http://json-schema.org/draft-07/schema#
-$id: https://github.com/lsst-ts/ts_ATDome/blob/master/schema/ATDome.yaml
+$id: https://github.com/lsst-ts/ts_MTMount/blob/master/schema/MTMount.yaml
 # title must end with one or more spaces followed by the schema version, which must begin with "v"
-title: ATDome v1
-description: Schema for ATDome configuration files
+title: MTMount v1
+description: Schema for MTMount configuration files
 type: object
 properties:
   host:
     description: IP address of the Operation Manager.
     type: string
     format: hostname
-    default: "127.0.0.1"
+    default: ccw-mgmt.cp.lsst.org
+  telemetry_host:
+    description: IP address of the telemetry server.
+    type: string
+    format: hostname
+    default: ccw-mgmt.cp.lsst.org
   connection_timeout:
     description: Time limit for connecting to the TCP/IP command interface (sec)
     type: number

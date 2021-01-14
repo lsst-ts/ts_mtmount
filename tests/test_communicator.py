@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -164,12 +164,20 @@ class CommunicatorTestCase(asynctest.TestCase):
         replies = (
             MTMount.replies.AckReply(sequence_id=1, timeout_ms=3500),
             MTMount.replies.DoneReply(sequence_id=2),
+            MTMount.replies.WarningReply(
+                active=True,
+                code=47,
+                subsystem=f"{MTMount.SubsystemId.MIRROR_COVERS}. MyTopVI/MyNextVI/MyNextNextVI",
+                what="test warning",
+                description="Description of the warning",
+            ),
             MTMount.replies.ErrorReply(
                 on=True,
                 active=False,
                 code=47,
                 subsystem=f"{MTMount.SubsystemId.MIRROR_COVERS}. MyTopVI/MyNextVI/MyNextNextVI",
                 what="test error",
+                description="Description of the error",
             ),
             MTMount.replies.InPositionReply(what=1, in_position=True),
         )

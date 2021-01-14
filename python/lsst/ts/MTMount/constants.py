@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -27,6 +27,8 @@ HHD_COMMAND_PORT = 40005
 # CSC TCP/IP default configuration
 # Update this when Tekniker adds a dedicated pair of ports for the CSC.
 CSC_COMMAND_PORT = HHD_COMMAND_PORT
+
+TELEMETRY_PORT = 50036
 
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)

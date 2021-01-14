@@ -274,7 +274,7 @@ class MockDevicesTestCase(asynctest.TestCase):
                 await self.check_axis_device(device)
 
     async def check_axis_device(self, device):
-        has_home_command = device.device_id in (
+        is_elaz = device.device_id in (
             MTMount.DeviceId.AZIMUTH_AXIS,
             MTMount.DeviceId.ELEVATION_AXIS,
         )
@@ -292,7 +292,7 @@ class MockDevicesTestCase(asynctest.TestCase):
             "stop",
             "track",
         ]
-        if has_home_command:
+        if is_elaz:
             short_command_names.append("home")
         dev_prefix = f"{device.device_id.name}_"
         command_codes = {
@@ -309,9 +309,19 @@ class MockDevicesTestCase(asynctest.TestCase):
         drive_enable_off_command = command_classes["drive_enable"](drive=-1, on=False)
         drive_enable_on_command = command_classes["drive_enable"](drive=-1, on=True)
         drive_reset_command = command_classes["drive_reset"](drive=-1)
-        enable_tracking_off_command = command_classes["enable_tracking"](on=False)
-        enable_tracking_on_command = command_classes["enable_tracking"](on=True)
-        home_command = command_classes["home"]() if has_home_command else None
+        if is_elaz:
+            # Elevation and azimuth have a home command,
+            # and tracking cannot be paused (so the enable tracking command
+            # has no "on" parameter)
+            home_command = command_classes["home"]()
+            enable_tracking_on_command = command_classes["enable_tracking"]()
+            pause_tracking_command = None
+        else:
+            # The camera cable wrap has no home command,
+            # and tracking can be paused.
+            home_command = None
+            enable_tracking_on_command = command_classes["enable_tracking"](on=True)
+            pause_tracking_command = command_classes["enable_tracking"](on=False)
         power_off_command = command_classes["power"](on=False)
         power_on_command = command_classes["power"](on=True)
         stop_command = command_classes["stop"]()
@@ -342,7 +352,6 @@ class MockDevicesTestCase(asynctest.TestCase):
 
         # Most commands should fail if drive not enabled.
         fail_if_not_enabled_commands = [
-            enable_tracking_off_command,
             enable_tracking_on_command,
             stop_command,
             home_command,
@@ -353,6 +362,10 @@ class MockDevicesTestCase(asynctest.TestCase):
                 tai=salobj.current_tai(),
             ),
         ]
+        if is_elaz:
+            fail_if_not_enabled_commands.append(home_command)
+        else:
+            fail_if_not_enabled_commands.append(pause_tracking_command)
         for command in fail_if_not_enabled_commands:
             if command is None:
                 continue
@@ -395,7 +408,7 @@ class MockDevicesTestCase(asynctest.TestCase):
 
         # Start homing or a big point to point move, then stop the axes
         # (Homing is a point to point move, and it's slow).
-        if has_home_command:
+        if is_elaz:
             slow_move_command = home_command
         else:
             start_position = start_segment.position
@@ -431,6 +444,7 @@ class MockDevicesTestCase(asynctest.TestCase):
         self.assertTrue(device.power_on)
         self.assertTrue(device.enabled)
         self.assertTrue(device.tracking_enabled)
+        self.assertFalse(device.tracking_paused)
         self.assertFalse(device.has_target)
 
         non_tracking_mode_commands = [
@@ -466,24 +480,30 @@ class MockDevicesTestCase(asynctest.TestCase):
             self.assertTrue(device.has_target)
             await asyncio.sleep(0.1)
 
-        # Disable tracking and check state
-        await self.run_command(enable_tracking_off_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        # If camera cable wrap, pause tracking and check state
+        if not is_elaz:
+            # Pause tracking
+            await self.run_command(pause_tracking_command)
+            self.assertTrue(device.power_on)
+            self.assertTrue(device.enabled)
+            self.assertTrue(device.tracking_enabled)
+            self.assertTrue(device.tracking_paused)
+            self.assertFalse(device.has_target)
 
-        # Check that stop disable tracking
-        await self.run_command(enable_tracking_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertTrue(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+            # Un-pause tracking
+            await self.run_command(enable_tracking_on_command)
+            self.assertTrue(device.power_on)
+            self.assertTrue(device.enabled)
+            self.assertTrue(device.tracking_enabled)
+            self.assertFalse(device.tracking_paused)
+            self.assertFalse(device.has_target)
 
+        # Check that stop disable tracking (after r
         await self.run_command(stop_command)
         self.assertTrue(device.power_on)
         self.assertTrue(device.enabled)
         self.assertFalse(device.tracking_enabled)
+        self.assertFalse(device.tracking_paused)
         self.assertFalse(device.has_target)
 
         # Check that drive_disable disables tracking

@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -20,6 +20,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = ["BaseMessage"]
+
+import enum
+
+import astropy.time
 
 
 class BaseMessage:
@@ -131,12 +135,20 @@ class BaseMessage:
             str_list += list(self.extra_data)
         return str_list
 
+    def _get_formatted_value(self, name):
+        value = getattr(self, name)
+        if isinstance(value, enum.Enum):
+            return repr(value)
+        elif isinstance(value, astropy.time.Time):
+            return value.isot
+        return str(value)
+
     def __eq__(self, other):
         return self.str_fields() == other.str_fields()
 
     def __repr__(self):
         arglist = [
-            f"{finfo.name}={str(getattr(self, finfo.name))}"
+            f"{finfo.name}={self._get_formatted_value(finfo.name)}"
             for finfo in self.field_infos
         ]
         argstr = ", ".join(arglist)

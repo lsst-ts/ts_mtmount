@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for the LSST Data Management System.
+# Developed for Vera Rubin Observatory.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -27,6 +27,7 @@ __all__ = [
     "ReplyCode",
     "Source",
     "SubsystemId",
+    "TelemetryTopicId",
 ]
 
 import enum
@@ -182,10 +183,9 @@ class CommandCode(enum.IntEnum):
 
 
 class CscErrorCode(enum.IntEnum):
-    COULD_NOT_CONNECT = 1
-    CONNECTION_LOST = 2
-    ACTUATOR_ENABLE_ERROR = 3
-    ACTUATOR_DISABLE_ERROR = 4
+    COULD_NOT_CONNECT = 1  # Could not connect to low-level controller
+    CONNECTION_LOST = 2  # Lost connection to low-level controller
+    TELEMETRY_CLIENT_ERROR = 3  # Could not start telemetry client
     MOCK_CONTROLLER_ERROR = 98
     INTERNAL_ERROR = 99
 
@@ -284,3 +284,17 @@ class SubsystemId(enum.IntEnum):
     ELEVATION_THERMAL = 1700
     INTERLOCK = 1800
     TOP_END_CHILLER = 2200
+
+
+class TelemetryTopicId(enum.IntEnum):
+    """Telemetry topic ID values.
+
+    These must match the data in telemetry_map.yaml
+    """
+
+    # All of these except CCW is a guess
+    AZIMUTH = 6
+    AZIMUTH_DRIVE = 5
+    ELEVATION = 15
+    ELEVATION_DRIVE = 14
+    CAMERA_CABLE_WRAP = 8

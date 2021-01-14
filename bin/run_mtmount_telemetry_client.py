@@ -21,4 +21,4 @@ import asyncio
 
 from lsst.ts import MTMount
 
-asyncio.run(MTMount.MTMountCsc.amain(index=None))
+asyncio.run(MTMount.TelemetryClient.amain())

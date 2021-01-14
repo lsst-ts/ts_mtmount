@@ -21,6 +21,7 @@
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 import unittest
@@ -78,6 +79,8 @@ class MockControllerTestCase(asynctest.TestCase):
         """
         log = logging.getLogger()
         command_port = next(port_generator)
+        next(port_generator)  # for reply port
+        telemetry_port = next(port_generator)
         self.communicator = MTMount.Communicator(
             name="communicator",
             client_host=salobj.LOCAL_HOST,
@@ -91,18 +94,31 @@ class MockControllerTestCase(asynctest.TestCase):
             connect_callback=None,
         )
         self.controller = MTMount.mock.Controller(
-            command_port=command_port, log=log, commander=commander
+            command_port=command_port,
+            telemetry_port=telemetry_port,
+            log=log,
+            commander=commander,
         )
         connect_task = asyncio.create_task(self.communicator.connect())
+        # Dict of task_id: parsed data
+        self.telemetry_dict = {topic_id: None for topic_id in MTMount.TelemetryTopicId}
         t0 = time.monotonic()
         await asyncio.wait_for(
             asyncio.gather(self.controller.start_task, connect_task), timeout=START_TIME
         )
+        telemetry_connect_coro = asyncio.open_connection(
+            host=salobj.LOCAL_HOST, port=telemetry_port
+        )
+        self.telemetry_reader, self.telemetry_writer = await asyncio.wait_for(
+            telemetry_connect_coro, timeout=START_TIME
+        )
+        self.telemetry_task = asyncio.create_task(self.telemetry_read_loop())
         dt = time.monotonic() - t0
         print(f"Time to start up: {dt:0.2f} sec")
         try:
             yield
         finally:
+            self.telemetry_writer.close()
             await self.communicator.close()
             await self.controller.close()
 
@@ -251,6 +267,22 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertEqual(len(nonack_replies), len(noack_reply_types))
         return nonack_replies
 
+    async def telemetry_read_loop(self):
+        while True:
+            try:
+                data = await self.telemetry_reader.readuntil(b"\r\n")
+                decoded_data = data.decode()
+                llv_data = json.loads(decoded_data)
+                topic_id = llv_data.get("topicID")
+                self.telemetry_dict[topic_id] = llv_data
+            except asyncio.CancelledError:
+                return
+            except (ConnectionResetError, asyncio.IncompleteReadError):
+                return
+            except Exception as e:
+                self.fail(f"telemetry_read_loop failed: {e!r}")
+                return
+
     async def test_ask_for_command_ok(self):
         async with self.make_controller(commander=MTMount.Source.NONE):
             # Until AskForCommand is issued, all other commands should fail;
@@ -305,9 +337,7 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=True
-            )
+            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking()
             await self.run_command(enable_tracking_command, use_read_loop=use_read_loop)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
@@ -320,12 +350,8 @@ class MockControllerTestCase(asynctest.TestCase):
             )
             # Issue one more command to be sure we really didn't get
             # a Done reply for the previous command
-            disable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=False
-            )
-            await self.run_command(
-                disable_tracking_command, use_read_loop=use_read_loop
-            )
+            stop_tracking_command = MTMount.commands.AzimuthAxisStop()
+            await self.run_command(stop_tracking_command, use_read_loop=use_read_loop)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
@@ -341,6 +367,21 @@ class MockControllerTestCase(asynctest.TestCase):
             await self.run_command(
                 unsupported_command, should_fail=True, use_read_loop=use_read_loop
             )
+
+    async def next_telemetry(self, topic_id, timeout=STD_TIMEOUT):
+        """Wait for a new instance of the specified telemetry topic."""
+        topic_id = MTMount.TelemetryTopicId(topic_id)
+        self.telemetry_dict[topic_id] = None
+        t0 = time.monotonic()
+        data = None
+        while True:
+            dt = time.monotonic() - t0
+            if dt > timeout:
+                self.fail(f"No new {topic_id!r} telemetry sample seen in {timeout} sec")
+            await asyncio.sleep(0.1)
+            data = self.telemetry_dict[topic_id]
+            if data is not None:
+                return data
 
     async def test_command_queue(self):
         async with self.make_controller():
@@ -383,6 +424,56 @@ class MockControllerTestCase(asynctest.TestCase):
             self.controller.delete_command_queue()
             self.assertIsNone(self.controller.command_queue)
 
+    async def test_initial_telemetry(self):
+        async with self.make_controller():
+            for topic_id, prefix in (
+                (MTMount.TelemetryTopicId.AZIMUTH, "az"),
+                (MTMount.TelemetryTopicId.ELEVATION, "el"),
+            ):
+                # Elevation does not start at position 0,
+                # so read the position.
+                device_id = {
+                    MTMount.TelemetryTopicId.AZIMUTH: MTMount.DeviceId.AZIMUTH_AXIS,
+                    MTMount.TelemetryTopicId.ELEVATION: MTMount.DeviceId.ELEVATION_AXIS,
+                }[topic_id]
+                device = self.controller.device_dict[device_id]
+                # Work around Docker time issues on macOS with an offset
+                tai0 = salobj.current_tai() - 0.1
+                axis_telem = await self.next_telemetry(topic_id)
+                for name in (
+                    "angleActual",
+                    "angleSet",
+                    "velocityActual",
+                    "velocitySet",
+                    "accelerationActual",
+                    "torqueActual",
+                ):
+                    if name.startswith("angle"):
+                        desired_value = device.actuator.path.at(tai0).position
+                    else:
+                        desired_value = 0
+                    self.assertAlmostEqual(axis_telem[name], desired_value, msg=name)
+                self.assertGreater(axis_telem["timestamp"], tai0)
+
+            # Work around Docker time issues on macOS with an offset
+            tai0 = salobj.current_tai() - 0.1
+            ccw_telem = await self.next_telemetry(
+                MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP
+            )
+            self.assertEqual(ccw_telem["cCWStatusDrive1"], "Off")
+            self.assertEqual(ccw_telem["cCWStatusDrive2"], "Off")
+            for brief_name in (
+                "Angle1",
+                "Angle2",
+                "Speed1",
+                "Speed2",
+                "Current1",
+                "Current2",
+            ):
+                full_name = f"cCW{brief_name}"
+                self.assertEqual(ccw_telem[full_name], 0, msg=full_name)
+            self.assertGreater(ccw_telem["timestamp"], tai0)
+
     async def test_tracking(self):
         """Test the <axis>AxisTrack command and InPosition replies.
         """
@@ -402,9 +493,7 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=True
-            )
+            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking()
             await self.run_command(enable_tracking_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
@@ -442,11 +531,9 @@ class MockControllerTestCase(asynctest.TestCase):
                 previous_tai = tai
                 await asyncio.sleep(0.1)
 
-            disable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=False
-            )
+            stop_tracking_command = MTMount.commands.AzimuthAxisStop()
             nonack_replies = await self.run_command(
-                disable_tracking_command,
+                stop_tracking_command,
                 use_read_loop=True,
                 noack_reply_types=[MTMount.replies.InPositionReply],
                 return_others=False,
@@ -502,6 +589,22 @@ class MockControllerTestCase(asynctest.TestCase):
             reply = nonack_replies[0]
             self.assertTrue(reply.in_position)
             self.assertEqual(reply.what, 1)
+
+            # Test telemetry after move
+            axis_telem = await self.next_telemetry(MTMount.TelemetryTopicId.ELEVATION)
+            for name in (
+                "angleActual",
+                "angleSet",
+                "velocityActual",
+                "velocitySet",
+                "accelerationActual",
+                "torqueActual",
+            ):
+                if name.startswith("angle"):
+                    desired_value = end_position
+                else:
+                    desired_value = 0
+                self.assertAlmostEqual(axis_telem[name], desired_value, msg=name)
 
 
 if __name__ == "__main__":
