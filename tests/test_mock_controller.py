@@ -357,9 +357,7 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=True
-            )
+            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking()
             await self.run_command(enable_tracking_command, use_read_loop=use_read_loop)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
@@ -372,12 +370,8 @@ class MockControllerTestCase(asynctest.TestCase):
             )
             # Issue one more command to be sure we really didn't get
             # a Done reply for the previous command
-            disable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=False
-            )
-            await self.run_command(
-                disable_tracking_command, use_read_loop=use_read_loop
-            )
+            stop_tracking_command = MTMount.commands.AzimuthAxisStop()
+            await self.run_command(stop_tracking_command, use_read_loop=use_read_loop)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
@@ -519,9 +513,7 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=True
-            )
+            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking()
             await self.run_command(enable_tracking_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
@@ -559,11 +551,9 @@ class MockControllerTestCase(asynctest.TestCase):
                 previous_tai = tai
                 await asyncio.sleep(0.1)
 
-            disable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking(
-                on=False
-            )
+            stop_tracking_command = MTMount.commands.AzimuthAxisStop()
             nonack_replies = await self.run_command(
-                disable_tracking_command,
+                stop_tracking_command,
                 use_read_loop=True,
                 noack_reply_types=[MTMount.replies.InPositionReply],
                 return_others=False,

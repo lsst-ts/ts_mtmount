@@ -60,6 +60,7 @@ class AxisDevice(BaseDevice):
         device_limits = limits.LimitsDict[device_id].scaled()
         self.enabled = False
         self.tracking_enabled = False
+        self.tracking_paused = False
         # Has a target position been specified?
         # Set True when tracking or moving point to point and False otherwise.
         self.has_target = False
@@ -146,6 +147,7 @@ class AxisDevice(BaseDevice):
         self.supersede_move_command()
         self.abort()
         self.tracking_enabled = False
+        self.tracking_paused = False
         self.enabled = command.on
 
     def do_drive_reset(self, command):
@@ -159,10 +161,11 @@ class AxisDevice(BaseDevice):
         self.supersede_move_command()
         self.abort()
         self.tracking_enabled = False
+        self.tracking_paused = False
         self.enabled = False
 
     def do_enable_tracking(self, command):
-        """Enable or disable tracking mode.
+        """Enable or pause tracking mode.
 
         The drive must be enabled.
         """
@@ -170,7 +173,23 @@ class AxisDevice(BaseDevice):
         self.supersede_move_command()
         self.actuator.stop()
         self.has_target = False
-        self.tracking_enabled = command.on
+        # Camera cable wrap enable tracking has an "on" parameter:
+        # on=1 means enable tracking, on=0 means pause tracking.
+        # Azimuth and elevation enable tracking commands have no parameters;
+        # they always enable tracking.
+        on_value = getattr(command, "on", True)
+        if on_value:
+            # Enable tracking.
+            self.tracking_enabled = True
+            self.tracking_paused = False
+        else:
+            # Pause tracking (this must be the camera cable wrap).
+            if not self.tracking_enabled:
+                raise RuntimeError(
+                    "Tracking cannot be paused because tracking is not enabled"
+                )
+            self.tracking_paused = True
+            self.actuator.stop()
 
     def do_home(self, command):
         """Home the actuator.
@@ -229,6 +248,8 @@ class AxisDevice(BaseDevice):
         self.assert_enabled()
         self.assert_tracking_enabled(True)
         self.supersede_move_command()
+        if self.tracking_paused:
+            return
         self.actuator.set_target(
             tai=command.tai, position=command.position, velocity=command.velocity
         )
