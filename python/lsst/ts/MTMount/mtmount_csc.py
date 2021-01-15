@@ -605,6 +605,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def camera_cable_wrap_loop(self):
         self.log.info("Camera cable wrap control begins")
+        await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
         try:
             while True:
                 position_velocity_tai = await self.get_camera_cable_wrap_demand()
@@ -763,7 +764,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_enableCameraCableWrapTracking(self, data):
         self.assert_enabled()
-        await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
         if self.camera_cable_wrap_task.done():
             self.camera_cable_wrap_task = asyncio.create_task(
                 self.camera_cable_wrap_loop()
