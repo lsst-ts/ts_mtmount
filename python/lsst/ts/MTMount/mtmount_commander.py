@@ -44,7 +44,7 @@ class MTMountCommander(salobj.CscCommander):
         super().__init__(
             name="MTMount",
             enable=enable,
-            telemetry_fields_to_not_compare=("current", "timestamp"),
+            telemetry_fields_to_not_compare=("current", "timestamp",),
         )
         for command_to_ignore in ("abort", "setValue"):
             self.command_dict.pop(command_to_ignore, None)
@@ -56,22 +56,6 @@ class MTMountCommander(salobj.CscCommander):
     @property
     def ramp_arg_names(self):
         return
-
-    def tel_cameraCableWrap_callback(self, data):
-        """Handle NaN values.
-        """
-        name = "cameraCableWrap"
-        prev_value_name = f"previous_tel_{name}"
-        public_dict = self.get_rounded_public_data(data)
-        trimmed_dict = {
-            name: str(value)  # use str to handle nan
-            for name, value in public_dict.items()
-            if name not in self.telemetry_fields_to_not_compare
-        }
-        if trimmed_dict != getattr(self, prev_value_name):
-            setattr(self, prev_value_name, trimmed_dict)
-            formatted_data = self.format_dict(public_dict)
-            self.output(f"{data.private_sndStamp:0.3f}: {name}: {formatted_data}")
 
     async def do_ramp(self, args):
         ramp_arg_info = RampArgs.__dataclass_fields__
