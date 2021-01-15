@@ -215,7 +215,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def begin_disable(self, data):
         try:
             await super().begin_disable(data)
-            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
             if self.has_control and self.connected:
                 self.disable_task.cancel()
                 self.disable_task = asyncio.create_task(self.disable_devices())
@@ -432,7 +431,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.info("Enable devices")
         self.disable_task.cancel()
         try:
-            enable_commands = [
+            for reset_command in [
                 commands.TopEndChillerResetAlarm(),
                 commands.MainPowerSupplyResetAlarm(),
                 commands.MirrorCoverLocksResetAlarm(),
@@ -440,6 +439,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.AzimuthAxisResetAlarm(),
                 commands.ElevationAxisResetAlarm(),
                 commands.CameraCableWrapResetAlarm(),
+            ]:
+                try:
+                    await self.send_command(reset_command, do_lock=False)
+                except Exception as e:
+                    self.log.warning(f"Command {reset_command} failed; continuing: {e}")
+
+            power_on_commands = [
                 commands.TopEndChillerPower(on=True),
                 commands.TopEndChillerTrackAmbient(on=True, temperature=0),
                 commands.MainPowerSupplyPower(on=True),
@@ -447,11 +453,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.AzimuthAxisPower(on=True),
                 commands.ElevationAxisPower(on=True),
                 commands.CameraCableWrapPower(on=True),
-                commands.CameraCableWrapEnableTracking(on=True),
             ]
-            await self.send_commands(*enable_commands)
+            await self.send_commands(*power_on_commands)
+        except salobj.ExpectedError as e:
+            self.log.error(f"Failed to power on one or more devices: {e}")
+            raise
         except Exception:
-            self.log.exception("Failed to enable one or more devices")
+            self.log.exception("Failed to power on one or more devices")
             raise
         if self.camera_cable_wrap_task.done():
             self.camera_cable_wrap_task = asyncio.create_task(
@@ -461,6 +469,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def disable_devices(self):
         self.log.info("Disable devices")
         self.enable_task.cancel()
+        self.camera_cable_wrap_task.cancel()
         if not self.connected:
             return
         for command in [
@@ -474,7 +483,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.send_command(command, do_lock=False)
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e}")
-                raise
+
+        self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
@@ -578,6 +588,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except ConnectionResetError:
             if future is not None:
                 future.setnoack("Connection lost")
+        except salobj.ExpectedError as e:
+            self.log.error(f"send_commands failed: {e}")
+            # The future is probably done, but in case not...
+            if future is not None:
+                future.setnoack(f"send_commands failed: {e}")
+            raise
         except Exception as e:
             self.log.exception("send_commands failed")
             # The future is probably done, but in case not...
@@ -623,6 +639,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap control ends")
+        except salobj.ExpectedError as e:
+            self.log.error(f"Camera cable wrap control failed: {e}")
         except Exception:
             self.log.exception("Camera cable wrap control failed")
         finally:
