@@ -22,17 +22,19 @@
 __all__ = ["MTMountCsc"]
 
 import asyncio
+import math
 import pathlib
 import signal
 
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import DriveState
+from . import constants
 from . import command_futures
 from . import commands
-from . import constants
-from . import enums
-from . import replies
 from . import communicator
+from . import enums
+from . import limits
+from . import replies
 from . import __version__
 
 # Extra time to wait for commands to be done (sec)
@@ -155,32 +157,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task for self.read_loop
         self.read_loop_task = salobj.make_done_future()
 
-        # Camera cable wrap (CCW) - camera rotator (rotator) synchronization
-        # limits.
-        # The goto limit is the distance between the CCW and the rotator
-        # demand position after which the CCW will blindly go to the demand,
-        # as long as the distance between the ccw and rot are less then
-        # half the max limit.
-        # The max limit is the maximum distance allowed between CCW and
-        # rotator.
-        # The slew limit is the distance between CCW - rotator where CCW will
-        # enter "slew" mode, and start following the position of the rotator.
-        # The track limit is the distance between CCW - rotator at which they
-        # are considered in synchronization and CCW will follow the rotator
-        # demand.
-        # TODO: Make these configuration parameters (DM-25941).
-        self.ccw_rot_sync_limit_goto = 7.5
-        self.ccw_rot_sync_limit_max = 2.0
-        self.ccw_rot_sync_limit_slew = 0.25
-        self.ccw_rot_sync_limit_track = 0.125
-
-        # Is the camera cable wrap (CCW) in catchup mode?
-        # This is True if CCW is enabled and the distance between
-        # CCW and MTRotator exceeds ccw_rot_sync_limit_slew.
-        # It will remain True until the distance is smaller then
-        # ccw_rot_sync_limit_track.
-        self.catch_up_mode = False
-
         # Should the CSC be connected?
         # Used to decide whether disconnecting sends the CSC to a Fault state.
         # Set True when fully connected and False just before
@@ -279,8 +255,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def get_camera_cable_wrap_demand(self):
         """Get camera cable wrap tracking command data.
 
-        Read the position of the camera cable wrap and camera rotator
-        and compute an optimum demand for the former.
+        Read the position and velocity of the camera rotator
+        and compute an optimum demand for camera cable wrap.
 
         Returns
         -------
@@ -295,63 +271,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
 
         rot_data = await self.rotator.tel_rotation.next(flush=True)
-        ccw_data = await self.mtmount_remote.tel_cameraCableWrap.aget()
 
-        # Adjust the camera cable wrap position to the timestamp
-        # in the rotator telemetry.
-        dt = rot_data.timestamp - ccw_data.timestamp
-        ccw_actual_velocity = ccw_data.velocityActual
-        ccw_unadjusted_actual_position = ccw_data.angleActual
-        ccw_actual_position = ccw_actual_velocity * dt + ccw_unadjusted_actual_position
-
-        distance_ccw_rot_actual = ccw_actual_position - rot_data.actualPosition
-
-        distance_ccw_rot_demand = ccw_actual_position - rot_data.demandPosition
-
-        distance_rot_actual_demand = rot_data.actualPosition - rot_data.demandPosition
-
-        if (
-            not self.catch_up_mode
-            and abs(distance_ccw_rot_actual) < self.ccw_rot_sync_limit_slew
-        ) or (
-            abs(distance_ccw_rot_demand) < self.ccw_rot_sync_limit_goto
-            and abs(distance_ccw_rot_actual) < self.ccw_rot_sync_limit_max / 2.0
-        ):
-            # Camera cable wrap and camera rotator are synchronized,
-            # or within the goto limit and following closely enough;
-            # follow the demand and exit catch-up mode (if in it).
-            self.catch_up_mode = False
-            desired_position = rot_data.demandPosition
-            desired_velocity = 0.0
-        else:
-            if not self.catch_up_mode:
-                self.catch_up_mode = True
-                self.log.info(
-                    "MTRotator and camera cable wrap out of sync. Going into catchup mode."
-                )
-            else:
-                # Switch off catch_up_mode if ccw-rot in the "track" limit.
-                self.catch_up_mode = (
-                    abs(distance_ccw_rot_actual) > self.ccw_rot_sync_limit_track
-                )
-
-            # Compute desired velocity. If the distance between
-            # camera cable wrap and rotator > rotator following error
-            # use the rotator demand velocity; otherwise use 0.
-            desired_velocity = (
-                rot_data.demandVelocity
-                if abs(distance_ccw_rot_demand) > abs(distance_rot_actual_demand)
-                else 0.0
-            )
-            desired_position = rot_data.actualPosition
-
-        # Adjust demand position for desired time:
-        # self.config.camera_cable_wrap_advance_time later than now.
-        # Note that the unadjusted data was computed at rot_data.timestamp.
         desired_tai = salobj.current_tai() + self.config.camera_cable_wrap_advance_time
-        delta_t = desired_tai - rot_data.timestamp
-        adjusted_desired_position = desired_position + desired_velocity * delta_t
+        dt = rot_data.timestamp - desired_tai
 
+        desired_position = rot_data.demandPosition
+        desired_velocity = rot_data.demandVelocity
+
+        max_velocity = limits.LimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP].max_velocity
+
+        if abs(desired_velocity) > max_velocity:
+            excessive_desired_velocity = desired_velocity
+            desired_velocity = math.copysign(max_velocity, desired_velocity)
+            self.log.warning(
+                f"Limiting desired velocity from {excessive_desired_velocity:0.2f} "
+                f"to {desired_velocity:0.2f}"
+            )
+
+        adjusted_desired_position = desired_position + desired_velocity * dt
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
     async def connect(self):

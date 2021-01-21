@@ -236,9 +236,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 velocity = 0.1
                 tai0 = salobj.current_tai()
                 num_rotator_samples = 10
-                prev_position = None
                 previous_tai = 0
-                previous_delay = None
                 for i in range(num_rotator_samples):
                     tai = salobj.current_tai()
                     # Work around non-monotonic clocks, which are
@@ -266,19 +264,6 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                         tai + self.csc.config.camera_cable_wrap_advance_time
                     )
                     self.assertLessEqual(command.tai - desired_command_tai, delay)
-                    self.assertAlmostEqual(command.position, position)
-                    if i == 0 or not self.csc.catch_up_mode:
-                        self.assertAlmostEqual(command.velocity, 0.0)
-                    else:
-                        nominal_dt = tai - previous_tai
-                        min_dt = nominal_dt - delay - previous_delay
-                        max_dt = nominal_dt + delay + previous_delay
-                        min_vel = (position - prev_position) / max_dt
-                        max_vel = (position - prev_position) / min_dt
-                        max_vel_error = max_vel - min_vel
-                        self.assertAlmostEqual(
-                            command.velocity, velocity, delta=max_vel_error
-                        )
 
                     # Check camera cable wrap telemetry;
                     # use a crude comparison because a new CCW tracking
@@ -295,9 +280,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     )
 
                     await asyncio.sleep(0.1)
-                    prev_position = position
                     previous_tai = tai
-                    previous_delay = delay
 
                 # Stop the camera cable wrap tracking loop.
                 await self.remote.cmd_disableCameraCableWrapTracking.start(
