@@ -23,7 +23,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import math
 import pathlib
 import time
 import unittest
@@ -187,12 +186,9 @@ class TelemetryClientTestCase(asynctest.TestCase):
                 timestamp=ccw_llv_data["timestamp"],
             )
             await self.publish_data(ccw_llv_data)
-            ccw_dds_data = await self.assert_next_telemetry(
+            await self.assert_next_telemetry(
                 self.remote.tel_cameraCableWrap, desired_ccw_dds_data
             )
-            self.assertTrue(math.isnan(ccw_dds_data.accelerationActual))
-            self.assertTrue(math.isnan(ccw_dds_data.angleSet))
-            self.assertTrue(math.isnan(ccw_dds_data.velocitySet))
 
     async def assert_next_telemetry(
         self, topic, desired_data, delta=1e-7, timeout=STD_TIMEOUT

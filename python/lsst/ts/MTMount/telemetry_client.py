@@ -323,9 +323,6 @@ class TelemetryClient:
         else:
             llv_data["angleActual"] = llv_data["cCWAngle2"]
             llv_data["velocityActual"] = llv_data["cCWSpeed2"]
-        llv_data["accelerationActual"] = math.nan
-        llv_data["angleSet"] = math.nan
-        llv_data["velocitySet"] = math.nan
 
     def _preprocess_elevationDrives(self, llv_data):
         """Preprocess status for the tel_elevationDrives topic."""
