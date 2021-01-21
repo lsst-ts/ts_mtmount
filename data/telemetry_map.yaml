@@ -39,8 +39,5 @@
 8:
 - cameraCableWrap
 - angleActual: angleActual
-  angleSet: angleSet
   velocityActual: velocityActual
-  velocitySet: velocitySet
-  accelerationActual: accelerationActual
   timestamp: timestamp
