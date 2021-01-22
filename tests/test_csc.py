@@ -135,6 +135,10 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         async with self.make_csc(
             initial_state=salobj.State.ENABLED, internal_mock_controller=False
         ):
+            await self.assert_next_sample(
+                self.remote.evt_cameraCableWrapFollowing, enabled=False
+            )
+
             # Test initial telemetry
             await self.assert_next_sample(
                 topic=self.remote.tel_azimuth,
@@ -174,8 +178,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 enabled_commands=(
                     "closeMirrorCovers",
                     "openMirrorCovers",
-                    "disableCameraCableWrapTracking",
-                    "enableCameraCableWrapTracking",
+                    "disableCameraCableWrapFollowing",
+                    "enableCameraCableWrapFollowing",
                     "moveToTarget",
                     "startTracking",
                     "trackTarget",
@@ -219,14 +223,21 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
 
     async def test_camera_cable_wrap_tracking(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
-            self.mock_controller.set_command_queue(maxsize=0)
+            await self.assert_next_sample(
+                self.remote.evt_cameraCableWrapFollowing, enabled=False
+            )
             ccw_device = self.mock_controller.device_dict[
                 MTMount.DeviceId.CAMERA_CABLE_WRAP
             ]
             ccw_actuator = ccw_device.actuator
             self.assertTrue(ccw_device.power_on)
             self.assertTrue(ccw_device.enabled)
+
+            await self.assert_next_sample(
+                self.remote.evt_cameraCableWrapFollowing, enabled=True
+            )
             self.assertTrue(ccw_device.tracking_enabled)
+            self.mock_controller.set_command_queue(maxsize=0)
 
             async with salobj.Controller(name="MTRotator") as rotator:
                 self.assertTrue(self.mock_controller.command_queue.empty())
@@ -282,8 +293,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     await asyncio.sleep(0.1)
                     previous_tai = tai
 
-                # Stop the camera cable wrap tracking loop.
-                await self.remote.cmd_disableCameraCableWrapTracking.start(
+                # Stop the camera cable wrap from following the rotator.
+                await self.remote.cmd_disableCameraCableWrapFollowing.start(
                     timeout=STD_TIMEOUT
                 )
                 command = await self.next_lowlevel_command()
@@ -307,6 +318,12 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     )
                     await asyncio.sleep(0.1)
                 self.assertTrue(self.mock_controller.command_queue.empty())
+
+                # Restart the camera cable wrap following the rotator.
+                await self.remote.cmd_enableCameraCableWrapFollowing.start(
+                    timeout=STD_TIMEOUT
+                )
+                self.assertTrue(ccw_device.tracking_enabled)
 
     async def test_mirror_covers(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
