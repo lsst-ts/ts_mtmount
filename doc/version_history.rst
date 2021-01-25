@@ -6,6 +6,13 @@
 Version History
 ###############
 
+v0.12.1
+=======
+
+Changes:
+
+* Fixed setup.py and conda/meta.yaml so the conda build works again.
+
 v0.12.0
 =======
 
