@@ -158,6 +158,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task for self.read_loop
         self.read_loop_task = salobj.make_done_future()
 
+        # Is camera rotator actual position - demand position
+        # greater than config.max_rotator_position_error?
+        # Log a warning every time this transitions to True.
+        self.rotator_position_error_excessive = False
+
         # Should the CSC be connected?
         # Used to decide whether disconnecting sends the CSC to a Fault state.
         # Set True when fully connected and False just before
@@ -275,8 +280,19 @@ class MTMountCsc(salobj.ConfigurableCsc):
         desired_tai = salobj.current_tai() + self.config.camera_cable_wrap_advance_time
         dt = rot_data.timestamp - desired_tai
 
-        desired_position = rot_data.demandPosition
-        desired_velocity = rot_data.demandVelocity
+        if (
+            abs(rot_data.demandPosition - rot_data.actualPosition)
+            > self.config.max_rotator_position_error
+        ):
+            if not self.rotator_position_error_excessive:
+                self.log.warning("Excessive rotator demand-actual error; using actual")
+                self.rotator_position_error_excessive = True
+            desired_position = rot_data.actualPosition
+            desired_velocity = rot_data.actualVelocity
+        else:
+            self.rotator_position_error_excessive = False
+            desired_position = rot_data.demandPosition
+            desired_velocity = rot_data.demandVelocity
 
         max_velocity = limits.LimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP].max_velocity
 
@@ -658,6 +674,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         Camera cable wrap tracking must be enabled before this is called.
         """
         self.log.info("Camera cable wrap following begins")
+        self.rotator_position_error_excessive = False
         try:
             while True:
                 position_velocity_tai = await self.get_camera_cable_wrap_demand()
