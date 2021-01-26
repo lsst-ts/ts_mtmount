@@ -38,6 +38,7 @@
 
 8:
 - cameraCableWrap
-- angleActual: angleActual
-  velocityActual: velocityActual
+- angleActual: angle
+  velocityActual: speed
+  accelerationActual: acceleration
   timestamp: timestamp

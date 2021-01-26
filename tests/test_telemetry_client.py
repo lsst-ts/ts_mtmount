@@ -31,7 +31,6 @@ import asynctest
 import yaml
 import numpy as np
 
-from lsst.ts.idl.enums.MTMount import DriveState
 from lsst.ts import salobj
 from lsst.ts import hexrotcomm
 from lsst.ts import MTMount
@@ -45,10 +44,6 @@ CONNECT_TIMEOUT = 5
 
 class TelemetryClientTestCase(asynctest.TestCase):
     async def setUp(self):
-        self.driveStateToStr = {
-            value: key for key, value in MTMount.DriveStateDict.items()
-        }
-
         telemetry_map_path = (
             pathlib.Path(__file__).parents[1] / "data" / "telemetry_map.yaml"
         )
@@ -167,22 +162,16 @@ class TelemetryClientTestCase(asynctest.TestCase):
             # CCW is tricky for now because the telemetry
             # is heavily massaged and some fields are unknown.
 
-            DriveStateNameDict = {
-                value: key for key, value in MTMount.DriveStateDict.items()
-            }
             ccw_llv_data = dict(
-                cCWStatusDrive1=DriveStateNameDict[DriveState.MOVING],
-                cCWStatusDrive2=DriveStateNameDict[DriveState.OFF],
-                cCWAngle1=12.3,
-                cCWAngle2=-34.5,
-                cCWSpeed1=1.23,
-                cCWSpeed2=-3.45,
+                angle=12.3,
+                speed=-34.5,
+                acceleration=1.23,
                 timestamp=time.time(),
                 topicID=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
             )
             desired_ccw_dds_data = dict(
-                angleActual=ccw_llv_data["cCWAngle1"],
-                velocityActual=ccw_llv_data["cCWSpeed1"],
+                angleActual=ccw_llv_data["angle"],
+                velocityActual=ccw_llv_data["speed"],
                 timestamp=ccw_llv_data["timestamp"],
             )
             await self.publish_data(ccw_llv_data)
@@ -273,11 +262,6 @@ class TelemetryClientTestCase(asynctest.TestCase):
         value : `str`
             DDS value.
         """
-        if llv_key.endswith("StatusDrive"):
-            for i, item in enumerate(value):
-                llv_data[llv_key + str(i + 1)] = self.driveStateToStr[item]
-            return
-
         if isinstance(value, list):
             for i, item in enumerate(value):
                 llv_data[llv_key + str(i + 1)] = item
