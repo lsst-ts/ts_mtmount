@@ -204,10 +204,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.send_command(
                     commands.AskForCommand(commander=enums.Source.CSC)
                 )
-                self.log.info(
-                    "Wait 1 second before sending any other commands, to work around a TMA bug."
-                )
-                await asyncio.sleep(1)
                 self.has_control = True
             except Exception as e:
                 raise salobj.ExpectedError(
