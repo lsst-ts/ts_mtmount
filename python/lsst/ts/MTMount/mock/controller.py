@@ -29,11 +29,11 @@ import signal
 
 from lsst.ts import salobj
 from lsst.ts import hexrotcomm
-from .. import constants
 from .. import commands
+from .. import communicator
+from .. import constants
 from .. import enums
 from .. import replies
-from .. import communicator
 
 # from . import device
 from .axis_device import AxisDevice
@@ -253,29 +253,12 @@ class Controller:
         device = self.device_dict[enums.DeviceId.CAMERA_CABLE_WRAP]
         actuator = device.actuator
         actual = actuator.path.at(tai)
-        kind = actuator.kind(tai)
-
-        if device.power_on:
-            drive_status = {
-                actuator.Kind.Stopped: "Standstill",
-                actuator.Kind.Tracking: "Discrete Motion",
-                actuator.Kind.Slewing: "Discrete Motion",
-                actuator.Kind.Stopping: "Stopping",
-            }.get(kind, "Unknown")
-        else:
-            drive_status = "Off"
 
         data_dict = dict(
             topicID=enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
-            cCWStatus="Enabled" if device.power_on else "Off",
-            cCWStatusDrive1="Off",  # Only one drive is on; assume drive 2
-            cCWStatusDrive2=drive_status,
-            cCWAngle1=actual.position,
-            cCWAngle2=actual.position,
-            cCWSpeed1=actual.velocity,
-            cCWSpeed2=actual.velocity,
-            cCWCurrent1=0,
-            cCWCurrent2=0,
+            angle=actual.position,
+            speed=actual.velocity,
+            acceleration=actual.acceleration,
             timestamp=tai,
         )
         await self.write_telemetry(data_dict)
