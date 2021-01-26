@@ -26,7 +26,6 @@ __all__ = [
     "EnabledState",
     "ReplyCode",
     "Source",
-    "SubsystemId",
     "TelemetryTopicId",
 ]
 
@@ -196,8 +195,8 @@ class DeviceId(enum.Enum):
     These are for mock devices. The values do not match
     anything in Tekniker's code.
 
-    We could use SubsystemId, instead, but that enum class includes entries
-    that have no POWER or RESET_ALARM commands.
+    We could use SubsystemId from ts_idl, instead, but that enum class
+    includes entries that have no POWER or RESET_ALARM commands.
     """
 
     ELEVATION_AXIS = enum.auto()
@@ -259,40 +258,12 @@ class Source(enum.IntEnum):
     PXI = 100
 
 
-class SubsystemId(enum.IntEnum):
-    """Subsystem ID numbers.
-
-    Used in errors and warnings.
-    """
-
-    AZIMUTH_AXIS = 100
-    AZIMUTH_DRIVE = 200
-    AZIMUTH_CABLE_WRAP = 300
-    ELEVATION_AXIS = 400
-    ELEVATION_DRIVE = 500
-    MAIN_POWER_SUPPLY = 600
-    ENCODER_INTERFACE_BOX = 700
-    OIL_SUPPLY_SYSTEM = 800
-    MIRROR_COVERS = 900
-    CAMERA_CABLE_WRAP = 1000
-    BALANCE = 1100
-    DEPLOYABLE_PLATFORM = 1200
-    CABINET = 1300
-    LOCKING_PINS = 1400
-    MIRROR_COVER_LOCKS = 1500
-    AZIMUTH_THERMAL = 1600
-    ELEVATION_THERMAL = 1700
-    INTERLOCK = 1800
-    TOP_END_CHILLER = 2200
-
-
 class TelemetryTopicId(enum.IntEnum):
     """Telemetry topic ID values.
 
     These must match the data in telemetry_map.yaml
     """
 
-    # All of these except CCW is a guess
     AZIMUTH = 6
     AZIMUTH_DRIVE = 5
     ELEVATION = 15
