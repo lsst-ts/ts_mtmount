@@ -47,6 +47,11 @@ MAX_ROTATOR_APPLICATION_GAP = 1.0
 MOCK_CTRL_START_TIME = 20
 TELEMETRY_START_TIME = 30
 
+# Maximum time to wait for rotator telemetry (seconds).
+# Must be less than the maximum time the CCW waits for a tracking command
+# before going to FAULT.
+ROTATOR_TELEMETRY_TIMEOUT = 1
+
 NOT_SUPPORTED_MESSAGE = (
     "Not supported in this camera-cable-wrap-only version of the CSC"
 )
@@ -273,9 +278,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Desired camera cable wrap time (TAI unix seconds).
             This will be ``config.camera_cable_wrap_advance_time``
             seconds in the future.
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If data not seen in ROTATOR_TELEMETRY_TIMEOUT seconds.
         """
 
-        rot_data = await self.rotator.tel_rotation.next(flush=True)
+        rot_data = await self.rotator.tel_rotation.next(
+            flush=True, timeout=ROTATOR_TELEMETRY_TIMEOUT
+        )
 
         desired_tai = salobj.current_tai() + self.config.camera_cable_wrap_advance_time
         dt = rot_data.timestamp - desired_tai
@@ -658,15 +670,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.evt_cameraCableWrapFollowing.set_put(enabled=True, force_output=True)
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following canceled before it starts")
+            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
             raise
         except salobj.ExpectedError as e:
             self.log.error(f"Camera cable wrap tracking could not be enabled: {e}")
+            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
             raise
         except Exception:
             self.log.exception("Camera cable wrap tracking could not be enabled")
-            raise
-        finally:
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            raise
 
     async def _camera_cable_wrap_follow_loop(self):
         """Implement the camera cable wrap following the camera rotator.
@@ -676,11 +689,29 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         self.log.info("Camera cable wrap following begins")
         self.rotator_position_error_excessive = False
+        paused = False
         try:
             while True:
-                position_velocity_tai = await self.get_camera_cable_wrap_demand()
-                if position_velocity_tai is None:
-                    return
+                try:
+                    position_velocity_tai = await self.get_camera_cable_wrap_demand()
+                except asyncio.TimeoutError:
+                    if not paused:
+                        paused = True
+                        self.log.warning(
+                            "Rotator data not available; stopping the camera "
+                            "cable wrap until rotator data is available"
+                        )
+                        await self.send_command(commands.CameraCableWrapStop())
+                    continue
+                if paused:
+                    paused = False
+                    self.log.info(
+                        "Rotator data received; resume making "
+                        "the camera cable wrap follow the rotator"
+                    )
+                    await self.send_command(
+                        commands.CameraCableWrapEnableTracking(on=True)
+                    )
                 position, velocity, tai = position_velocity_tai
 
                 command = commands.CameraCableWrapTrack(
@@ -796,7 +827,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         self.evt_cameraCableWrapFollowing.set_put(enabled=False)
         await super().start()
-        self.log.info("Started")
 
     async def do_clearError(self, data):
         self.assert_enabled()

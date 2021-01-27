@@ -223,7 +223,13 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         )
 
     async def test_camera_cable_wrap_tracking(self):
-        async with self.make_csc(initial_state=salobj.State.ENABLED):
+        # Start the CSC in DISABLED state
+        # so we can get the rotator remote running
+        # before the camera cable wrap loop needs data from the rotator.
+        # (I tried constructing the rotator before the CSC
+        # but for some reason the CSC doesn't see data from the rotator
+        # when I do that).
+        async with self.make_csc(initial_state=salobj.State.DISABLED):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
@@ -231,16 +237,20 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 MTMount.DeviceId.CAMERA_CABLE_WRAP
             ]
             ccw_actuator = ccw_device.actuator
-            self.assertTrue(ccw_device.power_on)
-            self.assertTrue(ccw_device.enabled)
-
-            await self.assert_next_sample(
-                self.remote.evt_cameraCableWrapFollowing, enabled=True
-            )
-            self.assertTrue(ccw_device.tracking_enabled)
-            self.mock_controller.set_command_queue(maxsize=0)
+            self.assertFalse(ccw_device.power_on)
+            self.assertFalse(ccw_device.enabled)
 
             async with salobj.Controller(name="MTRotator") as rotator:
+                await self.remote.cmd_enable.start(timeout=STD_TIMEOUT)
+                self.assertTrue(ccw_device.power_on)
+                self.assertTrue(ccw_device.enabled)
+
+                await self.assert_next_sample(
+                    self.remote.evt_cameraCableWrapFollowing, enabled=True
+                )
+                self.assertTrue(ccw_device.tracking_enabled)
+                self.mock_controller.set_command_queue(maxsize=0)
+
                 self.assertTrue(self.mock_controller.command_queue.empty())
 
                 # Test regular tracking mode. CCW and MTRotator start in sync.
@@ -267,7 +277,6 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     )
                     command = await self.next_lowlevel_command()
                     delay = salobj.current_tai() - tai
-
                     self.assertEqual(
                         command.command_code,
                         MTMount.CommandCode.CAMERA_CABLE_WRAP_TRACK,
