@@ -64,10 +64,10 @@ class MockControllerTestCase(asynctest.TestCase):
 
         Parameters
         ----------
-    commander : `Source`, optional
-        Who initially has command. Defaults to `Source.HHD`,
-        so tests need not issue the ``ASK_FOR_COMMAND`` command
-        before issuing other commands.
+        commander : `Source`, optional
+            Who initially has command. Defaults to `Source.HHD`,
+            so tests need not issue the ``ASK_FOR_COMMAND`` command
+            before issuing other commands.
 
         Other special values:
 
