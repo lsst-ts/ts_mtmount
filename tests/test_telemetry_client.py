@@ -112,12 +112,12 @@ class TelemetryClientTestCase(asynctest.TestCase):
             # Arbitrary values that are suitable for both
             # the elevation and azimuth telemetry topics.
             desired_elaz_dds_data = dict(
-                angleActual=55.1,
-                angleSet=45.2,
-                velocityActual=1.3,
-                velocitySet=1.4,
-                accelerationActual=-0.5,
-                torqueActual=3.3,
+                actualPosition=55.1,
+                demandPosition=45.2,
+                actualVelocity=1.3,
+                demandVelocity=1.4,
+                actualAcceleration=-0.5,
+                actualTorque=3.3,
                 timestamp=time.time(),
             )
             # topic_id is from telemetry_map.yaml
@@ -125,6 +125,7 @@ class TelemetryClientTestCase(asynctest.TestCase):
                 dds_data=desired_elaz_dds_data,
                 topic_id=MTMount.TelemetryTopicId.AZIMUTH,
             )
+            azimuth_llv_data["this_extra_field_should_be_ignored"] = 55.2
             await self.publish_data(azimuth_llv_data)
             await self.assert_next_telemetry(
                 self.remote.tel_azimuth, desired_elaz_dds_data
@@ -159,20 +160,15 @@ class TelemetryClientTestCase(asynctest.TestCase):
                 self.remote.tel_elevationDrives, desired_elevation_drives_dds_data
             )
 
-            # CCW is tricky for now because the telemetry
-            # is heavily massaged and some fields are unknown.
-
-            ccw_llv_data = dict(
-                angle=12.3,
-                speed=-34.5,
-                acceleration=1.23,
-                timestamp=time.time(),
-                topicID=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
-            )
             desired_ccw_dds_data = dict(
-                angleActual=ccw_llv_data["angle"],
-                velocityActual=ccw_llv_data["speed"],
-                timestamp=ccw_llv_data["timestamp"],
+                actualPosition=12.3,
+                actualVelocity=-34.5,
+                actualAcceleration=0.25,
+                timestamp=time.time(),
+            )
+            ccw_llv_data = self.convert_dds_data_to_llv(
+                dds_data=desired_ccw_dds_data,
+                topic_id=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
             )
             await self.publish_data(ccw_llv_data)
             await self.assert_next_telemetry(
