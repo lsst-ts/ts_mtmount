@@ -144,33 +144,36 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             await self.assert_next_sample(
                 topic=self.remote.tel_azimuth,
                 flush=False,
-                angleActual=0,
-                angleSet=0,
-                velocityActual=0,
-                velocitySet=0,
-                accelerationActual=0,
+                actualPosition=0,
+                actualVelocity=0,
+                actualAcceleration=0,
+                actualTorque=0,
+                demandPosition=0,
+                demandVelocity=0,
             )
 
             data = await self.assert_next_sample(
                 topic=self.remote.tel_elevation,
                 flush=False,
-                velocitySet=0,
-                velocityActual=0,
-                accelerationActual=0,
+                actualVelocity=0,
+                actualAcceleration=0,
+                actualTorque=0,
+                demandVelocity=0,
             )
             min_elevation = (
                 MTMount.LimitsDict[MTMount.DeviceId.ELEVATION_AXIS]
                 .scaled()
                 .min_position
             )
-            self.assertAlmostEqual(data.angleSet, min_elevation)
-            self.assertAlmostEqual(data.angleActual, min_elevation)
+            self.assertAlmostEqual(data.demandPosition, min_elevation)
+            self.assertAlmostEqual(data.actualPosition, min_elevation)
 
             await self.assert_next_sample(
                 topic=self.remote.tel_cameraCableWrap,
                 flush=False,
-                angleActual=0,
-                velocityActual=0,
+                actualPosition=0,
+                actualVelocity=0,
+                actualAcceleration=0,
             )
 
     async def test_standard_state_transitions(self):
@@ -294,10 +297,15 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                     )
                     actual_segment = ccw_actuator.path.at(tel_ccw_data.timestamp)
                     self.assertAlmostEqual(
-                        tel_ccw_data.angleActual, actual_segment.position, delta=0.1
+                        tel_ccw_data.actualPosition, actual_segment.position, delta=0.1
                     )
                     self.assertAlmostEqual(
-                        tel_ccw_data.velocityActual, actual_segment.velocity, delta=0.1
+                        tel_ccw_data.actualVelocity, actual_segment.velocity, delta=0.1
+                    )
+                    self.assertAlmostEqual(
+                        tel_ccw_data.actualAcceleration,
+                        actual_segment.acceleration,
+                        delta=0.1,
                     )
 
                     await asyncio.sleep(0.1)
@@ -593,19 +601,19 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             )
             el_actual = elevation_actuator.path.at(tel_el_data.timestamp)
             el_target = elevation_actuator.target.at(tel_el_data.timestamp)
-            self.assertAlmostEqual(tel_el_data.angleSet, el_target.position)
-            self.assertAlmostEqual(tel_el_data.velocitySet, el_target.velocity)
-            self.assertAlmostEqual(tel_el_data.angleActual, el_actual.position)
-            self.assertAlmostEqual(tel_el_data.velocityActual, el_actual.velocity)
+            self.assertAlmostEqual(tel_el_data.demandPosition, el_target.position)
+            self.assertAlmostEqual(tel_el_data.demandVelocity, el_target.velocity)
+            self.assertAlmostEqual(tel_el_data.actualPosition, el_actual.position)
+            self.assertAlmostEqual(tel_el_data.actualVelocity, el_actual.velocity)
 
             tel_az_data = await self.remote.tel_azimuth.next(
                 flush=True, timeout=STD_TIMEOUT
             )
             az_actual = azimuth_actuator.path.at(tel_az_data.timestamp)
             az_target = azimuth_actuator.target.at(tel_az_data.timestamp)
-            self.assertAlmostEqual(tel_az_data.angleSet, az_target.position)
-            self.assertAlmostEqual(tel_az_data.velocitySet, az_target.velocity)
-            self.assertAlmostEqual(tel_az_data.angleActual, az_actual.position)
-            self.assertAlmostEqual(tel_az_data.velocityActual, az_actual.velocity)
+            self.assertAlmostEqual(tel_az_data.demandPosition, az_target.position)
+            self.assertAlmostEqual(tel_az_data.demandVelocity, az_target.velocity)
+            self.assertAlmostEqual(tel_az_data.actualPosition, az_actual.position)
+            self.assertAlmostEqual(tel_az_data.actualVelocity, az_actual.velocity)
 
             previous_tai = tai
