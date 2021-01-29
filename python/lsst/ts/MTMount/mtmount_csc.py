@@ -461,6 +461,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.disable_task.cancel()
         try:
             for reset_command in [
+                # Reset e-stop. This is only allowed in the CCW-only code;
+                # it must be removed for the full TMA code.
+                commands.SafetyReset(what="25"),
                 # commands.TopEndChillerResetAlarm(),
                 # commands.MainPowerSupplyResetAlarm(),
                 # commands.MirrorCoverLocksResetAlarm(),
