@@ -220,7 +220,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.has_control = True
             except Exception as e:
                 raise salobj.ExpectedError(
-                    f"The CSC was not allowed to command the mount: {e}"
+                    f"The CSC was not allowed to command the mount: {e!r}"
                 )
 
         self.enable_task.cancel()
@@ -243,7 +243,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.has_control = True
             except Exception as e:
                 self.log.warning(
-                    f"The CSC was not able to give up command of the mount: {e}"
+                    f"The CSC was not able to give up command of the mount: {e!r}"
                 )
         finally:
             self.has_control = False
@@ -364,7 +364,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     self.log.exception(err_msg)
                     self.fault(
                         code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR,
-                        report=f"{err_msg}: {e}",
+                        report=f"{err_msg}: {e!r}",
                     )
                     return
                 else:
@@ -403,7 +403,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             f"at client_host={client_host}, command_port={command_port}"
             self.log.exception(err_msg)
             self.fault(
-                code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e}"
+                code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e!r}"
             )
             return
 
@@ -422,7 +422,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             err_msg = f"Could not start MTMount telemetry client with {cmdstr!r}"
             self.log.exception(err_msg)
             self.fault(
-                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=f"{err_msg}: {e}"
+                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR,
+                report=f"{err_msg}: {e!r}",
             )
             return
         try:
@@ -484,7 +485,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 try:
                     await self.send_command(reset_command, do_lock=False)
                 except Exception as e:
-                    self.log.warning(f"Command {reset_command} failed; continuing: {e}")
+                    self.log.warning(
+                        f"Command {reset_command} failed; continuing: {e!r}"
+                    )
 
             power_on_commands = [
                 # commands.TopEndChillerPower(on=True),
@@ -498,7 +501,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             ]
             await self.send_commands(*power_on_commands)
         except salobj.ExpectedError as e:
-            self.log.error(f"Failed to power on one or more devices: {e}")
+            self.log.error(f"Failed to power on one or more devices: {e!r}")
             raise
         except Exception:
             self.log.exception("Failed to power on one or more devices")
@@ -525,7 +528,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             try:
                 await self.send_command(command, do_lock=False)
             except Exception as e:
-                self.log.warning(f"Command {command} failed; continuing: {e}")
+                self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
         self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
 
@@ -564,7 +567,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except ConnectionResetError:
             raise
         except salobj.ExpectedError as e:
-            self.log.error(f"Failed to send command {command}: {e}")
+            self.log.error(f"Failed to send command {command}: {e!r}")
             raise
         except Exception:
             self.log.exception(f"Failed to send command {command}")
@@ -632,16 +635,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
             if future is not None:
                 future.setnoack("Connection lost")
         except salobj.ExpectedError as e:
-            self.log.error(f"send_commands failed: {e}")
+            self.log.error(f"send_commands failed: {e!r}")
             # The future is probably done, but in case not...
             if future is not None:
-                future.setnoack(f"send_commands failed: {e}")
+                future.setnoack(f"send_commands failed: {e!r}")
             raise
         except Exception as e:
             self.log.exception("send_commands failed")
             # The future is probably done, but in case not...
             if future is not None:
-                future.setnoack(f"send_commands failed: {e}")
+                future.setnoack(f"send_commands failed: {e!r}")
             raise
 
     def terminate_background_processes(self):
@@ -685,7 +688,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
             raise
         except salobj.ExpectedError as e:
-            self.log.error(f"Camera cable wrap tracking could not be enabled: {e}")
+            self.log.error(f"Camera cable wrap tracking could not be enabled: {e!r}")
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
             raise
         except Exception:
@@ -737,7 +740,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following ends")
         except salobj.ExpectedError as e:
-            self.log.error(f"Camera cable wrap following failed: {e}")
+            self.log.error(f"Camera cable wrap following failed: {e!r}")
         except Exception:
             self.log.exception("Camera cable wrap following failed")
         finally:
@@ -822,7 +825,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         self.log.exception(err_msg)
                         self.fault(
                             code=enums.CscErrorCode.INTERNAL_ERROR,
-                            report=f"{err_msg}: {e}",
+                            report=f"{err_msg}: {e!r}",
                         )
                     else:
                         self.fault(
