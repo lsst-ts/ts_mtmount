@@ -48,8 +48,12 @@ MOCK_CTRL_START_TIME = 20
 TELEMETRY_START_TIME = 30
 
 # Maximum time to wait for rotator telemetry (seconds).
-# Must be less than the maximum time the CCW waits for a tracking command
-# before going to FAULT.
+# Must be significantly greater than the interval between rotator
+# telemetry updates, which should not be longer than 0.2 seconds.
+# For minimum confusion when CCW following fails, this should also be
+# significantly less than the maximum time the low-level controller waits
+# for a tracking command, which is controlled by setting "Tracking Wait time
+# for check setpoint"; on 2020-02-01 the value was 5 seconds.
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
 NOT_SUPPORTED_MESSAGE = (
@@ -297,7 +301,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
             > self.config.max_rotator_position_error
         ):
             if not self.rotator_position_error_excessive:
-                self.log.warning("Excessive rotator demand-actual error; using actual")
+                self.log.warning(
+                    "Excessive rotator demand-actual position error; using actual. "
+                    f"Demand={rot_data.demandPosition:0.3f}; "
+                    f"actual={rot_data.actualPosition:0.3f}; "
+                    f"max_rotator_position_error={self.config.max_rotator_position_error} deg."
+                )
                 self.rotator_position_error_excessive = True
             desired_position = rot_data.actualPosition
             desired_velocity = rot_data.actualVelocity
