@@ -500,11 +500,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 # commands.CameraCableWrapEnableTracking(on=True),
             ]
             await self.send_commands(*power_on_commands)
-        except salobj.ExpectedError as e:
+        except Exception as e:
             self.log.error(f"Failed to power on one or more devices: {e!r}")
-            raise
-        except Exception:
-            self.log.exception("Failed to power on one or more devices")
             raise
         self.camera_cable_wrap_follow_start_task = asyncio.create_task(
             self.camera_cable_wrap_start_following()
@@ -566,11 +563,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 return await self._basic_send_command(command=command)
         except ConnectionResetError:
             raise
-        except salobj.ExpectedError as e:
-            self.log.error(f"Failed to send command {command}: {e!r}")
-            raise
-        except Exception:
-            self.log.exception(f"Failed to send command {command}")
+        except Exception as e:
+            self.log.exception(f"Failed to send command {command}: {e!r}")
             raise
 
     async def _basic_send_command(self, command):
@@ -634,17 +628,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except ConnectionResetError:
             if future is not None:
                 future.setnoack("Connection lost")
-        except salobj.ExpectedError as e:
-            self.log.error(f"send_commands failed: {e!r}")
-            # The future is probably done, but in case not...
-            if future is not None:
-                future.setnoack(f"send_commands failed: {e!r}")
-            raise
         except Exception as e:
-            self.log.exception("send_commands failed")
+            err_msg = f"send_commands failed: {e!r}"
+            self.log.exception(err_msg)
             # The future is probably done, but in case not...
             if future is not None:
-                future.setnoack(f"send_commands failed: {e!r}")
+                future.setnoack(err_msg)
             raise
 
     def terminate_background_processes(self):
@@ -687,12 +676,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Camera cable wrap following canceled before it starts")
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
             raise
-        except salobj.ExpectedError as e:
-            self.log.error(f"Camera cable wrap tracking could not be enabled: {e!r}")
-            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
-            raise
-        except Exception:
-            self.log.exception("Camera cable wrap tracking could not be enabled")
+        except Exception as e:
+            if isinstance(e, salobj.ExpectedError):
+                self.log.error(
+                    f"Camera cable wrap tracking could not be enabled: {e!r}"
+                )
+            else:
+                self.log.exception("Camera cable wrap tracking could not be enabled")
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
             raise
 
