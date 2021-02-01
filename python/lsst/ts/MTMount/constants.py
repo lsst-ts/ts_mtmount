@@ -18,6 +18,16 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+__all__ = [
+    "EUI_COMMAND_PORT",
+    "HHD_COMMAND_PORT",
+    "CSC_COMMAND_PORT",
+    "TELEMETRY_PORT",
+    "MIRROR_COVER_DRIVES",
+    "AxisStateDict",
+    "DriveStateDict",
+]
 from lsst.ts.idl.enums.MTMount import AxisState, DriveState
 
 # Reply ports are one larger.
