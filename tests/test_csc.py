@@ -448,13 +448,18 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertAlmostEqual(azimuth_pvt.velocity, 0)
             self.assertAlmostEqual(elevation_pvt.velocity, 0)
 
-            # Check that putting the CSC into STANDBY state
-            # sends the axes out of position
+            # Check that putting the CSC into STANDBY state sends the axes
+            # out of position (possibly one axis at a time)
             await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
             await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
-            await self.assert_next_sample(
-                self.remote.evt_axesInPosition, azimuth=False, elevation=False,
-            )
+            try:
+                await self.assert_next_sample(
+                    self.remote.evt_axesInPosition, azimuth=False, elevation=False,
+                )
+            except AssertionError:
+                await self.assert_next_sample(
+                    self.remote.evt_axesInPosition, azimuth=False, elevation=False,
+                )
 
     async def test_tracking(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
