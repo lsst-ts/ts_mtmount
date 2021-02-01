@@ -44,7 +44,7 @@ class MTMountCommander(salobj.CscCommander):
         super().__init__(
             name="MTMount",
             enable=enable,
-            telemetry_fields_to_not_compare=("current", "timestamp",),
+            telemetry_fields_to_not_compare=("current", "timestamp"),
         )
         for command_to_ignore in ("abort", "setValue"):
             self.command_dict.pop(command_to_ignore, None)

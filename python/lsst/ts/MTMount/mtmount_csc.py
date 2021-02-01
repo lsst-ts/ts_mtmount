@@ -887,7 +887,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.assert_enabled()
         raise salobj.ExpectedError(NOT_SUPPORTED_MESSAGE)
         await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation,),
+            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
         )
 
     async def do_trackTarget(self, data):
