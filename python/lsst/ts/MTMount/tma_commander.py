@@ -32,15 +32,16 @@ For more information:
 
 tma_commander.py --help
 """
+__all__ = ["TmaCommander"]
 
 import argparse
 import asyncio
 import logging
-import math
 import sys
 import traceback
 
 from lsst.ts import salobj
+from lsst.ts import simactuators
 
 from . import constants
 from . import command_futures
@@ -129,7 +130,7 @@ class TmaCommander:
         self.tracking_task = salobj.make_done_future()
 
         # Dict of command_id: CommandFuture
-        self.command_dict = dict()
+        self.command_futures_dict = dict()
 
         self.simulator = None
         if simulate:
@@ -199,9 +200,9 @@ TMA Commands (omit the tai argument, if shown):
 {self.get_command_help()}
 
 Other commands:
-ccw_ramp start_position end_position velocity  # make CCW track a ramp
-ccw_sine start_position amplitude  # make CCW track one cycle of a sine wave
-stop  # stop ccw_ramp or ccw_sine
+ccw_ramp start_position end_position speed  # make CCW track a ramp
+ccw_cosine center_position amplitude max_speed # make CCW track one cycle of a cosine wave
+stop  # stop ccw_ramp or ccw_cosine
 exit  # Exit from this commander
 help  # Print this help
 
@@ -243,9 +244,9 @@ ask_for_command 1
             await self.stop_tracking(verbose=False)
             self.read_loop_task.cancel()
             self.command_loop_task.cancel()
-            while self.command_dict:
-                command = self.command_dict.popitem()[1]
-                command.setdone()
+            while self.command_futures_dict:
+                cmd_futures = self.command_futures_dict.popitem()[1]
+                cmd_futures.setdone()
             if self.simulator is not None:
                 await self.simulator.close()
             await self.communicator.close()
@@ -278,14 +279,14 @@ ask_for_command 1
                         print(self.help_text)
                     elif cmd_name == "ccw_ramp":
                         await self.start_ccw_ramp(args)
-                    elif cmd_name == "ccw_sine":
-                        await self.start_ccw_sine(args)
+                    elif cmd_name == "ccw_cosine":
+                        await self.start_ccw_cosine(args)
                     elif cmd_name == "stop":
                         await self.stop_tracking(verbose=True)
                     else:
                         await self.handle_command(cmd_name, args)
                 except Exception as e:
-                    print(f"Command {cmd_name} failed: {e}")
+                    print(f"Command {cmd_name} failed: {e!r}")
                     print(traceback.format_exc())
                     continue
         finally:
@@ -379,20 +380,20 @@ ask_for_command 1
                 # with do_wait=True are put in the command dict).
                 if isinstance(reply, replies.AckReply):
                     # Command acknowledged. Set timeout but leave
-                    # futures in command_dict.
-                    futures = self.command_dict.get(reply.sequence_id, None)
-                    if futures is not None:
-                        futures.setack(reply.timeout_ms / 100.0)
+                    # cmd_futures in command_futures_dict.
+                    cmd_futures = self.command_futures_dict.get(reply.sequence_id, None)
+                    if cmd_futures is not None:
+                        cmd_futures.setack(reply.timeout_ms / 100.0)
                 elif isinstance(reply, replies.NoAckReply):
-                    # Command failed. Pop the command_dict entry
+                    # Command failed. Pop the command_futures_dict entry
                     # and report failure.
-                    futures = self.command_dict.pop(reply.sequence_id, None)
-                    if futures is not None:
-                        futures.setnoack(reply.explanation)
+                    cmd_futures = self.command_futures_dict.pop(reply.sequence_id, None)
+                    if cmd_futures is not None:
+                        cmd_futures.setnoack(reply.explanation)
                 elif isinstance(reply, replies.DoneReply):
-                    futures = self.command_dict.pop(reply.sequence_id, None)
-                    if futures is not None:
-                        futures.setdone()
+                    cmd_futures = self.command_futures_dict.pop(reply.sequence_id, None)
+                    if cmd_futures is not None:
+                        cmd_futures.setdone()
 
         except asyncio.CancelledError:
             pass
@@ -407,7 +408,7 @@ ask_for_command 1
         """Start the camera cable wrap tracking a linear ramp.
         """
         self.tracking_task.cancel()
-        arg_names = ("start_position", "end_position", "velocity")
+        arg_names = ("start_position", "end_position", "speed")
         if len(args) != len(arg_names):
             arg_names_str = ", ".join(arg_names)
             raise ValueError(
@@ -417,11 +418,11 @@ ask_for_command 1
         kwargs = {name: arg for name, arg in zip(arg_names, args)}
         self.tracking_task = asyncio.ensure_future(self._ccw_ramp(**kwargs))
 
-    async def start_ccw_sine(self, args):
-        """Start the camera cable wrap tracking one cycle of a sine wave.
+    async def start_ccw_cosine(self, args):
+        """Start the camera cable wrap tracking one cycle of a cosine wave.
         """
         self.tracking_task.cancel()
-        arg_names = ("start_position", "amplitude", "period")
+        arg_names = ("center_position", "amplitude", "max_speed")
         if len(args) != len(arg_names):
             arg_names_str = ", ".join(arg_names)
             raise ValueError(
@@ -429,7 +430,7 @@ ask_for_command 1
             )
         args = [float(arg) for arg in args]
         kwargs = {name: arg for name, arg in zip(arg_names, args)}
-        self.tracking_task = asyncio.ensure_future(self._ccw_sine(**kwargs))
+        self.tracking_task = asyncio.ensure_future(self._ccw_cosine(**kwargs))
 
     async def stop_tracking(self, verbose):
         if not self.tracking_task.done():
@@ -446,33 +447,33 @@ ask_for_command 1
         If do_wait true then wait for the command to finish.
         """
         print(f"Write {command}")
-        if command.sequence_id in self.command_dict:
+        if command.sequence_id in self.command_futures_dict:
             raise RuntimeError(
-                f"Bug! Duplicate sequence_id {command.sequence_id} in command_dict"
+                f"Bug! Duplicate sequence_id {command.sequence_id} in command_futures_dict"
             )
         await self.communicator.write(command)
         if not do_wait:
             return
 
-        futures = command_futures.CommandFutures()
-        self.command_dict[command.sequence_id] = futures
-        await asyncio.wait_for(futures.ack, ACK_TIMEOUT)
+        cmd_futures = command_futures.CommandFutures()
+        self.command_futures_dict[command.sequence_id] = cmd_futures
+        await asyncio.wait_for(cmd_futures.ack, ACK_TIMEOUT)
         if command.command_code in commands.AckOnlyCommandCodes:
             # This command only receives an Ack; mark it done.
-            futures.done.set_result(None)
+            cmd_futures.done.set_result(None)
         else:
             try:
                 await asyncio.wait_for(
-                    futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
+                    cmd_futures.done, timeout=cmd_futures.timeout + TIMEOUT_BUFFER
                 )
             except asyncio.TimeoutError:
-                self.command_dict.pop(command.sequence_id, None)
+                self.command_futures_dict.pop(command.sequence_id, None)
                 raise asyncio.TimeoutError(
-                    f"Timed out after {futures.timeout + TIMEOUT_BUFFER} seconds "
+                    f"Timed out after {cmd_futures.timeout + TIMEOUT_BUFFER} seconds "
                     f"waiting for the Done reply to {command}"
                 )
 
-    async def _ccw_ramp(self, start_position, end_position, velocity):
+    async def _ccw_ramp(self, start_position, end_position, speed):
         """Make the camera cable wrap track a linear ramp.
 
         Parameters
@@ -481,30 +482,28 @@ ask_for_command 1
             Starting position of ramp (deg).
         end_position : `float`
             Ending position of ramp (deg).
-        velocity : `float`
-            Velocity of motion along the ramp (deg/sec).
+        speed : `float`
+            Speed of motion along the ramp (deg/sec).
+            The sign is ignored.
         """
         try:
-            if velocity == 0:
-                raise ValueError(f"velocity {velocity} must be nonzero")
-            dt = (end_position - start_position) / velocity
-            if dt < 0:
-                raise ValueError(f"velocity {velocity} has the wrong sign")
-            print(
-                f"Tracking a ramp from {start_position} to {end_position} at velocity {velocity}; "
-                f"this will take {dt:0.2f} seconds"
+            ramp_generator = simactuators.RampGenerator(
+                start_positions=[start_position],
+                end_positions=[end_position],
+                speeds=[speed],
+                advance_time=TRACK_ADVANCE_TIME,
             )
-            dpos = velocity * TRACK_INTERVAL
-            nelts = int(dt / TRACK_INTERVAL)
+            print(
+                f"Tracking a ramp from {start_position} to {end_position} at speed {speed}; "
+                f"this will take {ramp_generator.duration:0.2f} seconds"
+            )
+
             await self.write_command(
                 commands.CameraCableWrapEnableTracking(on=True), do_wait=True
             )
-            for i in range(nelts):
-                position = start_position + i * dpos
+            for positions, velocities, tai in ramp_generator():
                 track_command = commands.CameraCableWrapTrack(
-                    position=position,
-                    velocity=velocity,
-                    tai=salobj.current_tai() + TRACK_ADVANCE_TIME,
+                    position=positions[0], velocity=velocities[0], tai=tai,
                 )
                 await self.write_command(track_command, do_wait=True)
                 await asyncio.sleep(TRACK_INTERVAL)
@@ -517,48 +516,46 @@ ask_for_command 1
             await asyncio.sleep(0.1)
             await self.write_command(commands.CameraCableWrapStop())
 
-    async def _ccw_sine(self, start_position, amplitude, period):
-        """Make the camera cable wrap track one cycle of a sine wave.
+    async def _ccw_cosine(self, center_position, amplitude, max_speed):
+        """Make the camera cable wrap track one cycle of a cosine wave.
 
-        The range of motion is period - amplitude to period + amplitude,
+        The range of motion is center_position +/- amplitude,
         plus whatever motion is required to slew to the path.
 
         Parameters
         ----------
-        start_position : `float`
-            Midpoint of sine wave (deg).
+        center_position : `float`
+            Midpoint of cosine wave (deg).
         amplitude : `float`
-            Amplitude of sine wave (deg).
-        period : `float`
-            Duration of motion: one full wave (sec).
+            Amplitude of cosine wave (deg).
+        max_speed : `float`
+            Maximum speed along the path (deg/sec).
         """
         try:
-            if period <= 0:
-                raise ValueError(f"period {period} must be positive")
-            print(
-                f"Tracking one cycle of a sine wave centered at {start_position} "
-                f"with amplitude {amplitude} and a period of {period}"
+            cosine_generator = simactuators.CosineGenerator(
+                center_positions=[center_position],
+                amplitudes=[amplitude],
+                max_speeds=[max_speed],
+                advance_time=TRACK_ADVANCE_TIME,
             )
-            nelts = int(period / TRACK_INTERVAL)
-            vmax = amplitude * 2 * math.pi / period
+            print(
+                f"Tracking one cycle of a cosine wave centered at {center_position} "
+                f"with amplitude {amplitude}; "
+                f"this will take {cosine_generator.duration:0.2f} seconds"
+            )
             await self.write_command(
                 commands.CameraCableWrapEnableTracking(on=True), do_wait=True
             )
-            for i in range(nelts):
-                angle_rad = 2 * math.pi * i / nelts
-                position = amplitude * math.sin(angle_rad) + start_position
-                velocity = vmax * math.cos(angle_rad)
+            for positions, velocities, tai in cosine_generator():
                 track_command = commands.CameraCableWrapTrack(
-                    position=position,
-                    velocity=velocity,
-                    tai=salobj.current_tai() + TRACK_ADVANCE_TIME,
+                    position=positions[0], velocity=velocities[0], tai=tai,
                 )
                 await self.write_command(track_command, do_wait=True)
                 await asyncio.sleep(TRACK_INTERVAL)
         except asyncio.CancelledError:
-            print("ccw_sine cancelled")
+            print("ccw_cosine cancelled")
         except Exception as e:
-            print(f"ccw_sine failed: {e!r}")
+            print(f"ccw_cosine failed: {e!r}")
         finally:
             # Wait a bit in case there is a tracking command to be acked.
             await asyncio.sleep(0.1)

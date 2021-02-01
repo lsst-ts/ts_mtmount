@@ -1,4 +1,4 @@
-# This file is part of ts_ATDomeTrajectory.
+# This file is part of ts_MTMount.
 #
 # Developed for the LSST Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -78,7 +78,7 @@ class MockDevicesTestCase(asynctest.TestCase):
         try:
             timeout_task = do_method(command)
         except Exception as e:
-            print(f"command failed: {e}")
+            print(f"command failed: {e!r}")
             raise
 
         if timeout_task is None:
@@ -100,7 +100,7 @@ class MockDevicesTestCase(asynctest.TestCase):
                 self.fail(f"Command {command} succeeded but should_noack true")
         except Exception as e:
             if not should_noack:
-                self.fail(f"Command {command} failed but should_noack false: {e}")
+                self.fail(f"Command {command} failed but should_noack false: {e!r}")
 
     async def test_base_commands(self):
         for device_id, device in self.device_dict.items():

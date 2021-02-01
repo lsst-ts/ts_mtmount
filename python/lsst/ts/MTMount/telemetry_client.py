@@ -20,8 +20,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
-    "AxisStateDict",
-    "DriveStateDict",
     "TelemetryTopicHandler",
     "TelemetryClient",
 ]
@@ -35,27 +33,8 @@ import pathlib
 
 import yaml
 
-from lsst.ts.idl.enums.MTMount import AxisState, DriveState
 from lsst.ts import salobj
 from . import constants
-
-
-AxisStateDict = {
-    "Unknown": AxisState.UNKNOWN,
-    "Off": AxisState.OFF,
-    "Enabled": AxisState.ENABLED,
-    "Fault": AxisState.FAULT,
-}
-
-
-DriveStateDict = {
-    "Unknown": DriveState.UNKNOWN,
-    "Off": DriveState.OFF,
-    "Standstill": DriveState.STOPPED,
-    "Discrete Motion": DriveState.MOVING,
-    "Stopping": DriveState.STOPPING,
-    "Fault": DriveState.FAULT,
-}
 
 
 class TelemetryTopicHandler:
@@ -174,7 +153,7 @@ class TelemetryClient:
             f"host={namespace.host}; "
             f"port={namespace.port}"
         )
-        telemetry_client = cls(host=namespace.host, port=namespace.port,)
+        telemetry_client = cls(host=namespace.host, port=namespace.port)
         telemetry_client.log.setLevel(namespace.loglevel)
         try:
             print("MTMount telemetry client starting")
@@ -184,7 +163,7 @@ class TelemetryClient:
         except asyncio.CancelledError:
             print("MTMount telemetry client done")
         except Exception as e:
-            print(f"MTMount telemetry client failed: {e}")
+            print(f"MTMount telemetry client failed: {e!r}")
 
     async def start(self):
         """Connect to the telemetry port and start the read loop.
@@ -279,53 +258,11 @@ class TelemetryClient:
                 llv_data.pop(f"{key}{n}", math.nan) for n in range(1, ndrives + 1)
             ]
 
-    def _convert_drive_states(self, llv_data, key, ndrives):
-        """Convert drive state strings.
-
-        Parameters
-        ----------
-        llv_data : dict
-            Data from the low-level controller. Modified in place.
-        key : str
-            Prefix for named items; one of "azStatusDrive",
-            "cCWStatusDrive", or "elStatusDrive".
-        ndrives : int
-            The number of drives.
-        """
-        llv_data[key] = [
-            DriveStateDict.get(llv_data.pop(f"{key}{n}", "Unknown"), DriveState.UNKNOWN)
-            for n in range(1, ndrives + 1)
-        ]
-
     def _preprocess_azimuthDrives(self, llv_data):
         """Preprocess status for the tel_azimuthDrives topic."""
         self._convert_drive_measurements(
             llv_data=llv_data, keys=["azCurrent"], ndrives=16
         )
-
-    def _preprocess_cameraCableWrap(self, llv_data):
-        """Preprocess status for the tel_cameraCableWrap topic.
-
-        This method is rather complicated because the data
-        output by the CCW as of 2021-01-11 does not look much like
-        the data that will be output by the final TMA.
-        For now the CCW outputs cCWAngle1, cCWAngle2, cCWSpeed1, and cCWSpeed2,
-        where the 1 values are only valid if drive 1 is on,
-        and the 2 values are only valid if drive 2 is on.
-        The positions are moderately close, the speeds less so.
-        For now I report the 1 values if drive 1 is on and the 2 values
-        otherwise, because we tend to use drive 2.
-        """
-        drive_state1 = llv_data.get("cCWStatusDrive1", None)
-        if drive_state1 in self.on_drive_states:
-            llv_data["angleActual"] = llv_data["cCWAngle1"]
-            llv_data["velocityActual"] = llv_data["cCWSpeed1"]
-        else:
-            llv_data["angleActual"] = llv_data["cCWAngle2"]
-            llv_data["velocityActual"] = llv_data["cCWSpeed2"]
-        llv_data["accelerationActual"] = math.nan
-        llv_data["angleSet"] = math.nan
-        llv_data["velocitySet"] = math.nan
 
     def _preprocess_elevationDrives(self, llv_data):
         """Preprocess status for the tel_elevationDrives topic."""

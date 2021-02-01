@@ -23,7 +23,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import math
 import pathlib
 import time
 import unittest
@@ -32,7 +31,6 @@ import asynctest
 import yaml
 import numpy as np
 
-from lsst.ts.idl.enums.MTMount import DriveState
 from lsst.ts import salobj
 from lsst.ts import hexrotcomm
 from lsst.ts import MTMount
@@ -46,10 +44,6 @@ CONNECT_TIMEOUT = 5
 
 class TelemetryClientTestCase(asynctest.TestCase):
     async def setUp(self):
-        self.driveStateToStr = {
-            value: key for key, value in MTMount.DriveStateDict.items()
-        }
-
         telemetry_map_path = (
             pathlib.Path(__file__).parents[1] / "data" / "telemetry_map.yaml"
         )
@@ -118,12 +112,12 @@ class TelemetryClientTestCase(asynctest.TestCase):
             # Arbitrary values that are suitable for both
             # the elevation and azimuth telemetry topics.
             desired_elaz_dds_data = dict(
-                angleActual=55.1,
-                angleSet=45.2,
-                velocityActual=1.3,
-                velocitySet=1.4,
-                accelerationActual=-0.5,
-                torqueActual=3.3,
+                actualPosition=55.1,
+                demandPosition=45.2,
+                actualVelocity=1.3,
+                demandVelocity=1.4,
+                actualAcceleration=-0.5,
+                actualTorque=3.3,
                 timestamp=time.time(),
             )
             # topic_id is from telemetry_map.yaml
@@ -131,6 +125,7 @@ class TelemetryClientTestCase(asynctest.TestCase):
                 dds_data=desired_elaz_dds_data,
                 topic_id=MTMount.TelemetryTopicId.AZIMUTH,
             )
+            azimuth_llv_data["this_extra_field_should_be_ignored"] = 55.2
             await self.publish_data(azimuth_llv_data)
             await self.assert_next_telemetry(
                 self.remote.tel_azimuth, desired_elaz_dds_data
@@ -165,34 +160,20 @@ class TelemetryClientTestCase(asynctest.TestCase):
                 self.remote.tel_elevationDrives, desired_elevation_drives_dds_data
             )
 
-            # CCW is tricky for now because the telemetry
-            # is heavily massaged and some fields are unknown.
-
-            DriveStateNameDict = {
-                value: key for key, value in MTMount.DriveStateDict.items()
-            }
-            ccw_llv_data = dict(
-                cCWStatusDrive1=DriveStateNameDict[DriveState.MOVING],
-                cCWStatusDrive2=DriveStateNameDict[DriveState.OFF],
-                cCWAngle1=12.3,
-                cCWAngle2=-34.5,
-                cCWSpeed1=1.23,
-                cCWSpeed2=-3.45,
-                timestamp=time.time(),
-                topicID=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
-            )
             desired_ccw_dds_data = dict(
-                angleActual=ccw_llv_data["cCWAngle1"],
-                velocityActual=ccw_llv_data["cCWSpeed1"],
-                timestamp=ccw_llv_data["timestamp"],
+                actualPosition=12.3,
+                actualVelocity=-34.5,
+                actualAcceleration=0.25,
+                timestamp=time.time(),
+            )
+            ccw_llv_data = self.convert_dds_data_to_llv(
+                dds_data=desired_ccw_dds_data,
+                topic_id=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
             )
             await self.publish_data(ccw_llv_data)
-            ccw_dds_data = await self.assert_next_telemetry(
+            await self.assert_next_telemetry(
                 self.remote.tel_cameraCableWrap, desired_ccw_dds_data
             )
-            self.assertTrue(math.isnan(ccw_dds_data.accelerationActual))
-            self.assertTrue(math.isnan(ccw_dds_data.angleSet))
-            self.assertTrue(math.isnan(ccw_dds_data.velocitySet))
 
     async def assert_next_telemetry(
         self, topic, desired_data, delta=1e-7, timeout=STD_TIMEOUT
@@ -277,11 +258,6 @@ class TelemetryClientTestCase(asynctest.TestCase):
         value : `str`
             DDS value.
         """
-        if llv_key.endswith("StatusDrive"):
-            for i, item in enumerate(value):
-                llv_data[llv_key + str(i + 1)] = self.driveStateToStr[item]
-            return
-
         if isinstance(value, list):
             for i, item in enumerate(value):
                 llv_data[llv_key + str(i + 1)] = item

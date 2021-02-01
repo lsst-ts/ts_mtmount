@@ -71,6 +71,6 @@ LimitsDict = {
     ),
     # From LTS-218.
     enums.DeviceId.CAMERA_CABLE_WRAP: Limits(
-        min_position=-90, max_position=90, max_velocity=3.5, max_acceleration=1
+        min_position=-90, max_position=90, max_velocity=4.0, max_acceleration=1.5
     ),
 }
