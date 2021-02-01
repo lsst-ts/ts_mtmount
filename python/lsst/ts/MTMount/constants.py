@@ -18,6 +18,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
+from lsst.ts.idl.enums.MTMount import AxisState, DriveState
 
 # Reply ports are one larger.
 EUI_COMMAND_PORT = 60005
@@ -30,3 +31,25 @@ TELEMETRY_PORT = 50035
 
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
+
+# Axis state from the low-level controller: AxisState enum value.
+AxisStateDict = {
+    "Unknown": AxisState.UNKNOWN,
+    "Idle": AxisState.OFF,
+    "On Enable": AxisState.ENABLED,
+    "On DiscreteMove": AxisState.DISCRETE_MOVE,
+    "On JogMove": AxisState.JOG_MOVE,
+    "On Tracking": AxisState.TRACKING,
+    "On Stopping": AxisState.STOPPING,
+    "Fault": AxisState.FAULT,
+}
+
+# Drive state from the low-level controller: DriveState enum value.
+DriveStateDict = {
+    "Unknown": DriveState.UNKNOWN,
+    "Off": DriveState.OFF,
+    "Standstill": DriveState.STOPPED,
+    "Discrete Motion": DriveState.MOVING,
+    "Stopping": DriveState.STOPPING,
+    "Fault": DriveState.FAULT,
+}

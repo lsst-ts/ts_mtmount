@@ -22,17 +22,19 @@
 __all__ = ["MTMountCsc"]
 
 import asyncio
+import math
 import pathlib
 import signal
 
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import DriveState
+from . import constants
 from . import command_futures
 from . import commands
-from . import constants
-from . import enums
-from . import replies
 from . import communicator
+from . import enums
+from . import limits
+from . import replies
 from . import __version__
 
 # Extra time to wait for commands to be done (sec)
@@ -44,6 +46,15 @@ MAX_ROTATOR_APPLICATION_GAP = 1.0
 
 MOCK_CTRL_START_TIME = 20
 TELEMETRY_START_TIME = 30
+
+# Maximum time to wait for rotator telemetry (seconds).
+# Must be significantly greater than the interval between rotator
+# telemetry updates, which should not be longer than 0.2 seconds.
+# For minimum confusion when CCW following fails, this should also be
+# significantly less than the maximum time the low-level controller waits
+# for a tracking command, which is controlled by setting "Tracking Wait time
+# for check setpoint"; on 2020-02-01 the value was 5 seconds.
+ROTATOR_TELEMETRY_TIMEOUT = 1
 
 
 class MTMountCsc(salobj.ConfigurableCsc):
@@ -149,37 +160,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.monitor_telemetry_client_task = salobj.make_done_future()
 
-        # Task for self.camera_cable_wrap_loop
-        self.camera_cable_wrap_task = salobj.make_done_future()
+        # Tasks for camera cable wrap following the rotator
+        self.camera_cable_wrap_follow_start_task = salobj.make_done_future()
+        self.camera_cable_wrap_follow_loop_task = salobj.make_done_future()
 
         # Task for self.read_loop
         self.read_loop_task = salobj.make_done_future()
 
-        # Camera cable wrap (CCW) - camera rotator (rotator) synchronization
-        # limits.
-        # The goto limit is the distance between the CCW and the rotator
-        # demand position after which the CCW will blindly go to the demand,
-        # as long as the distance between the ccw and rot are less then
-        # half the max limit.
-        # The max limit is the maximum distance allowed between CCW and
-        # rotator.
-        # The slew limit is the distance between CCW - rotator where CCW will
-        # enter "slew" mode, and start following the position of the rotator.
-        # The track limit is the distance between CCW - rotator at which they
-        # are considered in synchronization and CCW will follow the rotator
-        # demand.
-        # TODO: Make these configuration parameters (DM-25941).
-        self.ccw_rot_sync_limit_goto = 7.5
-        self.ccw_rot_sync_limit_max = 2.0
-        self.ccw_rot_sync_limit_slew = 0.25
-        self.ccw_rot_sync_limit_track = 0.125
-
-        # Is the camera cable wrap (CCW) in catchup mode?
-        # This is True if CCW is enabled and the distance between
-        # CCW and MTRotator exceeds ccw_rot_sync_limit_slew.
-        # It will remain True until the distance is smaller then
-        # ccw_rot_sync_limit_track.
-        self.catch_up_mode = False
+        # Is camera rotator actual position - demand position
+        # greater than config.max_rotator_position_error?
+        # Log a warning every time this transitions to True.
+        self.rotator_position_error_excessive = False
 
         # Should the CSC be connected?
         # Used to decide whether disconnecting sends the CSC to a Fault state.
@@ -222,14 +213,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.send_command(
                     commands.AskForCommand(commander=enums.Source.CSC)
                 )
-                self.log.info(
-                    "Wait 1 second before sending any other commands, to work around a TMA bug."
-                )
-                await asyncio.sleep(1)
                 self.has_control = True
             except Exception as e:
                 raise salobj.ExpectedError(
-                    f"The CSC was not allowed to command the mount: {e}"
+                    f"The CSC was not allowed to command the mount: {e!r}"
                 )
 
         self.enable_task.cancel()
@@ -239,7 +226,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def begin_disable(self, data):
         try:
             await super().begin_disable(data)
-            self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
             if self.has_control and self.connected:
                 self.disable_task.cancel()
                 self.disable_task = asyncio.create_task(self.disable_devices())
@@ -253,7 +239,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.has_control = True
             except Exception as e:
                 self.log.warning(
-                    f"The CSC was not able to give up command of the mount: {e}"
+                    f"The CSC was not able to give up command of the mount: {e!r}"
                 )
         finally:
             self.has_control = False
@@ -279,8 +265,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def get_camera_cable_wrap_demand(self):
         """Get camera cable wrap tracking command data.
 
-        Read the position of the camera cable wrap and camera rotator
-        and compute an optimum demand for the former.
+        Read the position and velocity of the camera rotator
+        and compute an optimum demand for camera cable wrap.
 
         Returns
         -------
@@ -292,66 +278,50 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Desired camera cable wrap time (TAI unix seconds).
             This will be ``config.camera_cable_wrap_advance_time``
             seconds in the future.
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If data not seen in ROTATOR_TELEMETRY_TIMEOUT seconds.
         """
 
-        rot_data = await self.rotator.tel_rotation.next(flush=True)
-        ccw_data = await self.mtmount_remote.tel_cameraCableWrap.aget()
+        rot_data = await self.rotator.tel_rotation.next(
+            flush=True, timeout=ROTATOR_TELEMETRY_TIMEOUT
+        )
 
-        # Adjust the camera cable wrap position to the timestamp
-        # in the rotator telemetry.
-        dt = rot_data.timestamp - ccw_data.timestamp
-        ccw_actual_velocity = ccw_data.velocityActual
-        ccw_unadjusted_actual_position = ccw_data.angleActual
-        ccw_actual_position = ccw_actual_velocity * dt + ccw_unadjusted_actual_position
-
-        distance_ccw_rot_actual = ccw_actual_position - rot_data.actualPosition
-
-        distance_ccw_rot_demand = ccw_actual_position - rot_data.demandPosition
-
-        distance_rot_actual_demand = rot_data.actualPosition - rot_data.demandPosition
+        desired_tai = salobj.current_tai() + self.config.camera_cable_wrap_advance_time
+        dt = rot_data.timestamp - desired_tai
 
         if (
-            not self.catch_up_mode
-            and abs(distance_ccw_rot_actual) < self.ccw_rot_sync_limit_slew
-        ) or (
-            abs(distance_ccw_rot_demand) < self.ccw_rot_sync_limit_goto
-            and abs(distance_ccw_rot_actual) < self.ccw_rot_sync_limit_max / 2.0
+            abs(rot_data.demandPosition - rot_data.actualPosition)
+            > self.config.max_rotator_position_error
         ):
-            # Camera cable wrap and camera rotator are synchronized,
-            # or within the goto limit and following closely enough;
-            # follow the demand and exit catch-up mode (if in it).
-            self.catch_up_mode = False
-            desired_position = rot_data.demandPosition
-            desired_velocity = 0.0
-        else:
-            if not self.catch_up_mode:
-                self.catch_up_mode = True
-                self.log.info(
-                    "MTRotator and camera cable wrap out of sync. Going into catchup mode."
+            if not self.rotator_position_error_excessive:
+                self.log.warning(
+                    "Excessive rotator demand-actual position error; using actual. "
+                    f"Demand={rot_data.demandPosition:0.3f}; "
+                    f"actual={rot_data.actualPosition:0.3f}; "
+                    f"max_rotator_position_error={self.config.max_rotator_position_error} deg."
                 )
-            else:
-                # Switch off catch_up_mode if ccw-rot in the "track" limit.
-                self.catch_up_mode = (
-                    abs(distance_ccw_rot_actual) > self.ccw_rot_sync_limit_track
-                )
-
-            # Compute desired velocity. If the distance between
-            # camera cable wrap and rotator > rotator following error
-            # use the rotator demand velocity; otherwise use 0.
-            desired_velocity = (
-                rot_data.demandVelocity
-                if abs(distance_ccw_rot_demand) > abs(distance_rot_actual_demand)
-                else 0.0
-            )
+                self.rotator_position_error_excessive = True
             desired_position = rot_data.actualPosition
+            desired_velocity = rot_data.actualVelocity
+        else:
+            self.rotator_position_error_excessive = False
+            desired_position = rot_data.demandPosition
+            desired_velocity = rot_data.demandVelocity
 
-        # Adjust demand position for desired time:
-        # self.config.camera_cable_wrap_advance_time later than now.
-        # Note that the unadjusted data was computed at rot_data.timestamp.
-        desired_tai = salobj.current_tai() + self.config.camera_cable_wrap_advance_time
-        delta_t = desired_tai - rot_data.timestamp
-        adjusted_desired_position = desired_position + desired_velocity * delta_t
+        max_velocity = limits.LimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP].max_velocity
 
+        if abs(desired_velocity) > max_velocity:
+            excessive_desired_velocity = desired_velocity
+            desired_velocity = math.copysign(max_velocity, desired_velocity)
+            self.log.warning(
+                f"Limiting desired velocity from {excessive_desired_velocity:0.2f} "
+                f"to {desired_velocity:0.2f}"
+            )
+
+        adjusted_desired_position = desired_position + desired_velocity * dt
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
@@ -390,7 +360,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     self.log.exception(err_msg)
                     self.fault(
                         code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR,
-                        report=f"{err_msg}: {e}",
+                        report=f"{err_msg}: {e!r}",
                     )
                     return
                 else:
@@ -429,7 +399,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             f"at client_host={client_host}, command_port={command_port}"
             self.log.exception(err_msg)
             self.fault(
-                code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e}"
+                code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e!r}"
             )
             return
 
@@ -448,7 +418,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             err_msg = f"Could not start MTMount telemetry client with {cmdstr!r}"
             self.log.exception(err_msg)
             self.fault(
-                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=f"{err_msg}: {e}"
+                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR,
+                report=f"{err_msg}: {e!r}",
             )
             return
         try:
@@ -495,7 +466,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.info("Enable devices")
         self.disable_task.cancel()
         try:
-            enable_commands = [
+            for reset_command in [
                 commands.TopEndChillerResetAlarm(),
                 commands.MainPowerSupplyResetAlarm(),
                 commands.MirrorCoverLocksResetAlarm(),
@@ -503,6 +474,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.AzimuthAxisResetAlarm(),
                 commands.ElevationAxisResetAlarm(),
                 commands.CameraCableWrapResetAlarm(),
+            ]:
+                try:
+                    await self.send_command(reset_command, do_lock=False)
+                except Exception as e:
+                    self.log.warning(
+                        f"Command {reset_command} failed; continuing: {e!r}"
+                    )
+
+            power_on_commands = [
                 commands.TopEndChillerPower(on=True),
                 commands.TopEndChillerTrackAmbient(on=True, temperature=0),
                 commands.MainPowerSupplyPower(on=True),
@@ -510,20 +490,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.AzimuthAxisPower(on=True),
                 commands.ElevationAxisPower(on=True),
                 commands.CameraCableWrapPower(on=True),
-                commands.CameraCableWrapEnableTracking(on=True),
             ]
-            await self.send_commands(*enable_commands)
-        except Exception:
-            self.log.exception("Failed to enable one or more devices")
+            await self.send_commands(*power_on_commands)
+        except Exception as e:
+            self.log.error(f"Failed to power on one or more devices: {e!r}")
             raise
-        if self.camera_cable_wrap_task.done():
-            self.camera_cable_wrap_task = asyncio.create_task(
-                self.camera_cable_wrap_loop()
-            )
+        self.camera_cable_wrap_follow_start_task = asyncio.create_task(
+            self.camera_cable_wrap_start_following()
+        )
+        await self.camera_cable_wrap_follow_start_task
 
     async def disable_devices(self):
         self.log.info("Disable devices")
         self.enable_task.cancel()
+        self.camera_cable_wrap_follow_start_task.cancel()
+        self.camera_cable_wrap_follow_loop_task.cancel()
         if not self.connected:
             return
         for command in [
@@ -536,8 +517,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             try:
                 await self.send_command(command, do_lock=False)
             except Exception as e:
-                self.log.warning(f"Command {command} failed; continuing: {e}")
-                raise
+                self.log.warning(f"Command {command} failed; continuing: {e!r}")
+
+        self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
@@ -573,11 +555,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 return await self._basic_send_command(command=command)
         except ConnectionResetError:
             raise
-        except salobj.ExpectedError as e:
-            self.log.error(f"Failed to send command {command}: {e}")
-            raise
-        except Exception:
-            self.log.exception(f"Failed to send command {command}")
+        except Exception as e:
+            self.log.exception(f"Failed to send command {command}: {e!r}")
             raise
 
     async def _basic_send_command(self, command):
@@ -642,10 +621,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             if future is not None:
                 future.setnoack("Connection lost")
         except Exception as e:
-            self.log.exception("send_commands failed")
+            err_msg = f"send_commands failed: {e!r}"
+            self.log.exception(err_msg)
             # The future is probably done, but in case not...
             if future is not None:
-                future.setnoack(f"send_commands failed: {e}")
+                future.setnoack(err_msg)
             raise
 
     def terminate_background_processes(self):
@@ -666,27 +646,87 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.telemetry_client_process.terminate()
             self.telemetry_client_process = None
 
-    async def camera_cable_wrap_loop(self):
-        self.log.info("Camera cable wrap control begins")
+    async def camera_cable_wrap_start_following(self):
+        """Make the camera cable wrap start following the camera rotator.
+
+        Camera cable wrap following is divided into two tasks so that the
+        enableCameraCableWrapFollowing command can succeed or fail
+        if following is likely or unlikely to work.
+
+        This method enables camera cable wrap tracking,
+        waits for that command to succeed or fail,
+        and if it succeeds, starts the camera cable wrap following loop.
+        """
+        self.camera_cable_wrap_follow_loop_task.cancel()
+        try:
+            await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
+            self.camera_cable_wrap_follow_loop_task = asyncio.create_task(
+                self._camera_cable_wrap_follow_loop()
+            )
+            self.evt_cameraCableWrapFollowing.set_put(enabled=True, force_output=True)
+        except asyncio.CancelledError:
+            self.log.info("Camera cable wrap following canceled before it starts")
+            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            raise
+        except Exception as e:
+            if isinstance(e, salobj.ExpectedError):
+                self.log.error(
+                    f"Camera cable wrap tracking could not be enabled: {e!r}"
+                )
+            else:
+                self.log.exception("Camera cable wrap tracking could not be enabled")
+            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            raise
+
+    async def _camera_cable_wrap_follow_loop(self):
+        """Implement the camera cable wrap following the camera rotator.
+
+        This should be called by camera_cable_wrap_start_following.
+        Camera cable wrap tracking must be enabled before this is called.
+        """
+        self.log.info("Camera cable wrap following begins")
+        self.rotator_position_error_excessive = False
+        paused = False
         try:
             while True:
-                position_velocity_tai = await self.get_camera_cable_wrap_demand()
-                if position_velocity_tai is None:
-                    return
+                try:
+                    position_velocity_tai = await self.get_camera_cable_wrap_demand()
+                except asyncio.TimeoutError:
+                    if not paused:
+                        paused = True
+                        self.log.warning(
+                            "Rotator data not available; stopping the camera "
+                            "cable wrap until rotator data is available"
+                        )
+                        await self.send_command(commands.CameraCableWrapStop())
+                    continue
+                if paused:
+                    paused = False
+                    self.log.info(
+                        "Rotator data received; resume making "
+                        "the camera cable wrap follow the rotator"
+                    )
+                    await self.send_command(
+                        commands.CameraCableWrapEnableTracking(on=True)
+                    )
                 position, velocity, tai = position_velocity_tai
 
                 command = commands.CameraCableWrapTrack(
                     position=position, velocity=velocity, tai=tai,
                 )
                 await self.send_command(command)
+                self.evt_cameraCableWrapTarget.set_put(
+                    position=position, velocity=velocity, taiTime=tai
+                )
 
         except asyncio.CancelledError:
-            self.log.info("Camera cable wrap control ends")
+            self.log.info("Camera cable wrap following ends")
+        except salobj.ExpectedError as e:
+            self.log.error(f"Camera cable wrap following failed: {e!r}")
         except Exception:
-            self.log.exception("Camera cable wrap control failed")
+            self.log.exception("Camera cable wrap following failed")
         finally:
-            self.last_rotator_position = None
-            self.last_rotator_time = None
+            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
 
     async def configure(self, config):
         self.config = config
@@ -767,7 +807,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         self.log.exception(err_msg)
                         self.fault(
                             code=enums.CscErrorCode.INTERNAL_ERROR,
-                            report=f"{err_msg}: {e}",
+                            report=f"{err_msg}: {e!r}",
                         )
                     else:
                         self.fault(
@@ -782,8 +822,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def start(self):
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
+        self.evt_cameraCableWrapFollowing.set_put(enabled=False)
         await super().start()
-        self.log.info("Started")
 
     async def do_clearError(self, data):
         self.assert_enabled()
@@ -819,23 +859,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands.MirrorCoverLocksPower(on=False),
         )
 
-    async def do_disableCameraCableWrapTracking(self, data):
+    async def do_disableCameraCableWrapFollowing(self, data):
         self.assert_enabled()
-        self.camera_cable_wrap_task.cancel()
+        self.camera_cable_wrap_follow_start_task.cancel()
+        self.camera_cable_wrap_follow_loop_task.cancel()
         await self.send_command(commands.CameraCableWrapStop())
 
-    async def do_enableCameraCableWrapTracking(self, data):
+    async def do_enableCameraCableWrapFollowing(self, data):
         self.assert_enabled()
-        await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
-        if self.camera_cable_wrap_task.done():
-            self.camera_cable_wrap_task = asyncio.create_task(
-                self.camera_cable_wrap_loop()
+        if self.camera_cable_wrap_follow_loop_task.done():
+            self.camera_cable_wrap_follow_start_task = asyncio.create_task(
+                self.camera_cable_wrap_start_following()
             )
+            await self.camera_cable_wrap_follow_start_task
 
     async def do_moveToTarget(self, data):
         self.assert_enabled()
         await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation,),
+            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
         )
 
     async def do_trackTarget(self, data):

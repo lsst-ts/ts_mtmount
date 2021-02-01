@@ -6,6 +6,30 @@
 Version History
 ###############
 
+v0.13.0
+=======
+
+Changes:
+
+* Overhaul camera cable wrap control.
+  This requires ts_xml 7.2:
+
+    * Rename command ``disableCameraCableWrapTracking`` to ``disableCameraCableWrapFollowing``
+    * Rename command ``enableCameraCableWrapTracking`` to ``enableCameraCableWrapFollowing``.
+      Make that command wait until camera cable wrap tracking is enabled and fail if it cannot be.
+    * Output new event ``cameraCableWrapFollowing``.
+    * Simplify the ``cameraCableWrap`` telemetry schema;
+      the set position, set velocity and actual accleration cannot be set because the information is not available.
+    * Simplify the algorithm for following the camera rotator.
+      With recent improvements from Tekniker we can now directly use the rotator demand position and velocity as the camera cable wrap target
+      (or actual rotator position and velocity, if actual position is too different from demand position).
+    * Limit the camera cable wrap target velocity if the rotator demand velocity is larger than the cable wrap supports.
+    * Correctly handle lack of telemetry messages from the camera rotator.
+      Stop the camera cable wrap while waiting for rotator telemetry to resume.
+    * Add configuration parameter ``max_rotator_position_error``.
+
+* `MTMountCsc`: reset e-stops as part of going to enabled state.
+
 v0.12.1
 =======
 

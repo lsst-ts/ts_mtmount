@@ -28,6 +28,7 @@ import asynctest
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
+from lsst.ts.idl.enums.MTMount import SubsystemId
 
 # Standard timeout for TCP/IP messages (sec).
 STD_TIMEOUT = 0.01
@@ -167,7 +168,7 @@ class CommunicatorTestCase(asynctest.TestCase):
             MTMount.replies.WarningReply(
                 active=True,
                 code=47,
-                subsystem=f"{MTMount.SubsystemId.MIRROR_COVERS}. MyTopVI/MyNextVI/MyNextNextVI",
+                subsystem=f"{SubsystemId.MIRROR_COVERS}. MyTopVI/MyNextVI/MyNextNextVI",
                 what="test warning",
                 description="Description of the warning",
             ),
@@ -175,7 +176,7 @@ class CommunicatorTestCase(asynctest.TestCase):
                 on=True,
                 active=False,
                 code=47,
-                subsystem=f"{MTMount.SubsystemId.MIRROR_COVERS}. MyTopVI/MyNextVI/MyNextNextVI",
+                subsystem=f"{SubsystemId.MIRROR_COVERS}. MyTopVI/MyNextVI/MyNextNextVI",
                 what="test error",
                 description="Description of the error",
             ),

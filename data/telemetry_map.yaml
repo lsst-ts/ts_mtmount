@@ -8,12 +8,12 @@
 
 6: # fields are in flux
 - azimuth
-- angleActual: angleActual
-  angleSet: angleSet
-  velocityActual: velocityActual
-  velocitySet: velocitySet
-  accelerationActual: accelerationActual
-  torqueActual: torqueActual
+- actualPosition: angleActual
+  demandPosition: angleSet
+  actualVelocity: velocityActual
+  demandVelocity: velocitySet
+  actualAcceleration: accelerationActual
+  actualTorque: torqueActual
   timestamp: timestamp
 
 5:
@@ -23,12 +23,12 @@
 
 15: # fields are in flux
 - elevation
-- angleActual: angleActual
-  angleSet: angleSet
-  velocityActual: velocityActual
-  velocitySet: velocitySet
-  accelerationActual: accelerationActual
-  torqueActual: torqueActual
+- actualPosition: angleActual
+  demandPosition: angleSet
+  actualVelocity: velocityActual
+  demandVelocity: velocitySet
+  actualAcceleration: accelerationActual
+  actualTorque: torqueActual
   timestamp: timestamp
 
 14:
@@ -38,9 +38,7 @@
 
 8:
 - cameraCableWrap
-- angleActual: angleActual
-  angleSet: angleSet
-  velocityActual: velocityActual
-  velocitySet: velocitySet
-  accelerationActual: accelerationActual
+- actualPosition: angle
+  actualVelocity: speed
+  actualAcceleration: acceleration
   timestamp: timestamp
