@@ -876,7 +876,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_moveToTarget(self, data):
         self.assert_enabled()
         await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation,),
+            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
         )
 
     async def do_trackTarget(self, data):

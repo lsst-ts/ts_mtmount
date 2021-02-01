@@ -153,7 +153,7 @@ class TelemetryClient:
             f"host={namespace.host}; "
             f"port={namespace.port}"
         )
-        telemetry_client = cls(host=namespace.host, port=namespace.port,)
+        telemetry_client = cls(host=namespace.host, port=namespace.port)
         telemetry_client.log.setLevel(namespace.loglevel)
         try:
             print("MTMount telemetry client starting")

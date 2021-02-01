@@ -538,7 +538,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             # for each axis (resulting in two axesInPosition events)
             # or can be sent for both axes at the same time
             # (resulting in a single axesInPosition event).
-            data = await self.assert_next_sample(self.remote.evt_axesInPosition,)
+            data = await self.assert_next_sample(self.remote.evt_axesInPosition)
             self.assertIn(False, (data.azimuth, data.elevation))
             if True in (data.azimuth, data.elevation):
                 await self.assert_next_sample(
