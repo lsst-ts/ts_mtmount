@@ -198,7 +198,7 @@ class Controller:
         except asyncio.CancelledError:
             print("Mock TMA controller done")
         except Exception as e:
-            print(f"Mock TMA controller failed: {e}")
+            print(f"Mock TMA controller failed: {e!r}")
 
     def telemetry_connect_callback(self, server):
         """Called when a client connects to or disconnects from

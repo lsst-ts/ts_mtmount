@@ -213,7 +213,7 @@ class Communicator(client_server_pair.ClientServerPair):
             print("Client connection closed at the other end")
             pass
         except Exception as e:
-            print(f"monitor_client_reader failed: {e}")
+            print(f"monitor_client_reader failed: {e!r}")
 
         await self.close_client()
         self.call_connect_callback()

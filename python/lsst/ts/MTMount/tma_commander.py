@@ -286,7 +286,7 @@ ask_for_command 1
                     else:
                         await self.handle_command(cmd_name, args)
                 except Exception as e:
-                    print(f"Command {cmd_name} failed: {e}")
+                    print(f"Command {cmd_name} failed: {e!r}")
                     print(traceback.format_exc())
                     continue
         finally:
