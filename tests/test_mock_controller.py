@@ -1,4 +1,4 @@
-# This file is part of ts_ATDomeTrajectory.
+# This file is part of ts_MTMount.
 #
 # Developed for the LSST Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -64,10 +64,10 @@ class MockControllerTestCase(asynctest.TestCase):
 
         Parameters
         ----------
-    commander : `Source`, optional
-        Who initially has command. Defaults to `Source.HHD`,
-        so tests need not issue the ``ASK_FOR_COMMAND`` command
-        before issuing other commands.
+        commander : `Source`, optional
+            Who initially has command. Defaults to `Source.HHD`,
+            so tests need not issue the ``ASK_FOR_COMMAND`` command
+            before issuing other commands.
 
         Other special values:
 
@@ -460,18 +460,12 @@ class MockControllerTestCase(asynctest.TestCase):
             ccw_telem = await self.next_telemetry(
                 MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP
             )
-            self.assertEqual(ccw_telem["cCWStatusDrive1"], "Off")
-            self.assertEqual(ccw_telem["cCWStatusDrive2"], "Off")
-            for brief_name in (
-                "Angle1",
-                "Angle2",
-                "Speed1",
-                "Speed2",
-                "Current1",
-                "Current2",
+            for name in (
+                "angle",
+                "speed",
+                "acceleration",
             ):
-                full_name = f"cCW{brief_name}"
-                self.assertEqual(ccw_telem[full_name], 0, msg=full_name)
+                self.assertEqual(ccw_telem[name], 0, msg=name)
             self.assertGreater(ccw_telem["timestamp"], tai0)
 
     async def test_tracking(self):

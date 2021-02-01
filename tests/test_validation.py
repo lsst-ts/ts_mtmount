@@ -1,4 +1,4 @@
-# This file is part of ts_ATDomeTrajectory.
+# This file is part of ts_MTMount.
 #
 # Developed for the LSST Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -44,6 +44,7 @@ class ValidationTestCase(unittest.TestCase):
             connection_timeout=10,
             ack_timeout=10,
             camera_cable_wrap_advance_time=0.02,
+            max_rotator_position_error=0.1,
         )
 
     def test_default(self):
@@ -69,7 +70,12 @@ class ValidationTestCase(unittest.TestCase):
                         self.assertEqual(result[field], default_value)
 
     def test_all_specified(self):
-        data = dict(host="1.2.3.4", connection_timeout=3.4, ack_timeout=4.5)
+        data = dict(
+            host="1.2.3.4",
+            connection_timeout=3.4,
+            ack_timeout=4.5,
+            max_rotator_position_error=1.2,
+        )
         data_copy = data.copy()
         result = self.validator.validate(data)
         self.assertEqual(data, data_copy)
