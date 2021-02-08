@@ -750,20 +750,26 @@ def _make_command_dict():
 CommandDict = _make_command_dict()
 
 
-def parse_command(fields):
-    """Return a Command from a bytes string.
+def parse_command(command_str):
+    """Parse string as a `Command`.
 
     Parameters
     ----------
-    fields : `List` [`str`]
-        Fields from a read message.
-        The fields should not be terminated with ``\n``.
+    command_str : `str`
+        Command encoded as a sequence of ``\n``-separated fields.
+        Leading and trailing whitespace, ``\n``, and/or ``\r`` are ignored.
+
+    Returns
+    -------
+    command : `Command`
+        The parsed command.
 
     Raises
     ------
     ValueError
-        If the data cannot be parsed.
+        If the string cannot be parsed.
     """
+    fields = command_str.strip().split("\n")
     if len(fields) < NUM_HEADER_FIELDS:
         raise ValueError(
             f"A command has at least {NUM_HEADER_FIELDS} fields; only got {len(fields)}"
