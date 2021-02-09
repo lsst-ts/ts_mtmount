@@ -24,6 +24,7 @@ __all__ = ["MTMountCsc"]
 import asyncio
 import math
 import pathlib
+import re
 import signal
 import subprocess
 
@@ -72,18 +73,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
         the default.
     simulation_mode : `int`, optional
         Simulation mode.
-    mock_command_port : `int`, optional
-        Port for mock controller TCP/IP interface. If `None` then use the
-        standard value. Only used in simulation mode.
-    mock_telemetry_port : `int`, optional
-        Port for mock controller telemetry server. If `None` then use the
-        standard value. Only used in simulation mode.
     run_mock_controller : `bool`, optional
-        Run the mock controller? Ignored unless ``simulation_mode == 1``.
-        This is used by unit tests which run the mock controller
-        themselves in order to monitor the effect of commands.
-        This is necessary because the mock controller provides
-        very little feedback as to what it is doing.
+        Run the mock controller (using random ports)?
+        Ignored unless ``simulation_mode == 1``.
+        False with ``simulation_mode == 1`` is for unit tests
+        which run their own mock controller; many tests do this
+        in order to monitor what is going on in the controller.
+    mock_command_port : `int` or `None`, optional
+        Port for mock controller TCP/IP interface. If `None` then use the
+        standard value. Ignored unless running in simulation mode
+        and ``run_mock_controller`` false. This supports unit tests
+        which run their own mock controller with randomly chosen ports.
+    mock_telemetry_port : `int` or `None`, optional
+        Port for mock controller telemetry server. If `None` then use the
+        standard value. Ignored unless running in simulation mode
+        and ``run_mock_controller`` false. This supports unit tests
+        which run their own mock controller with randomly chosen ports.
 
     Raises
     ------
@@ -112,9 +117,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         config_dir=None,
         initial_state=salobj.State.STANDBY,
         simulation_mode=0,
+        run_mock_controller=True,
         mock_command_port=None,
         mock_telemetry_port=None,
-        run_mock_controller=True,
     ):
         schema_path = (
             pathlib.Path(__file__).resolve().parents[4] / "schema" / "MTMount.yaml"
@@ -346,19 +351,27 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise RuntimeError("Not yet configured")
         if self.connected:
             raise RuntimeError("Already connected")
-        connection_timeout = self.config.connection_timeout
-        if self.simulation_mode:
+
+        if self.simulation_mode == 0:
+            command_host = self.config.host
+            telemetry_host = self.config.telemetry_host
+            command_port = constants.CSC_COMMAND_PORT
+            telemetry_port = constants.TELEMETRY_PORT
+        else:
             command_host = salobj.LOCAL_HOST
             telemetry_host = salobj.LOCAL_HOST
-            command_port = self.mock_command_port
-            telemetry_port = self.mock_telemetry_port
-
-            if self.run_mock_controller:
+            if not self.run_mock_controller:
+                command_port = self.mock_command_port
+                telemetry_port = self.mock_telemetry_port
+            else:
+                # Run the mock controller using random ports;
+                # read the ports to set command_port and telemetry_port.
+                command_port = None
+                telemetry_port = None
                 args = [
                     "run_mock_tma.py",
-                    f"--command-port={command_port}",
-                    f"--telemetry-port={telemetry_port}",
                     f"--loglevel={self.log.level}",
+                    "--random-ports",
                 ]
                 self.log.info(f"Starting the mock controller: {' '.join(args)}")
                 try:
@@ -377,16 +390,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
                 self.log.info("Waiting for mock controller to start")
                 t0 = salobj.current_tai()
-                await asyncio.wait_for(
+                command_port, telemetry_port = await asyncio.wait_for(
                     self._wait_for_mock_controller(), timeout=MOCK_CTRL_START_TIMEOUT,
                 )
                 dt = salobj.current_tai() - t0
-                self.log.info(f"Mock controller took {dt:0.2f} seconds to start")
-        else:
-            command_host = self.config.host
-            telemetry_host = self.config.telemetry_host
-            command_port = constants.CSC_COMMAND_PORT
-            telemetry_port = constants.TELEMETRY_PORT
+                self.log.info(
+                    f"Mock controller running with command_port={command_port} "
+                    f"telemetry_port={telemetry_port}; {dt:0.1f} seconds to start"
+                )
+        if command_port is None or telemetry_port is None:
+            raise RuntimeError(
+                f"Bug: command_port={command_port} and/or "
+                f"telemetry_port={telemetry_port} is None; "
+                f"simulation_mode={self.simulation_mode}, "
+                f"run_mock_controller={self.run_mock_controller}"
+            )
         try:
             self.log.info(
                 "Connecting to the low-level controller: "
@@ -394,7 +412,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             connect_coro = asyncio.open_connection(host=command_host, port=command_port)
             self.reader, self.writer = await asyncio.wait_for(
-                connect_coro, timeout=connection_timeout
+                connect_coro, timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
             self.read_loop_task = asyncio.create_task(self.read_loop())
@@ -441,15 +459,28 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def _wait_for_mock_controller(self):
         """Wait for the mock controller to be running.
+
+        Returns
+        -------
+        command_port : `int`
+            The command port.
+        telemetry_port : `int`
+            The telemetry port.
         """
+        # Sample data:
+        # Mock TMA controller running: command_port=40827, telemetry_port=33133
+        running_regex = re.compile(
+            r"running: command_port=(\d+), telemetry_port=(\d+)$"
+        )
         while True:
             if self.mock_controller_process.returncode is not None:
                 raise RuntimeError("Mock controller process failed")
             line_bytes = await self.mock_controller_process.stdout.readline()
             line_str = line_bytes.decode().strip()
             self.log.debug("Mock controller: %s", line_str)
-            if line_str.endswith("running"):
-                return
+            match = running_regex.search(line_str)
+            if match is not None:
+                return int(match[1]), int(match[2])
 
     async def disconnect(self):
         """Disconnect from the low-level controller.
