@@ -94,6 +94,14 @@ class MTMountCommander(salobj.CscCommander):
             self._ramp(ramp_count=self.ramp_count, ramp_args=args)
         )
 
+    async def do_stop(self, args):
+        self.tracking_task.cancel()
+        await self.remote.cmd_stop.start(timeout=STD_TIMEOUT)
+
+    async def do_stopTracking(self, args):
+        self.tracking_task.cancel()
+        await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
+
     async def _ramp(self, ramp_count, ramp_args):
         try:
             ramp_generator = simactuators.RampGenerator(
