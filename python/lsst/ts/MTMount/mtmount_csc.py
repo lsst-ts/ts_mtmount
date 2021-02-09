@@ -25,13 +25,13 @@ import asyncio
 import math
 import pathlib
 import signal
+import subprocess
 
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import DriveState
 from . import constants
 from . import command_futures
 from . import commands
-from . import communicator
 from . import enums
 from . import limits
 from . import replies
@@ -44,8 +44,12 @@ TIMEOUT_BUFFER = 5
 # beyond which rotator velocity will not be estimated.
 MAX_ROTATOR_APPLICATION_GAP = 1.0
 
-MOCK_CTRL_START_TIME = 20
-TELEMETRY_START_TIME = 30
+# Dalay after starting the mock controller
+# before trying to connect to it (sec)
+MOCK_CTRL_START_TIMEOUT = 30
+
+# Timeout for seeing telemetry from the telemetry client (sec).
+TELEMETRY_START_TIMEOUT = 30
 
 # Maximum time to wait for rotator telemetry (seconds).
 # Must be significantly greater than the interval between rotator
@@ -126,7 +130,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             else constants.TELEMETRY_PORT
         )
         self.run_mock_controller = run_mock_controller
-        self.communicator = None
+
+        # Connection to the low-level controller, or None if not connected.
+        self.reader = None  # asyncio.StreamReader if connected
+        self.writer = None  # asyncio.StreamWriter if connected
 
         # Subprocess running the telemetry client
         self.telemetry_client_process = None
@@ -158,6 +165,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.enable_task = salobj.make_done_future()
         self.disable_task = salobj.make_done_future()
 
+        self.monitor_mock_controller_task = salobj.make_done_future()
+        self.mock_controller_started_task = asyncio.Future()
         self.monitor_telemetry_client_task = salobj.make_done_future()
 
         # Tasks for camera cable wrap following the rotator
@@ -246,9 +255,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     @property
     def connected(self):
-        if self.communicator is None:
-            return False
-        return self.communicator.connected
+        return not (
+            self.reader is None
+            or self.writer is None
+            or self.writer.is_closing()
+            or self.reader.at_eof()
+        )
 
     @staticmethod
     def get_config_pkg():
@@ -336,8 +348,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise RuntimeError("Already connected")
         connection_timeout = self.config.connection_timeout
         if self.simulation_mode:
-            client_host = salobj.LOCAL_HOST
-            server_host = salobj.LOCAL_HOST
+            command_host = salobj.LOCAL_HOST
             telemetry_host = salobj.LOCAL_HOST
             command_port = self.mock_command_port
             telemetry_port = self.mock_telemetry_port
@@ -352,7 +363,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.info(f"Starting the mock controller: {' '.join(args)}")
                 try:
                     self.mock_controller_process = await asyncio.create_subprocess_exec(
-                        *args
+                        *args, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL
                     )
                 except Exception as e:
                     cmdstr = " ".join(args)
@@ -363,40 +374,34 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         report=f"{err_msg}: {e!r}",
                     )
                     return
-                else:
-                    connection_timeout += MOCK_CTRL_START_TIME
+
+                self.log.info("Waiting for mock controller to start")
+                t0 = salobj.current_tai()
+                await asyncio.wait_for(
+                    self._wait_for_mock_controller(), timeout=MOCK_CTRL_START_TIMEOUT,
+                )
+                dt = salobj.current_tai() - t0
+                self.log.info(f"Mock controller took {dt:0.2f} seconds to start")
         else:
-            client_host = self.config.host
-            server_host = None  # Use all interfaces for the local server.
+            command_host = self.config.host
             telemetry_host = self.config.telemetry_host
             command_port = constants.CSC_COMMAND_PORT
             telemetry_port = constants.TELEMETRY_PORT
         try:
-            if self.communicator is None:
-                self.log.debug("Construct communicator")
-                self.communicator = communicator.Communicator(
-                    name="MTMountCsc",
-                    client_host=client_host,
-                    client_port=command_port,
-                    server_host=server_host,
-                    # Tekniker uses repy port = command port + 1
-                    server_port=command_port + 1,
-                    log=self.log,
-                    read_replies=True,
-                    connect=False,
-                    connect_callback=self.connect_callback,
-                )
-                await self.communicator.start_task
-            self.log.info("Connecting to the low-level controller")
-            await asyncio.wait_for(
-                self.communicator.connect(), timeout=connection_timeout
+            self.log.info(
+                "Connecting to the low-level controller: "
+                f"host={command_host}, port={command_port}"
+            )
+            connect_coro = asyncio.open_connection(host=command_host, port=command_port)
+            self.reader, self.writer = await asyncio.wait_for(
+                connect_coro, timeout=connection_timeout
             )
             self.should_be_connected = True
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
-            err_msg = "Could not connect to the low-level controller "
-            f"at client_host={client_host}, command_port={command_port}"
+            err_msg = "Could not connect to the low-level controller: "
+            f"host={command_host}, port={command_port}"
             self.log.exception(err_msg)
             self.fault(
                 code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e!r}"
@@ -424,7 +429,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             return
         try:
             await self.mtmount_remote.tel_cameraCableWrap.next(
-                flush=False, timeout=TELEMETRY_START_TIME
+                flush=False, timeout=TELEMETRY_START_TIMEOUT
             )
         except asyncio.TimeoutError:
             err_msg = "The telemetry client is not producing telemetry"
@@ -434,31 +439,34 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.monitor_telemetry_client()
         )
 
-    def connect_callback(self, communicator):
-        self.evt_connected.set_put(
-            command=communicator.client_connected, replies=communicator.server_connected
-        )
-        if self.should_be_connected and not communicator.connected:
-            self.should_be_connected = False
-            self.fault(
-                code=enums.CscErrorCode.CONNECTION_LOST,
-                report="Lost connection to low-level controller",
-            )
+    async def _wait_for_mock_controller(self):
+        """Wait for the mock controller to be running.
+        """
+        while True:
+            if self.mock_controller_process.returncode is not None:
+                raise RuntimeError("Mock controller process failed")
+            line_bytes = await self.mock_controller_process.stdout.readline()
+            line_str = line_bytes.decode().strip()
+            self.log.debug("Mock controller: %s", line_str)
+            if line_str.endswith("running"):
+                return
 
     async def disconnect(self):
         """Disconnect from the low-level controller.
 
-        Close and delete the communicator, if present,
-        and stop the mock controller process, if running.
+        Close the connection to the mock controller, if connected.
+        Sop the mock controller and telemetry process, if running.
         """
         self.should_be_connected = False
 
         self.monitor_telemetry_client_task.cancel()
 
-        if self.communicator is not None:
+        if self.writer is not None:
             self.log.info("Disconnect from the low-level controller")
-            await self.communicator.close()
-            self.communicator = None
+            writer = self.writer
+            self.writer = None
+            writer.close()
+            await writer.wait_closed()
 
         self.terminate_background_processes()
 
@@ -570,7 +578,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         futures = command_futures.CommandFutures()
         self.command_dict[command.sequence_id] = futures
-        await self.communicator.write(command)
+        self.writer.write(command.encode())
+        await self.writer.drain()
         await asyncio.wait_for(futures.ack, self.config.ack_timeout)
         if command.command_code in commands.AckOnlyCommandCodes:
             # This command only receives an Ack; mark it done.
@@ -731,6 +740,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def configure(self, config):
         self.config = config
 
+    async def monitor_mock_controller(self):
+        while self.mock_controller_process is not None:
+            line = self.mock_controller_process.stdin.readline()
+            self.log.info("MockController: %s", line.strip())
+            if not self.mock_controller_started_task.done() and line.endswith(
+                "running"
+            ):
+                self.mock_controller_started_task.set_result(None)
+
     async def monitor_telemetry_client(self):
         await self.telemetry_client_process.wait()
         self.fail("Telemetry process exited prematurely")
@@ -741,7 +759,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.debug("Read loop begins")
         while self.should_be_connected and self.connected:
             try:
-                reply = await self.communicator.read()
+                read_bytes = await self.reader.readuntil(b"\r\n")
+                try:
+                    reply = replies.parse_reply(read_bytes.decode(errors="ignore"))
+                    self.log.debug("Read %s; bytes %s", reply, read_bytes)
+                except Exception as e:
+                    self.log.warning(f"Ignoring unparsable reply: {read_bytes}: {e!r}")
+
                 if isinstance(reply, replies.AckReply):
                     # Command acknowledged. Set timeout but leave
                     # futures in command_dict.
