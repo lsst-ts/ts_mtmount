@@ -25,18 +25,24 @@ import asyncio
 import dataclasses
 
 from lsst.ts import salobj
+from lsst.ts import simactuators
 
 STD_TIMEOUT = 2
-TRACK_INTERVAL = 0.1
+
+TRACK_INTERVAL = 0.1  # interval between tracking updates (seconds)
+
+# How far in advance to set the time field of tracking commands (seconds)
+TRACK_ADVANCE_TIME = 0.05
 
 
 @dataclasses.dataclass
 class RampArgs:
-    el_pos0: float
-    az_pos0: float
-    el_vel: float
-    az_vel: float
-    duration: float
+    el_start: float
+    az_start: float
+    el_end: float
+    az_end: float
+    el_speed: float
+    az_speed: float
 
 
 class MTMountCommander(salobj.CscCommander):
@@ -49,6 +55,8 @@ class MTMountCommander(salobj.CscCommander):
         for command_to_ignore in ("abort", "setValue"):
             self.command_dict.pop(command_to_ignore, None)
 
+        self.tracking_task = salobj.make_done_future()
+
         ramp_arg_names = list(RampArgs.__dataclass_fields__)
         self.help_dict["ramp"] = " ".join(ramp_arg_names) + " # track a ramp"
         self.ramp_count = 0
@@ -57,7 +65,15 @@ class MTMountCommander(salobj.CscCommander):
     def ramp_arg_names(self):
         return
 
+    async def close(self):
+        self.tracking_task.cancel()
+        await super().close()
+
     async def do_ramp(self, args):
+        if not self.tracking_task.done():
+            print("Cancelling existing tracking sequence")
+            self.tracking_task.cancel()
+
         ramp_arg_info = RampArgs.__dataclass_fields__
         if len(args) != len(ramp_arg_info):
             ramp_arg_names = list(ramp_arg_info)
@@ -74,25 +90,36 @@ class MTMountCommander(salobj.CscCommander):
         args = RampArgs(**arg_dict)
         print("args=", args)
         self.ramp_count += 1
+        self.tracking_task = asyncio.create_task(
+            self._ramp(ramp_count=self.ramp_count, ramp_args=args)
+        )
 
-        print("Enable tracking")
-        await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
+    async def _ramp(self, ramp_count, ramp_args):
         try:
+            ramp_generator = simactuators.RampGenerator(
+                start_positions=[ramp_args.el_start, ramp_args.az_start],
+                end_positions=[ramp_args.el_end, ramp_args.az_end],
+                speeds=[ramp_args.el_speed, ramp_args.az_speed],
+                advance_time=TRACK_ADVANCE_TIME,
+            )
+            print(
+                f"Tracking a ramp from el={ramp_args.el_start}, az={ramp_args.az_start} "
+                f" to el={ramp_args.el_end}, az={ramp_args.az_end} "
+                f" at speed el={ramp_args.el_speed}, az={ramp_args.az_speed}; "
+                f"this will take {ramp_generator.duration:0.2f} seconds"
+            )
+
+            print("Enable tracking")
+            await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
+
             print("Start the ramp")
-            tai0 = salobj.current_tai()
-            while True:
-                curr_tai = salobj.current_tai()
-                dt = curr_tai - tai0
-                if dt > args.duration:
-                    break
-                el = args.el_pos0 + args.el_vel * dt
-                az = args.az_pos0 + args.az_vel * dt
+            for positions, velocities, tai in ramp_generator():
                 await self.remote.cmd_trackTarget.set_start(
-                    azimuth=az,
-                    azimuthVelocity=args.az_vel,
-                    elevation=el,
-                    elevationVelocity=args.el_vel,
-                    taiTime=curr_tai,
+                    elevation=positions[0],
+                    elevationVelocity=velocities[0],
+                    azimuth=positions[1],
+                    azimuthVelocity=velocities[1],
+                    taiTime=tai,
                     trackId=self.ramp_count,
                     tracksys="local",
                     radesys="ICRS",
@@ -103,3 +130,4 @@ class MTMountCommander(salobj.CscCommander):
             pass
         print("Disable tracking")
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
+        print("Ramp done")
