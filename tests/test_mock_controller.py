@@ -77,7 +77,7 @@ class MockControllerTestCase(asynctest.TestCase):
         """
         log = logging.getLogger()
         self.controller = MTMount.mock.Controller(
-            command_port=0, telemetry_port=0, log=log, commander=commander,
+            log=log, commander=commander, random_ports=True
         )
         t0 = time.monotonic()
         await asyncio.wait_for(self.controller.start_task, timeout=START_TIMEOUT)
