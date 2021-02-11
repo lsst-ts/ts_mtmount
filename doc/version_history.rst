@@ -26,7 +26,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 2
-* IDL files for MTMount and MTRotator from ts_xml 7.1
+* IDL files for MTMount and MTRotator from ts_xml 7.2
 
 v0.13.0
 =======
@@ -58,7 +58,7 @@ Requires:
 * ts_simactuators 2
 * ts_hexrotcomm 0.9
 * ts_idl 2
-* IDL files for MTMount and MTRotator from ts_xml 7.1
+* IDL files for MTMount and MTRotator from ts_xml 7.2
 
 v0.12.1
 =======
