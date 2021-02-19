@@ -135,19 +135,31 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             initial_state=salobj.State.ENABLED, internal_mock_controller=False
         ):
             await self.assert_next_sample(
+                topic=self.remote.evt_softwareVersions,
+                cscVersion=MTMount.__version__,
+                subsystemVersions="",
+            )
+            await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
 
             # Test initial telemetry
-            await self.assert_next_sample(
+            data = await self.assert_next_sample(
                 topic=self.remote.tel_azimuth,
                 flush=False,
                 actualPosition=0,
                 actualVelocity=0,
                 actualAcceleration=0,
                 actualTorque=0,
-                demandPosition=0,
                 demandVelocity=0,
+            )
+            self.assertAlmostEqual(
+                data.actualPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.AZIMUTH_AXIS],
+            )
+            self.assertAlmostEqual(
+                data.demandPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.AZIMUTH_AXIS],
             )
 
             data = await self.assert_next_sample(
@@ -158,20 +170,24 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 actualTorque=0,
                 demandVelocity=0,
             )
-            min_elevation = (
-                MTMount.LimitsDict[MTMount.DeviceId.ELEVATION_AXIS]
-                .scaled()
-                .min_position
+            self.assertAlmostEqual(
+                data.demandPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.ELEVATION_AXIS],
             )
-            self.assertAlmostEqual(data.demandPosition, min_elevation)
-            self.assertAlmostEqual(data.actualPosition, min_elevation)
+            self.assertAlmostEqual(
+                data.actualPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.ELEVATION_AXIS],
+            )
 
-            await self.assert_next_sample(
+            data = await self.assert_next_sample(
                 topic=self.remote.tel_cameraCableWrap,
                 flush=False,
-                actualPosition=0,
                 actualVelocity=0,
                 actualAcceleration=0,
+            )
+            self.assertAlmostEqual(
+                data.actualPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.CAMERA_CABLE_WRAP],
             )
 
     async def test_standard_state_transitions(self):

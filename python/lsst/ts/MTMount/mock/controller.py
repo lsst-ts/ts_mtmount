@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["Controller"]
+__all__ = ["INITIAL_POSITION", "Controller"]
 
 import argparse
 import asyncio
@@ -41,6 +41,13 @@ from .mirror_covers_device import MirrorCoversDevice
 from .mirror_cover_locks_device import MirrorCoverLocksDevice
 from .oil_supply_system_device import OilSupplySystemDevice
 from .top_end_chiller_device import TopEndChillerDevice
+
+# Dict of DeviceId: initial position (deg).
+INITIAL_POSITION = {
+    enums.DeviceId.ELEVATION_AXIS: 80,
+    enums.DeviceId.AZIMUTH_AXIS: 0,
+    enums.DeviceId.CAMERA_CABLE_WRAP: 0,
+}
 
 
 async def wait_tasks(*tasks):
@@ -314,7 +321,11 @@ class Controller:
             enums.DeviceId.AZIMUTH_AXIS,
             enums.DeviceId.CAMERA_CABLE_WRAP,
         ):
-            self.add_device(AxisDevice, device_id=device_id)
+            self.add_device(
+                AxisDevice,
+                device_id=device_id,
+                start_position=INITIAL_POSITION[device_id],
+            )
         self.add_device(MainPowerSupplyDevice)
         self.add_device(MirrorCoverLocksDevice)
         self.add_device(MirrorCoversDevice)

@@ -19,6 +19,9 @@ Changes:
 
 * `MTMountCsc` updated for the changes in `mock.Controller`.
 * `MTMountCommander` updated to use `lsst.ts.simactuators.RampGenerator`, for a more accurate ramp.
+* `mock`: add ``INITIAL_POSITION`` dict and use it to set the initial position of the mock axis actuators.
+  Change the initial elevation to 80 degrees.
+* Modernize ``doc/conf.py`` for documenteer 0.6.
 
 Requires:
 

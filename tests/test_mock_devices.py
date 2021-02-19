@@ -43,7 +43,11 @@ class MockDevicesTestCase(asynctest.TestCase):
     def setUp(self):
         self.controller = TrivialMockController()
         axis_devices = [
-            MTMount.mock.AxisDevice(controller=self.controller, device_id=device_id)
+            MTMount.mock.AxisDevice(
+                controller=self.controller,
+                device_id=device_id,
+                start_position=MTMount.mock.INITIAL_POSITION[device_id],
+            )
             for device_id in MTMount.LimitsDict
         ]
         devices = axis_devices + [
