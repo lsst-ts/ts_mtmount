@@ -33,8 +33,6 @@ from . import field_info
 from . import base_message
 from . import commands
 from . import replies
-from .client_server_pair import *
-from .communicator import *
 from .command_futures import *
 from .telemetry_client import *
 from .mtmount_commander import *

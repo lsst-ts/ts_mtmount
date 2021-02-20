@@ -35,8 +35,6 @@ STD_TIMEOUT = 10  # standard command timeout (sec)
 MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
-port_generator = salobj.index_generator(imin=3200)
-
 logging.basicConfig()
 
 
@@ -51,10 +49,12 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
     def basic_make_csc(
         self, initial_state, config_dir, simulation_mode, internal_mock_controller
     ):
-        mock_command_port = next(port_generator)
-        # discard a value for the reply port
-        next(port_generator)
-        mock_telemetry_port = next(port_generator)
+        if simulation_mode != 0 and not internal_mock_controller:
+            mock_command_port = self.mock_controller.command_server.port
+            mock_telemetry_port = self.mock_controller.telemetry_server.port
+        else:
+            mock_command_port = None
+            mock_telemetry_port = None
         csc = MTMount.MTMountCsc(
             initial_state=initial_state,
             config_dir=config_dir,
@@ -63,16 +63,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             mock_telemetry_port=mock_telemetry_port,
             run_mock_controller=internal_mock_controller,
         )
-        if internal_mock_controller:
+        if simulation_mode != 0 and internal_mock_controller:
             self.mock_controller = csc.mock_controller
-        elif simulation_mode != 0:
-            mock_ctrl_log = logging.getLogger()
-            mock_ctrl_log.setLevel(csc.log.level)
-            self.mock_controller = MTMount.mock.Controller(
-                command_port=mock_command_port,
-                telemetry_port=mock_telemetry_port,
-                log=mock_ctrl_log,
-            )
         return csc
 
     @contextlib.asynccontextmanager
@@ -103,6 +95,13 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             Should the CSC run the mock controller?
             Ignored if ``simulation_mode == 0``.
         """
+        if simulation_mode != 0 and not internal_mock_controller:
+            self.mock_controller = MTMount.mock.Controller(
+                log=logging.getLogger(), random_ports=True,
+            )
+            await self.mock_controller.start_task
+        else:
+            self.mock_controller = None
         async with super().make_csc(
             initial_state=initial_state,
             config_dir=config_dir,
@@ -136,19 +135,31 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             initial_state=salobj.State.ENABLED, internal_mock_controller=False
         ):
             await self.assert_next_sample(
+                topic=self.remote.evt_softwareVersions,
+                cscVersion=MTMount.__version__,
+                subsystemVersions="",
+            )
+            await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
 
             # Test initial telemetry
-            await self.assert_next_sample(
+            data = await self.assert_next_sample(
                 topic=self.remote.tel_azimuth,
                 flush=False,
                 actualPosition=0,
                 actualVelocity=0,
                 actualAcceleration=0,
                 actualTorque=0,
-                demandPosition=0,
                 demandVelocity=0,
+            )
+            self.assertAlmostEqual(
+                data.actualPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.AZIMUTH_AXIS],
+            )
+            self.assertAlmostEqual(
+                data.demandPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.AZIMUTH_AXIS],
             )
 
             data = await self.assert_next_sample(
@@ -159,20 +170,24 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 actualTorque=0,
                 demandVelocity=0,
             )
-            min_elevation = (
-                MTMount.LimitsDict[MTMount.DeviceId.ELEVATION_AXIS]
-                .scaled()
-                .min_position
+            self.assertAlmostEqual(
+                data.demandPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.ELEVATION_AXIS],
             )
-            self.assertAlmostEqual(data.demandPosition, min_elevation)
-            self.assertAlmostEqual(data.actualPosition, min_elevation)
+            self.assertAlmostEqual(
+                data.actualPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.ELEVATION_AXIS],
+            )
 
-            await self.assert_next_sample(
+            data = await self.assert_next_sample(
                 topic=self.remote.tel_cameraCableWrap,
                 flush=False,
-                actualPosition=0,
                 actualVelocity=0,
                 actualAcceleration=0,
+            )
+            self.assertAlmostEqual(
+                data.actualPosition,
+                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.CAMERA_CABLE_WRAP],
             )
 
     async def test_standard_state_transitions(self):

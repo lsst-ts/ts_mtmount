@@ -46,7 +46,6 @@ from lsst.ts import simactuators
 from . import constants
 from . import command_futures
 from . import commands
-from . import communicator
 from . import mock
 from . import replies
 
@@ -56,6 +55,9 @@ TRACK_INTERVAL = 0.1  # interval between tracking updates (seconds)
 
 # How far in advance to set the time field of tracking commands (seconds)
 TRACK_ADVANCE_TIME = 0.05
+
+# Time to wait to connect to the low-level controller (sec)
+START_TIMEOUT = 5
 
 # Extra time to wait for commands to be done (sec)
 TIMEOUT_BUFFER = 5
@@ -76,27 +78,6 @@ async def stdin_generator():
         if not line:  # EOF.
             break
         yield line.decode(errors="ignore").strip()
-
-
-def print_connected(descr, communicator):
-    """Print state of a connection.
-
-    Parameters
-    ----------
-    descr : `str`
-        Brief description, such as "TMA commander".
-    communicator : `Communicator`
-        Communicator
-    """
-
-    def connected_str(connected):
-        return "connected" if connected else "disconnected"
-
-    print(
-        f"{descr}: "
-        f"client {connected_str(communicator.client_connected)}, "
-        f"server {connected_str(communicator.server_connected)}"
-    )
 
 
 class TmaCommander:
@@ -139,18 +120,9 @@ class TmaCommander:
                 command_port=constants.CSC_COMMAND_PORT, log=self.log
             )
 
-        self.communicator = communicator.Communicator(
-            name="tma_commander",
-            client_host=host,
-            client_port=constants.CSC_COMMAND_PORT,
-            server_host=None,
-            # Tekniker uses repy port = command port + 1
-            server_port=constants.CSC_COMMAND_PORT + 1,
-            log=self.log,
-            read_replies=True,
-            connect=True,
-            connect_callback=self.connect_callback,
-        )
+        self.reader = None
+        self.writer = None
+
         self.command_dict = dict(
             ask_for_command=commands.AskForCommand,
             az_drive_enable=commands.AzimuthAxisDriveEnable,
@@ -209,7 +181,7 @@ help  # Print this help
 Before commanding the TMA you must take control with:
 ask_for_command 1
 """
-        self.start_task = asyncio.create_task(self.start())
+        self.start_task = asyncio.create_task(self.start(host=host))
 
     @classmethod
     async def amain(cls):
@@ -237,6 +209,15 @@ ask_for_command 1
         await commander.start_task
         await commander.done_task
 
+    @property
+    def connected(self):
+        return not (
+            self.reader is None
+            or self.writer is None
+            or self.writer.is_closing()
+            or self.reader.at_eof()
+        )
+
     async def close(self):
         """Shut down this TMA commander."""
         try:
@@ -249,7 +230,9 @@ ask_for_command 1
                 cmd_futures.setdone()
             if self.simulator is not None:
                 await self.simulator.close()
-            await self.communicator.close()
+            if self.writer is not None:
+                self.writer.close()
+                await self.writer.wait_closed()
             self.done_task.set_result(None)
             print("Done")
         except Exception as e:
@@ -259,8 +242,6 @@ ask_for_command 1
         """Read commands from the user and send them to the operations manager.
         """
         try:
-            print("Waiting to connect to the operation manager")
-            await self.communicator.connect_task
             print(f"\n{self.help_text}")
             async for line in salobj.stream_as_generator(stream=sys.stdin):
                 line = line.strip()
@@ -289,20 +270,10 @@ ask_for_command 1
                     print(f"Command {cmd_name} failed: {e!r}")
                     print(traceback.format_exc())
                     continue
+        except Exception as e:
+            print(f"command_loop failed: {e!r}")
         finally:
             await self.close()
-
-    def connect_callback(self, communicator):
-        """Callback function for changes in communicator connection state.
-
-        Parameters
-        ----------
-        communicator : `MTMount.Communicator`
-            The communicator whose connection state has changed.
-        """
-        print_connected(descr="TMA commander", communicator=communicator)
-        if communicator.connected:
-            self.read_loop_task = asyncio.create_task(self.read_loop())
 
     def get_argument_names(self, cmd_name):
         """Get the argument names from a command, for printing help.
@@ -371,9 +342,14 @@ ask_for_command 1
         """Read replies from the operations manager.
         """
         try:
-            await self.communicator.connect_task
-            while True:
-                reply = await self.communicator.read()
+            while self.connected:
+                read_bytes = await self.reader.readuntil(b"\r\n")
+                try:
+                    reply = replies.parse_reply(read_bytes.decode(errors="ignore"))
+                    self.log.debug("Read %s; bytes %s", reply, read_bytes)
+                except Exception as e:
+                    self.log.warning(f"Unparsable reply: {read_bytes}: {e!r}")
+                    continue
                 print(f"Read {reply}")
 
                 # Handle command ack, if relevant (only commands issued
@@ -400,9 +376,22 @@ ask_for_command 1
         except Exception as e:
             print(f"tma_commander read loop failed with {e!r}")
 
-    async def start(self):
-        await self.communicator.start_task
-        self.command_loop_task = asyncio.create_task(self.command_loop())
+    async def start(self, host):
+        print(f"Connecting to the TMA: host={host}")
+        try:
+            connect_coro = asyncio.open_connection(
+                host=host, port=constants.CSC_COMMAND_PORT
+            )
+            self.reader, self.writer = await asyncio.wait_for(
+                connect_coro, timeout=START_TIMEOUT
+            )
+            print("Connected")
+            await asyncio.sleep(0.1)
+            self.read_loop_task = asyncio.create_task(self.read_loop())
+            self.command_loop_task = asyncio.create_task(self.command_loop())
+        except Exception as e:
+            print(f"Failed to connect to the TMA: {e!r}")
+            await self.close()
 
     async def start_ccw_ramp(self, args):
         """Start the camera cable wrap tracking a linear ramp.
@@ -451,7 +440,8 @@ ask_for_command 1
             raise RuntimeError(
                 f"Bug! Duplicate sequence_id {command.sequence_id} in command_futures_dict"
             )
-        await self.communicator.write(command)
+        self.writer.write(command.encode())
+        await self.writer.drain()
         if not do_wait:
             return
 

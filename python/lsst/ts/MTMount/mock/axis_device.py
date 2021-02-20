@@ -45,6 +45,8 @@ class AxisDevice(BaseDevice):
         * enums.DeviceId.AZIMUTH_AXIS
         * enums.DeviceId.ELEVATION_AXIS
         * enums.DeviceId.CAMERA_CABLE_WRAP
+    start_position : `float`, optional
+        Initial position (deg)
 
     Notes
     -----
@@ -55,7 +57,7 @@ class AxisDevice(BaseDevice):
     Turning on the device also enables it.
     """
 
-    def __init__(self, controller, device_id):
+    def __init__(self, controller, device_id, start_position=0):
         device_id = enums.DeviceId(device_id)
         device_limits = limits.LimitsDict[device_id].scaled()
         self.enabled = False
@@ -70,6 +72,7 @@ class AxisDevice(BaseDevice):
             max_velocity=device_limits.max_velocity,
             max_acceleration=device_limits.max_acceleration,
             dtmax_track=0.2,
+            start_position=start_position,
         )
         self._monitor_move_task = asyncio.Future()
         super().__init__(controller=controller, device_id=device_id)

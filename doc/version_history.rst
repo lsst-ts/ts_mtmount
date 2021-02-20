@@ -6,6 +6,31 @@
 Version History
 ###############
 
+v0.14.0
+=======
+
+Changes:
+
+* Use a single socket for commands and replies.
+* `mock.Controller` related changes: 
+    * Replaced ``command_port`` and ``telemetry_port`` constructor argument with ``random_ports``
+    * Removed the ``reconnect`` argument.
+    * Updated the command-line arguments of ``run_mock_tma.py`` to match.
+
+* `MTMountCsc` updated for the changes in `mock.Controller`.
+* `MTMountCommander` updated to use `lsst.ts.simactuators.RampGenerator`, for a more accurate ramp.
+* `mock`: add ``INITIAL_POSITION`` dict and use it to set the initial position of the mock axis actuators.
+  Change the initial elevation to 80 degrees.
+* Modernize ``doc/conf.py`` for documenteer 0.6.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.2
+
 v0.13.0
 =======
 
@@ -30,12 +55,28 @@ Changes:
 
 * `MTMountCsc`: reset e-stops as part of going to enabled state.
 
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.2
+
 v0.12.1
 =======
 
 Changes:
 
 * Fixed setup.py and conda/meta.yaml so the conda build works again.
+
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.1
 
 v0.12.0
 =======
@@ -57,6 +98,13 @@ Changes:
 * `TmaCommander`: improve error handling in the tracking sequences.
   Output more information and pause briefly before halting the axis.
 
+Requires:
+
+* ts_salobj 6
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.1
 
 v0.11.0
 =======
