@@ -58,7 +58,8 @@ class CommandFutures:
         timeout : `float`
             Max time for command to complete (sec).
         """
-        self.ack.set_result(timeout)
+        if not self.ack.done():
+            self.ack.set_result(timeout)
 
     def setnoack(self, explanation):
         """Report a command as failed.
@@ -94,5 +95,14 @@ class CommandFutures:
 
         Return None if command not acknowledged.
         Raise an exception if the command failed before being acknowledged.
+
+        Raises
+        ------
+        InvalidStateError
+            If ``ack`` is not done.
+        CancelledError
+            If ``ack`` was cancelled.
+        The exception set by `asyncio.Future.set_exception`
+            If ``ack`` was set to an exception.
         """
         return self.ack.result()
