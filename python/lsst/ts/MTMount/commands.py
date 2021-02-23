@@ -92,7 +92,7 @@ MAX_SEQUENCE_ID = (1 << 31) - 1
 NUM_HEADER_FIELDS = 4
 
 
-# Command that are done when ACK is received
+# Command that are done when CMD_ACKNOWLEDGED is received
 AckOnlyCommandCodes = set(
     (
         enums.CommandCode.BOTH_AXES_TRACK,

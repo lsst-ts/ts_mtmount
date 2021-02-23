@@ -90,7 +90,7 @@ def make_reply_field_infos(reply_code, field_infos):
     return (field_info.ReplyCodeFieldInfo(reply_code),) + field_infos
 
 
-# All command responses (ACK, NOACK and DONE replies)
+# All command responses (CMD_x)
 # have the following fields, and possibly before one additional field.
 _ResponseFieldInfos = (
     field_info.IntFieldInfo(
@@ -103,7 +103,7 @@ _ResponseFieldInfos = (
 
 class AckReply(Reply):
     field_infos = make_reply_field_infos(
-        enums.ReplyCode.ACK,
+        enums.ReplyCode.CMD_ACKNOWLEDGED,
         _ResponseFieldInfos
         + (
             field_info.IntFieldInfo(
@@ -118,7 +118,7 @@ class AckReply(Reply):
 
 class NoAckReply(Reply):
     field_infos = make_reply_field_infos(
-        enums.ReplyCode.NOACK,
+        enums.ReplyCode.CMD_REJECTED,
         _ResponseFieldInfos
         + (
             field_info.StrFieldInfo(
@@ -129,7 +129,9 @@ class NoAckReply(Reply):
 
 
 class DoneReply(Reply):
-    field_infos = make_reply_field_infos(enums.ReplyCode.DONE, _ResponseFieldInfos)
+    field_infos = make_reply_field_infos(
+        enums.ReplyCode.CMD_SUCCEEDED, _ResponseFieldInfos
+    )
 
 
 class WarningReply(Reply):
@@ -177,7 +179,7 @@ class ErrorReply(Reply):
 
 class OnStateInfoReply(Reply):
     field_infos = make_reply_field_infos(
-        enums.ReplyCode.ON_STATE_INFO,
+        enums.ReplyCode.STATE_INFO,
         (
             field_info.TimestampFieldInfo(),
             field_info.StrFieldInfo(name="description", doc="description of the state"),

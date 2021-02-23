@@ -229,19 +229,55 @@ class EnabledState(enum.IntEnum):
 class ReplyCode(enum.IntEnum):
     """Reply codes for messages read from the low-level controller.
 
-    The values and names are from LL_MESSAGE in ll_commands.h.
-    except that ON_STATE_INFO is hard-coded in ``eui_communication.cpp``
-    in ``EUICommunication::onStateInfo`` and replaces the obsolete
-    SETTINGS from ll_commands.h.
+    The values and names are from email from Julen 2021-02-19.
+    There will presumably be something in a .h file.
     """
 
-    ACK = 0
-    NOACK = 1
-    DONE = 2
-    ERROR = 3
-    WARNING = 4
-    ON_STATE_INFO = 5
-    IN_POSITION = 6
+    CMD_ACKNOWLEDGED = 1
+    """Command accepted and begun.
+
+    For commands in AckOnlyCommandCodes: the command succeeded
+    and you will see no more CMD_ replies for it.
+    For all other commands: you will see one more CMD_ reply.
+    """
+
+    CMD_REJECTED = 2
+    """Command failed before being acknowledged."""
+
+    CMD_SUCCEEDED = 3
+    """Command succeeded."""
+
+    CMD_FAILED = 4
+    """Command failed after being acknowledged."""
+
+    CMD_SUPERSEDED = 5
+    """Command superseded after being acknowledged."""
+
+    WARNING = 10
+    ERROR = 11
+    COMMANDER = 20
+    SAFETY_INTERLOCKS = 30
+    DETAILED_SETTINGS_APPLIED = 40
+    AVAILABLE_SETTINGS = 41
+    STATE_INFO = 50  # Current state of the operation_manager
+    VERSION_INFO = 51  # Current version of the operation_manager
+    RECEIVED_COMMAND_FROM_CSC = 52  # Only sent to the EUI for log purposes
+    POWER_STATE = 100
+    MOTION_STATE = 101
+    OIL_SUPPLY_SYSTEM_STATE = 102
+    CHILLER_STATE = 103
+    MOTION_CONTROLLER_STATE = 104
+    IN_POSITION = 200
+    ELEVATION_LOCKING_PIN_POSITION = 201
+    MIRROR_COVER_POSITION = 202
+    MIRROR_COVER_LOCK_POSITION = 203
+    DEPLOYABLE_PLATFORM_POSITION = 204
+    SOFT_LIMIT_POSITION = 300
+    SOFT_LIMIT = 301
+    LIMIT_SWITCH = 302
+    KILL_SWITCH = 303
+    AZIMUTH_TOPPLE_BLOCK = 304
+    AZIMUTH_CABLE_WRAP_SWITCH = 305
 
 
 class Source(enum.IntEnum):
