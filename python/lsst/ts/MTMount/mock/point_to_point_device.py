@@ -73,6 +73,7 @@ class PointToPointDevice(base_device.BaseDevice):
         )
         self.multi_drive = multi_drive
         self._monitor_move_task = asyncio.Future()
+        self._monitor_move_task.set_result(None)
         super().__init__(controller=controller, device_id=device_id)
 
     def assert_drive_all(self, command):
