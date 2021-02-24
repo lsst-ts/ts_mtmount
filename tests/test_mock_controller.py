@@ -108,9 +108,15 @@ class MockControllerTestCase(asynctest.TestCase):
             yield
         finally:
             self.telemetry_writer.close()
-            await self.telemetry_writer.wait_closed()
+            try:
+                await asyncio.wait_for(self.telemetry_writer.wait_closed(), timeout=1)
+            except asyncio.TimeoutError:
+                print("Timed out waiting for the telemetry writer to close; continuing")
             self.command_writer.close()
-            await self.command_writer.wait_closed()
+            try:
+                await asyncio.wait_for(self.command_writer.wait_closed(), timeout=1)
+            except asyncio.TimeoutError:
+                print("Timed out waiting for the command writer to close; continuing")
             await self.controller.close()
 
     async def read_one_reply(self, timeout=STD_TIMEOUT):
@@ -119,9 +125,9 @@ class MockControllerTestCase(asynctest.TestCase):
         read_bytes = await asyncio.wait_for(
             self.command_reader.readuntil(b"\r\n"), timeout=timeout
         )
-        return MTMount.replies.parse_reply(read_bytes.decode())
+        return json.loads(read_bytes)
 
-    async def read_replies(self, reply_types, return_others):
+    async def read_replies(self, reply_codes, return_others):
         """Wait for one or more replies of the specified types.
 
         Return a list of the all replies read.
@@ -129,12 +135,12 @@ class MockControllerTestCase(asynctest.TestCase):
         Parameters
         ----------
 
-        reply_types : `list` [`MTMount.Reply`]
+        reply_codes : `list` [`MTMount.Reply`]
             Types of replies to wait for.
             If a type is listed N times then wait for N such replies.
         return_others : `bool`
             Return other replies, in addition to those specified in
-            ``reply_types``?
+            ``reply_codes``?
         timeout : `float`
             Timeout waiting for the Done reply (second).
             Ignored for other reads.
@@ -144,12 +150,12 @@ class MockControllerTestCase(asynctest.TestCase):
         replies : `List` [`MTMount.Reply`]
             The read replies.
         """
-        reply_types_remaining = reply_types.copy()
+        nonack_reply_codes_remaining = reply_codes.copy()
         replies = []
-        while reply_types_remaining:
+        while nonack_reply_codes_remaining:
             reply = await self.read_one_reply()
-            if type(reply) in reply_types_remaining:
-                reply_types_remaining.remove(type(reply))
+            if reply["id"] in nonack_reply_codes_remaining:
+                nonack_reply_codes_remaining.remove(reply["id"])
                 replies.append(reply)
             elif return_others:
                 replies.append(reply)
@@ -161,7 +167,7 @@ class MockControllerTestCase(asynctest.TestCase):
         use_read_loop,
         should_fail=False,
         read_done=True,
-        noack_reply_types=(),
+        nonack_reply_codes=(),
         return_others=False,
         timeout=STD_TIMEOUT,
     ):
@@ -182,15 +188,14 @@ class MockControllerTestCase(asynctest.TestCase):
         read_done : `bool`
             Should the command get a DoneReply reply?
             Most of them do, but a few do not.
-        noack_reply_types : `list` [`MTMount.Reply`]
-            Types of additional noack replies to wait for.
+        nonack_reply_codes : `list` [`MTMount.ReplyCode`]
+            Types of non-ack replies to wait for.
             If a type is listed N times then wait for N such replies.
             Any such replies found are returned in a list.
-            This list must not contain `AckReply`, `DoneReply`,
-            or `NoAckReply`.
+            This list must not contain any of the CMD_ constants.
         return_others : `bool`
             If True return all noack replies seen.
-            If False return only those listed in ``noack_reply_types``.
+            If False return only those listed in ``nonack_reply_codes``.
         timeout : `float`
             Timeout waiting for the Done reply (second).
             Ignored for other reads.
@@ -199,24 +204,26 @@ class MockControllerTestCase(asynctest.TestCase):
         -------
         nonack_replies : `List` [`MTMount.Reply`]
             All non-ack replies read. This list will definitely contain
-            the types listed in ``noack_reply_types`` and may contain
+            the types listed in ``nonack_reply_codes`` and may contain
             other replies as well.
         """
-        ack_reply_types = set(
+        ack_reply_codes = set(
             (
-                MTMount.replies.AckReply,
-                MTMount.replies.DoneReply,
-                MTMount.replies.NoAckReply,
+                MTMount.ReplyCode.CMD_ACKNOWLEDGED,
+                MTMount.ReplyCode.CMD_REJECTED,
+                MTMount.ReplyCode.CMD_SUCCEEDED,
+                MTMount.ReplyCode.CMD_FAILED,
+                MTMount.ReplyCode.CMD_SUPERSEDED,
             )
         )
+        bad_nonack_codes = set(nonack_reply_codes) & ack_reply_codes
+        if bad_nonack_codes:
+            raise ValueError(
+                f"nonack_reply_codes={nonack_reply_codes} contains "
+                f"{bad_nonack_codes}, which are cmd replies"
+            )
 
-        reply_types_remaining = list(noack_reply_types)
-        for reply_type in noack_reply_types:
-            if reply_type in ack_reply_types:
-                raise ValueError(
-                    f"noack_reply_types={noack_reply_types} contains "
-                    f"{reply_type}, which is an ack reply"
-                )
+        nonack_reply_codes_remaining = list(nonack_reply_codes)
 
         if use_read_loop:
             self.command_writer.write(command.encode())
@@ -225,45 +232,45 @@ class MockControllerTestCase(asynctest.TestCase):
             await self.controller.handle_command(command)
         nonack_replies = list()
         reply = None
-        while reply is None or type(reply) not in ack_reply_types:
+        while reply is None or reply["id"] not in ack_reply_codes:
             if reply is None:
                 pass
-            elif type(reply) in reply_types_remaining:
-                reply_types_remaining.remove(type(reply))
+            elif reply["id"] in nonack_reply_codes_remaining:
+                nonack_reply_codes_remaining.remove(reply["id"])
                 nonack_replies.append(reply)
             elif return_others:
                 nonack_replies.append(reply)
             reply = await asyncio.wait_for(self.read_one_reply(), timeout=STD_TIMEOUT)
         if should_fail:
-            self.assertIsInstance(reply, MTMount.replies.NoAckReply)
-            self.assertEqual(reply.sequence_id, command.sequence_id)
+            self.assertEqual(reply["id"], MTMount.ReplyCode.CMD_FAILED)
+            self.assertEqual(reply["parameters"]["sequenceId"], command.sequence_id)
         else:
-            self.assertIsInstance(reply, MTMount.replies.AckReply)
-            self.assertEqual(reply.sequence_id, command.sequence_id)
+            self.assertEqual(reply["id"], MTMount.ReplyCode.CMD_ACKNOWLEDGED)
+            self.assertEqual(reply["parameters"]["sequenceId"], command.sequence_id)
             if read_done:
                 reply = None
-                while reply is None or type(reply) not in ack_reply_types:
+                while reply is None or reply["id"] not in ack_reply_codes:
                     if reply is None:
                         pass
-                    elif type(reply) in reply_types_remaining:
-                        reply_types_remaining.remove(type(reply))
+                    elif reply["id"] in nonack_reply_codes_remaining:
+                        nonack_reply_codes_remaining.remove(reply["id"])
                         nonack_replies.append(reply)
                     elif return_others:
                         nonack_replies.append(reply)
                     reply = await asyncio.wait_for(
                         self.read_one_reply(), timeout=timeout
                     )
-                self.assertIsInstance(reply, MTMount.replies.DoneReply)
-                self.assertEqual(reply.sequence_id, command.sequence_id)
-        if reply_types_remaining:
+                self.assertEqual(reply["id"], MTMount.ReplyCode.CMD_SUCCEEDED)
+                self.assertEqual(reply["parameters"]["sequenceId"], command.sequence_id)
+        if nonack_reply_codes_remaining:
             nonack_replies += await asyncio.wait_for(
-                self.read_replies(reply_types_remaining, return_others=True),
+                self.read_replies(nonack_reply_codes_remaining, return_others=True),
                 timeout=timeout,
             )
         if return_others:
-            self.assertGreaterEqual(len(nonack_replies), len(noack_reply_types))
+            self.assertGreaterEqual(len(nonack_replies), len(nonack_reply_codes))
         else:
-            self.assertEqual(len(nonack_replies), len(noack_reply_types))
+            self.assertEqual(len(nonack_replies), len(nonack_reply_codes))
         return nonack_replies
 
     async def telemetry_read_loop(self):
@@ -493,14 +500,14 @@ class MockControllerTestCase(asynctest.TestCase):
         async with self.make_controller():
             replies = await asyncio.wait_for(
                 self.read_replies(
-                    reply_types=[MTMount.replies.InPositionReply] * 2,
+                    reply_codes=[MTMount.ReplyCode.IN_POSITION] * 2,
                     return_others=False,
                 ),
                 timeout=START_TIMEOUT,
             )
             for reply in replies:
-                self.assertFalse(reply.in_position)
-                self.assertIn(reply.what, (0, 1))
+                self.assertFalse(reply["parameters"]["inPosition"])
+                self.assertIn(reply["parameters"]["axis"], (0, 1))
 
             device = self.controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
             power_on_command = MTMount.commands.AzimuthAxisPower(on=True)
@@ -537,9 +544,9 @@ class MockControllerTestCase(asynctest.TestCase):
                     self.assertGreaterEqual(len(nonack_replies), 1)
                     num_in_position_replies = 0
                     for reply in nonack_replies:
-                        if isinstance(reply, MTMount.replies.InPositionReply):
-                            self.assertEqual(reply.what, 0)
-                            self.assertTrue(reply.in_position)
+                        if reply["id"] == MTMount.ReplyCode.IN_POSITION:
+                            self.assertEqual(reply["parameters"]["axis"], 0)
+                            self.assertTrue(reply["parameters"]["inPosition"])
                             num_in_position_replies += 1
                     self.assertEqual(num_in_position_replies, 1)
                     break
@@ -550,7 +557,7 @@ class MockControllerTestCase(asynctest.TestCase):
             nonack_replies = await self.run_command(
                 stop_tracking_command,
                 use_read_loop=True,
-                noack_reply_types=[MTMount.replies.InPositionReply],
+                nonack_reply_codes=[MTMount.ReplyCode.IN_POSITION],
                 return_others=False,
             )
             self.assertTrue(device.power_on)
@@ -558,9 +565,9 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertFalse(device.tracking_enabled)
             self.assertEqual(len(nonack_replies), 1)
             reply = nonack_replies[0]
-            self.assertIsInstance(reply, MTMount.replies.InPositionReply)
-            self.assertFalse(reply.in_position)
-            self.assertEqual(reply.what, 0)
+            self.assertEqual(reply["id"], MTMount.ReplyCode.IN_POSITION)
+            self.assertFalse(reply["parameters"]["inPosition"])
+            self.assertEqual(reply["parameters"]["axis"], 0)
 
     async def test_move(self):
         """Test the <axis>AxisMove command and InPosition replies.
@@ -568,7 +575,7 @@ class MockControllerTestCase(asynctest.TestCase):
         async with self.make_controller():
             replies = await asyncio.wait_for(
                 self.read_replies(
-                    reply_types=[MTMount.replies.InPositionReply] * 2,
+                    reply_codes=[MTMount.ReplyCode.IN_POSITION] * 2,
                     return_others=False,
                 ),
                 timeout=START_TIMEOUT,
@@ -576,8 +583,8 @@ class MockControllerTestCase(asynctest.TestCase):
 
             self.assertEqual(len(replies), 2)
             for reply in replies:
-                self.assertFalse(reply.in_position)
-                self.assertIn(reply.what, (0, 1))
+                self.assertFalse(reply["parameters"]["inPosition"])
+                self.assertIn(reply["parameters"]["axis"], (0, 1))
 
             device = self.controller.device_dict[MTMount.DeviceId.ELEVATION_AXIS]
             power_on_command = MTMount.commands.ElevationAxisPower(on=True)
@@ -595,7 +602,7 @@ class MockControllerTestCase(asynctest.TestCase):
                 move_command,
                 use_read_loop=True,
                 timeout=estimated_move_time + STD_TIMEOUT,
-                noack_reply_types=[MTMount.replies.InPositionReply],
+                nonack_reply_codes=[MTMount.ReplyCode.IN_POSITION],
                 return_others=False,
             )
             dt = time.monotonic() - t0
@@ -605,8 +612,8 @@ class MockControllerTestCase(asynctest.TestCase):
             self.assertFalse(device.tracking_enabled)
             self.assertEqual(len(nonack_replies), 1)
             reply = nonack_replies[0]
-            self.assertTrue(reply.in_position)
-            self.assertEqual(reply.what, 1)
+            self.assertTrue(reply["parameters"]["inPosition"])
+            self.assertEqual(reply["parameters"]["axis"], 1)
 
             # Test telemetry after move
             axis_telem = await self.next_telemetry(MTMount.TelemetryTopicId.ELEVATION)
