@@ -24,6 +24,7 @@ __all__ = [
     "HHD_COMMAND_PORT",
     "TELEMETRY_PORT",
     "MIRROR_COVER_DRIVES",
+    "LINE_TERMINATOR",
     "AxisStateDict",
     "DriveStateDict",
 ]
@@ -36,6 +37,9 @@ TELEMETRY_PORT = 50035
 
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
+
+# TCP/IP line terminator (bytes)
+LINE_TERMINATOR = b"\r\n"
 
 # Axis state from the low-level controller: AxisState enum value.
 AxisStateDict = {
