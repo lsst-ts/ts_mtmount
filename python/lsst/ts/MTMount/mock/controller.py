@@ -32,7 +32,6 @@ from lsst.ts import hexrotcomm
 from .. import commands
 from .. import constants
 from .. import enums
-from .. import replies
 
 # from . import device
 from .axis_device import AxisDevice
@@ -48,6 +47,14 @@ INITIAL_POSITION = {
     enums.DeviceId.AZIMUTH_AXIS: 0,
     enums.DeviceId.CAMERA_CABLE_WRAP: 0,
 }
+
+
+def make_reply_dict(id, **parameters):
+    """Make a reply dict.
+    """
+    return dict(
+        id=enums.ReplyCode(id), timestamp=salobj.current_tai(), parameters=parameters,
+    )
 
 
 async def wait_tasks(*tasks):
@@ -217,12 +224,17 @@ class Controller:
         )
         if in_position != self.in_position_dict[device_id]:
             self.in_position_dict[device_id] = in_position
-            what = {enums.DeviceId.AZIMUTH_AXIS: 0, enums.DeviceId.ELEVATION_AXIS: 1}[
+            axis = {enums.DeviceId.AZIMUTH_AXIS: 0, enums.DeviceId.ELEVATION_AXIS: 1}[
                 device_id
             ]
             if self.command_server.connected:
-                reply = replies.InPositionReply(what=what, in_position=in_position)
-                await self.write_reply(reply)
+                await self.write_reply(
+                    make_reply_dict(
+                        id=enums.ReplyCode.IN_POSITION,
+                        axis=axis,
+                        inPosition=in_position,
+                    )
+                )
 
     async def put_camera_cable_wrap_telemetry(self, tai):
         """Warning: this minimal and simplistic."""
@@ -239,16 +251,25 @@ class Controller:
         )
         await self.write_telemetry(data_dict)
 
-    async def write_reply(self, reply):
+    async def write_reply(self, reply_dict):
         """Write a reply to the command/reply stream.
+
+        Parameters
+        ----------
+        reply_dict : `dict`
+            Reply as a dict.
+            It will be formatted as json before being written.
         """
-        self.log.debug("write_reply(%s)", reply)
-        self.command_server.writer.write(reply.encode())
+        self.log.debug("write_reply(%s)", reply_dict)
+        reply_str = json.dumps(reply_dict)
+        self.command_server.writer.write(reply_str.encode())
+        self.command_server.writer.write(constants.LINE_TERMINATOR)
         await self.command_server.writer.drain()
 
     async def write_telemetry(self, data_dict):
         data_str = json.dumps(data_dict)
-        self.telemetry_server.writer.write(data_str.encode() + b"\r\n")
+        self.telemetry_server.writer.write(data_str.encode())
+        self.telemetry_server.writer.write(constants.LINE_TERMINATOR)
         await self.telemetry_server.writer.drain()
 
     def telemetry_connect_callback(self, server):
@@ -468,18 +489,14 @@ class Controller:
         if not self.command_server.connected:
             raise RuntimeError(f"reply_to_command({command}) failed: not connected")
         try:
-            await self.write_reply(
-                replies.AckReply(sequence_id=command.sequence_id, timeout_ms=1000)
-            )
+            await self.write_ack(command, timeout=1)
             if command.command_code not in commands.AckOnlyCommandCodes:
                 await asyncio.sleep(0.1)
                 if not self.command_server.connected:
                     raise RuntimeError(
                         f"reply_to_command({command}) failed: disconnected before writing Done"
                     )
-                await self.write_reply(
-                    replies.DoneReply(sequence_id=command.sequence_id)
-                )
+                await self.write_done(command)
         except Exception:
             self.log.exception(f"reply_to_command({command}) failed")
             raise
@@ -588,12 +605,14 @@ class Controller:
         """
         if timeout is None:
             timeout = 0
-        reply = replies.AckReply(
-            sequence_id=command.sequence_id,
-            source=command.source,
-            timeout_ms=int(timeout * 1000),
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyCode.CMD_ACKNOWLEDGED,
+                commander=command.source,
+                sequenceId=command.sequence_id,
+                timeout=timeout,
+            )
         )
-        await self.write_reply(reply)
 
     async def write_done(self, command):
         """Report a command as done.
@@ -603,10 +622,13 @@ class Controller:
         command : `Command`
             Command to report as done.
         """
-        reply = replies.DoneReply(
-            sequence_id=command.sequence_id, source=command.source,
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyCode.CMD_SUCCEEDED,
+                commander=command.source,
+                sequenceId=command.sequence_id,
+            )
         )
-        await self.write_reply(reply)
 
     async def write_noack(self, command, explanation):
         """Report a command as failed.
@@ -618,9 +640,11 @@ class Controller:
         explanation : `str`
             Reason for the failure.
         """
-        reply = replies.NoAckReply(
-            sequence_id=command.sequence_id,
-            source=command.source,
-            explanation=explanation,
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyCode.CMD_FAILED,
+                commander=command.source,
+                sequenceId=command.sequence_id,
+                explanation=explanation,
+            )
         )
-        await self.write_reply(reply)
