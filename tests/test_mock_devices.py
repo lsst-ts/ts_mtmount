@@ -99,10 +99,10 @@ class MockDevicesTestCase(asynctest.TestCase):
         self.assertGreaterEqual(timeout, min_timeout)
 
         try:
-            await task
+            await asyncio.wait_for(task, timeout=timeout + STD_TIMEOUT)
             if should_noack:
                 self.fail(f"Command {command} succeeded but should_noack true")
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             if not should_noack:
                 self.fail(f"Command {command} failed but should_noack false: {e!r}")
 
@@ -643,16 +643,16 @@ class MockDevicesTestCase(asynctest.TestCase):
 
         assert_at_end(at_min=start_at_min)
 
-        # Test that moves fail if not powered on
+        # Test that moves fail if not powered on.
+        # This failure happens before the command starts running,
+        # so the should_noack argument is not relevant.
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                command=goto_min_command,
-                min_timeout=move_min_timeout,
-                should_noack=True,
+                command=goto_min_command, min_timeout=move_min_timeout,
             )
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                command=goto_max_command, min_timeout=move_min_timeout
+                command=goto_max_command, min_timeout=move_min_timeout,
             )
 
         await self.run_command(
