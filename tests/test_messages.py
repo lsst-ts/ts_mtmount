@@ -50,11 +50,6 @@ class MessageTestCase(unittest.TestCase):
             with self.subTest(command_type=command_type.__name__):
                 self.check_message_type(command_type)
 
-    def test_replies(self):
-        for reply_type in MTMount.replies.Replies:
-            with self.subTest(reply_type=reply_type.__name__):
-                self.check_message_type(reply_type)
-
 
 if __name__ == "__main__":
     unittest.main()
