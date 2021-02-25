@@ -197,7 +197,12 @@ class TelemetryClient:
         self.writer = None
         if writer:
             writer.close()
-            await writer.wait_closed()
+            try:
+                await asyncio.wait_for(writer.wait_closed(), timeout=1)
+            except asyncio.TimeoutError:
+                self.log.warning(
+                    "Timed out waiting for the writer to close; continuing"
+                )
         self.done_task.set_result(None)
 
     def get_preprocessor(self, sal_topic_name):
