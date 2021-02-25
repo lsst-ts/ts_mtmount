@@ -30,7 +30,6 @@ test:
     - python
     - bin
     - tests
-    - schema
     - setup.cfg
     - data
   commands:
