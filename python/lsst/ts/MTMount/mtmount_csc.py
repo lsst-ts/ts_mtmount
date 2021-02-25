@@ -22,6 +22,7 @@
 __all__ = ["MTMountCsc"]
 
 import asyncio
+import json
 import math
 import pathlib
 import re
@@ -35,7 +36,6 @@ from . import command_futures
 from . import commands
 from . import enums
 from . import limits
-from . import replies
 from . import __version__
 
 # Extra time to wait for commands to be done (sec)
@@ -486,7 +486,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
             writer = self.writer
             self.writer = None
             writer.close()
-            await writer.wait_closed()
+            # In Python 3.8.6 writer.wait_closed may hang indefinitely
+            try:
+                await asyncio.wait_for(writer.wait_closed(), timeout=1)
+            except asyncio.TimeoutError:
+                self.log.warning(
+                    "Timed out waiting for the writer to close; continuing"
+                )
 
         # Kill the telemetry process
         if (
@@ -786,65 +792,71 @@ class MTMountCsc(salobj.ConfigurableCsc):
             try:
                 read_bytes = await self.reader.readuntil(b"\r\n")
                 try:
-                    reply = replies.parse_reply(read_bytes.decode(errors="ignore"))
-                    self.log.debug("Read %s; bytes %s", reply, read_bytes)
+                    reply = json.loads(read_bytes)
+                    self.log.debug("Read %s", reply)
                 except Exception as e:
                     self.log.warning(f"Ignoring unparsable reply: {read_bytes}: {e!r}")
 
-                if isinstance(reply, replies.AckReply):
+                reply_id = reply["id"]
+                if reply_id == enums.ReplyCode.CMD_ACKNOWLEDGED:
                     # Command acknowledged. Set timeout but leave
                     # futures in command_dict.
-                    futures = self.command_dict.get(reply.sequence_id, None)
+                    sequence_id = reply["parameters"]["sequenceId"]
+                    futures = self.command_dict.get(sequence_id, None)
                     if futures is None:
                         self.log.warning(
-                            f"Got Ack for non-existent command {reply.sequence_id}"
+                            f"Got Ack for non-existent command {sequence_id}"
                         )
                         continue
-                    futures.setack(reply.timeout_ms / 100.0)
-                elif isinstance(reply, replies.NoAckReply):
+                    futures.setack(reply["parameters"]["timeout"])
+                elif reply_id == enums.ReplyCode.CMD_FAILED:
                     # Command failed. Pop the command_dict entry
                     # and report failure.
-                    futures = self.command_dict.pop(reply.sequence_id, None)
+                    sequence_id = reply["parameters"]["sequenceId"]
+                    futures = self.command_dict.pop(sequence_id, None)
                     if futures is None:
                         self.log.warning(
-                            f"Got NoAck for non-existent command {reply.sequence_id}"
+                            f"Got NoAck for non-existent command {sequence_id}"
                         )
                         continue
-                    futures.setnoack(reply.explanation)
-                elif isinstance(reply, replies.DoneReply):
-                    futures = self.command_dict.pop(reply.sequence_id, None)
+                    futures.setnoack(reply["parameters"]["explanation"])
+                elif reply_id == enums.ReplyCode.CMD_SUCCEEDED:
+                    sequence_id = reply["parameters"]["sequenceId"]
+                    futures = self.command_dict.pop(sequence_id, None)
                     if futures is None:
                         self.log.warning(
-                            f"Got Done for non-existent command {reply.sequence_id}"
+                            f"Got Done for non-existent command {sequence_id}"
                         )
                         continue
                     futures.setdone()
-                elif isinstance(reply, replies.WarningReply):
+                elif reply_id == enums.ReplyCode.WARNING:
                     self.evt_warning.set_put(
-                        code=reply.code,
-                        active=reply.active,
-                        text="\n".join(reply.extra_data),
+                        code=reply["parameters"]["code"],
+                        active=reply["parameters"]["active"],
+                        text="\n".join(reply["parameters"]["description"]),
                         force_output=True,
                     )
-                elif isinstance(reply, replies.ErrorReply):
+                elif reply_id == enums.ReplyCode.ERROR:
                     self.evt_error.set_put(
-                        code=reply.code,
-                        latched=reply.on,
-                        active=reply.active,
-                        text="\n".join(reply.extra_data),
+                        code=reply["parameters"]["code"],
+                        latched=reply["parameters"]["on"],
+                        active=reply["parameters"]["active"],
+                        text="\n".join(reply["parameters"]["description"]),
                         force_output=True,
                     )
-                elif isinstance(reply, replies.OnStateInfoReply):
-                    self.log.debug(f"Ignoring OnStateInfo reply: {reply}")
-                elif isinstance(reply, replies.InPositionReply):
-                    if reply.what == 0:
-                        self.evt_axesInPosition.set_put(azimuth=reply.in_position)
-                    elif reply.what == 1:
-                        self.evt_axesInPosition.set_put(elevation=reply.in_position)
+                elif reply_id == enums.ReplyCode.IN_POSITION:
+                    axis = reply["parameters"]["axis"]
+                    in_position = reply["parameters"]["inPosition"]
+                    if axis == 0:
+                        self.evt_axesInPosition.set_put(azimuth=in_position)
+                    elif axis == 1:
+                        self.evt_axesInPosition.set_put(elevation=in_position)
                     else:
                         self.log.warning(
-                            f"Unrecognized what={reply.what} in InPositionReply"
+                            f"Unrecognized axis={axis} in IN_POSITION reply"
                         )
+                elif reply_id == enums.ReplyCode.STATE_INFO:
+                    self.log.debug("Ignoring STATE_INFO reply: %s", reply)
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
