@@ -36,6 +36,7 @@ __all__ = ["TmaCommander"]
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 import traceback
@@ -44,10 +45,10 @@ from lsst.ts import salobj
 from lsst.ts import simactuators
 
 from . import constants
+from . import enums
 from . import command_futures
 from . import commands
 from . import mock
-from . import replies
 
 logging.basicConfig()
 
@@ -232,7 +233,11 @@ ask_for_command 1
                 await self.simulator.close()
             if self.writer is not None:
                 self.writer.close()
-                await self.writer.wait_closed()
+                # In Python 3.8.6 writer.wait_closed may hang indefinitely
+                try:
+                    await asyncio.wait_for(self.writer.wait_closed(), timeout=1)
+                except asyncio.TimeoutError:
+                    print("Timed out waiting for the writer to close")
             self.done_task.set_result(None)
             print("Done")
         except Exception as e:
@@ -345,7 +350,7 @@ ask_for_command 1
             while self.connected:
                 read_bytes = await self.reader.readuntil(b"\r\n")
                 try:
-                    reply = replies.parse_reply(read_bytes.decode(errors="ignore"))
+                    reply = json.loads(read_bytes)
                     self.log.debug("Read %s; bytes %s", reply, read_bytes)
                 except Exception as e:
                     self.log.warning(f"Unparsable reply: {read_bytes}: {e!r}")
@@ -354,20 +359,26 @@ ask_for_command 1
 
                 # Handle command ack, if relevant (only commands issued
                 # with do_wait=True are put in the command dict).
-                if isinstance(reply, replies.AckReply):
+                if reply["id"] == enums.ReplyCode.CMD_ACKNOWLEDGED:
                     # Command acknowledged. Set timeout but leave
                     # cmd_futures in command_futures_dict.
-                    cmd_futures = self.command_futures_dict.get(reply.sequence_id, None)
+                    cmd_futures = self.command_futures_dict.get(
+                        reply["parameters"]["sequenceId"], None
+                    )
                     if cmd_futures is not None:
-                        cmd_futures.setack(reply.timeout_ms / 100.0)
-                elif isinstance(reply, replies.NoAckReply):
+                        cmd_futures.setack(reply["parameters"]["timeout"])
+                elif reply["id"] == enums.ReplyCode.CMD_FAILED:
                     # Command failed. Pop the command_futures_dict entry
                     # and report failure.
-                    cmd_futures = self.command_futures_dict.pop(reply.sequence_id, None)
+                    cmd_futures = self.command_futures_dict.pop(
+                        reply["parameters"]["sequenceId"], None
+                    )
                     if cmd_futures is not None:
-                        cmd_futures.setnoack(reply.explanation)
-                elif isinstance(reply, replies.DoneReply):
-                    cmd_futures = self.command_futures_dict.pop(reply.sequence_id, None)
+                        cmd_futures.setnoack(reply["parameters"]["explanation"])
+                elif reply["id"] == enums.ReplyCode.CMD_SUCCEEDED:
+                    cmd_futures = self.command_futures_dict.pop(
+                        reply["parameters"]["sequenceId"], None
+                    )
                     if cmd_futures is not None:
                         cmd_futures.setdone()
 
