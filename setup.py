@@ -27,10 +27,7 @@ setuptools.setup(
     package_dir={"": "python"},
     packages=setuptools.find_namespace_packages(where="python"),
     package_data={"": ["*.rst", "*.yaml"]},
-    data_files=[
-        (os.path.join(data_files_path, "schema"), ["schema/MTMount.yaml"]),
-        (os.path.join(data_files_path, "data"), ["data/telemetry_map.yaml"]),
-    ],
+    data_files=[(os.path.join(data_files_path, "data"), ["data/telemetry_map.yaml"])],
     scripts=[
         "bin/command_mtmount.py",
         "bin/command_tma.py",
