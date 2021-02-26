@@ -24,10 +24,11 @@ __all__ = ["PointToPointDevice"]
 import asyncio
 
 from lsst.ts import simactuators
-from . import base_device
+from ..exceptions import CommandSupersededException
+from .base_device import BaseDevice
 
 
-class PointToPointDevice(base_device.BaseDevice):
+class PointToPointDevice(BaseDevice):
     """Base class for devices have a single point to point actuator.
 
     This also works for multi-drive devices where we always
@@ -72,6 +73,8 @@ class PointToPointDevice(base_device.BaseDevice):
             speed=speed,
         )
         self.multi_drive = multi_drive
+        self._move_result_task = asyncio.Future()
+        self._move_result_task.set_result(None)
         self._monitor_move_task = asyncio.Future()
         self._monitor_move_task.set_result(None)
         super().__init__(controller=controller, device_id=device_id)
@@ -86,6 +89,7 @@ class PointToPointDevice(base_device.BaseDevice):
 
     async def close(self):
         await super().close()
+        self._move_result_task.cancel()
         self._monitor_move_task.cancel()
 
     def monitor_move_command(self, command):
@@ -101,9 +105,11 @@ class PointToPointDevice(base_device.BaseDevice):
         task : `asyncio.Task`
             A task that is set done when the move is done.
         """
+        self._move_result_task.cancel()
         self._monitor_move_task.cancel()
+        self._move_result_task = asyncio.Future()
         self._monitor_move_task = asyncio.create_task(self._monitor_move(command))
-        return self._monitor_move_task
+        return self._move_result_task
 
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command.
@@ -111,10 +117,16 @@ class PointToPointDevice(base_device.BaseDevice):
         # Provide some slop for non-monotonic clocks, which are
         # sometimes seen when running Docker on macOS.
         await asyncio.sleep(self.actuator.remaining_time() + 0.2)
+        if not self._move_result_task.done():
+            self._move_result_task.set_result(None)
 
-    def supersede_move_command(self):
+    def supersede_move_command(self, command):
         """Report the current move command (if any) as superseded.
         """
+        if not self._move_result_task.done():
+            self._move_result_task.set_exception(
+                CommandSupersededException(command=command)
+            )
         self._monitor_move_task.cancel()
 
     def do_move(self, command):
@@ -132,7 +144,7 @@ class PointToPointDevice(base_device.BaseDevice):
     def do_stop(self, command):
         """Stop the actuator.
         """
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         self.actuator.stop()
 
     def move(self, position, command):
@@ -154,7 +166,7 @@ class PointToPointDevice(base_device.BaseDevice):
             raise RuntimeError("Device not powered on.")
         if self.multi_drive:
             self.assert_drive_all(command)
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         timeout = self.actuator.set_position(position)
         task = self.monitor_move_command(command)
         return timeout, task

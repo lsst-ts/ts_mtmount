@@ -63,5 +63,5 @@ class MirrorCoverLocksDevice(PointToPointDevice):
     def do_stop(self, command):
         """Stop the actuator.
         """
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         self.actuator.stop()
