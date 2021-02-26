@@ -63,7 +63,9 @@ class MockDevicesTestCase(asynctest.TestCase):
         command_code = getattr(MTMount.CommandCode, command_code_name.upper())
         return MTMount.commands.CommandDict[command_code]
 
-    async def run_command(self, command, min_timeout=None, should_noack=False):
+    async def run_command(
+        self, command, min_timeout=None, should_be_superseded=False, should_fail=False
+    ):
         """Run a command that should succeed and wait for replies.
 
         Parameters
@@ -73,9 +75,10 @@ class MockDevicesTestCase(asynctest.TestCase):
         min_timeout : `float` or `None`, optional
             Minimum timeout. Must be specified if the command method
             returns a timeout, None if not.
-        should_noack : `bool`, optional
-            True if the command should start OK,
-            but then fail or be superseded.
+        should_be_superseded : `bool`, optional
+            Set True if the command should start OK but then be superseded.
+        should_fail : `bool`, optional
+            True if the command should start OK but then fail.
         """
         print(f"run_command({command})")
         do_method = self.controller.command_dict[command.command_code]
@@ -100,11 +103,16 @@ class MockDevicesTestCase(asynctest.TestCase):
 
         try:
             await asyncio.wait_for(task, timeout=timeout + STD_TIMEOUT)
-            if should_noack:
-                self.fail(f"Command {command} succeeded but should_noack true")
-        except (Exception, asyncio.CancelledError) as e:
-            if not should_noack:
-                self.fail(f"Command {command} failed but should_noack false: {e!r}")
+            if should_fail:
+                self.fail(f"Command {command} succeeded but should_fail true")
+        except (MTMount.CommandSupersededException, asyncio.CancelledError) as e:
+            if not should_be_superseded:
+                self.fail(
+                    f"Command {command} superseded, but should_be_superseded false: {e!r}"
+                )
+        except Exception as e:
+            if not should_fail:
+                self.fail(f"Command {command} failed, but should_fail false: {e!r}")
 
     async def test_base_commands(self):
         for device_id, device in self.device_dict.items():
@@ -419,7 +427,9 @@ class MockDevicesTestCase(asynctest.TestCase):
             end_position = start_position + 10
             slow_move_command = command_classes["move"](position=end_position)
         task = asyncio.create_task(
-            self.run_command(slow_move_command, min_timeout=0.5, should_noack=True)
+            self.run_command(
+                slow_move_command, min_timeout=0.5, should_be_superseded=True
+            )
         )
 
         await asyncio.sleep(0.1)
@@ -645,7 +655,7 @@ class MockDevicesTestCase(asynctest.TestCase):
 
         # Test that moves fail if not powered on.
         # This failure happens before the command starts running,
-        # so the should_noack argument is not relevant.
+        # so the should_fail argument is not relevant.
         with self.assertRaises(RuntimeError):
             await self.run_command(
                 command=goto_min_command, min_timeout=move_min_timeout,
@@ -691,7 +701,7 @@ class MockDevicesTestCase(asynctest.TestCase):
             self.run_command(
                 command=goto_min_command,
                 min_timeout=move_min_timeout,
-                should_noack=True,
+                should_be_superseded=True,
             )
         )
         await asyncio.sleep(0.1)  # Let the move begin

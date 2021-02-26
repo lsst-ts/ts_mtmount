@@ -29,6 +29,7 @@ import signal
 
 from lsst.ts import salobj
 from lsst.ts import hexrotcomm
+from ..exceptions import CommandSupersededException
 from .. import commands
 from .. import constants
 from .. import enums
@@ -432,7 +433,7 @@ class Controller:
             self.commander != enums.Source.CSC
             and command.command_code != enums.CommandCode.ASK_FOR_COMMAND
         ):
-            await self.write_noack(
+            await self.write_cmd_rejected(
                 command=command,
                 explanation=f"The commander is {self.commander!r}, not the CSC.",
             )
@@ -440,7 +441,7 @@ class Controller:
 
         command_func = self.command_dict.get(command.command_code)
         if command_func is None:
-            await self.write_noack(
+            await self.write_cmd_rejected(
                 command=command, explanation="This command is not yet supported"
             )
             return
@@ -448,15 +449,15 @@ class Controller:
         try:
             timeout_task = command_func(command)
         except Exception as e:
-            await self.write_noack(command=command, explanation=repr(e))
+            await self.write_cmd_rejected(command=command, explanation=repr(e))
             return
         if timeout_task is None:
-            await self.write_ack(command, timeout=None)
+            await self.write_cmd_acknowledged(command, timeout=None)
             if command.command_code not in commands.AckOnlyCommandCodes:
-                await self.write_done(command)
+                await self.write_cmd_succeeded(command)
         else:
             timeout, task = timeout_task
-            await self.write_ack(command, timeout=timeout)
+            await self.write_cmd_acknowledged(command, timeout=timeout)
             # Do not bother to save the task because `Controller.close` calls
             # `BaseDevice.close` on each mock device, which cancels the task
             # that `Controller.monitor_command` is awaiting.
@@ -489,14 +490,14 @@ class Controller:
         if not self.command_server.connected:
             raise RuntimeError(f"reply_to_command({command}) failed: not connected")
         try:
-            await self.write_ack(command, timeout=1)
+            await self.write_cmd_acknowledged(command, timeout=1)
             if command.command_code not in commands.AckOnlyCommandCodes:
                 await asyncio.sleep(0.1)
                 if not self.command_server.connected:
                     raise RuntimeError(
                         f"reply_to_command({command}) failed: disconnected before writing Done"
                     )
-                await self.write_done(command)
+                await self.write_cmd_succeeded(command)
         except Exception:
             self.log.exception(f"reply_to_command({command}) failed")
             raise
@@ -582,18 +583,21 @@ class Controller:
         try:
             await task
             if self.command_server.connected:
-                await self.write_done(command)
+                await self.write_cmd_succeeded(command)
         except asyncio.CancelledError:
             if self.command_server.connected:
-                await self.write_noack(command, explanation="Superseded")
+                await self.write_cmd_superseded(command, superseded_by=None)
+        except CommandSupersededException as e:
+            if self.command_server.connected:
+                await self.write_cmd_superseded(command, superseded_by=e.command)
         except Exception as e:
             if self.command_server.connected:
-                await self.write_noack(command, explanation=str(e))
+                await self.write_cmd_failed(command, explanation=str(e))
 
     def signal_handler(self):
         asyncio.create_task(self.close())
 
-    async def write_ack(self, command, timeout):
+    async def write_cmd_acknowledged(self, command, timeout):
         """Report a command as acknowledged.
 
         Parameters
@@ -614,7 +618,45 @@ class Controller:
             )
         )
 
-    async def write_done(self, command):
+    async def write_cmd_failed(self, command, explanation):
+        """Report a command as failed (after acknowledged).
+
+        Parameters
+        ----------
+        command : `Command`
+            Command to report as failed.
+        explanation : `str`
+            Reason for the failure.
+        """
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyCode.CMD_FAILED,
+                commander=command.source,
+                sequenceId=command.sequence_id,
+                explanation=explanation,
+            )
+        )
+
+    async def write_cmd_rejected(self, command, explanation):
+        """Report a command as rejected (failed before acknowledged).
+
+        Parameters
+        ----------
+        command : `Command`
+            Command to report as failed.
+        explanation : `str`
+            Reason for the failure.
+        """
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyCode.CMD_REJECTED,
+                commander=command.source,
+                sequenceId=command.sequence_id,
+                explanation=explanation,
+            )
+        )
+
+    async def write_cmd_succeeded(self, command):
         """Report a command as done.
 
         Parameters
@@ -630,21 +672,33 @@ class Controller:
             )
         )
 
-    async def write_noack(self, command, explanation):
-        """Report a command as failed.
+    async def write_cmd_superseded(self, command, superseded_by):
+        """Report a command as done.
 
         Parameters
         ----------
         command : `Command`
-            Command to report as failed.
-        explanation : `str`
-            Reason for the failure.
+            Command to report as done.
+        superseded_by : `Command` or `None`
+            Superseding command, if known.
         """
+        if superseded_by is None:
+            superseding_kwargs = dict(
+                supersedingSequenceId=0,
+                supersedingCommander=0,
+                supersedingCommandCode=0,
+            )
+        else:
+            superseding_kwargs = dict(
+                supersedingSequenceId=superseded_by.sequence_id,
+                supersedingCommander=superseded_by.source,
+                supersedingCommandCode=superseded_by.command_code,
+            )
         await self.write_reply(
             make_reply_dict(
-                id=enums.ReplyCode.CMD_FAILED,
+                id=enums.ReplyCode.CMD_SUPERSEDED,
                 commander=command.source,
                 sequenceId=command.sequence_id,
-                explanation=explanation,
+                **superseding_kwargs,
             )
         )
