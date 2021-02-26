@@ -54,6 +54,14 @@ class PointToPointDevice(BaseDevice):
     multi_drive : `bool`
         Does this system have multiple drives (being treated as one)?
         If True then `move` calls `assert_drive_all`.
+
+    Attributes
+    ----------
+    fail_next_command : `bool`
+        Set True before issuing a command to have that command
+        run to completion and then fail (warning: it does not fail
+        if the command is superseded).
+        This attribute is reset to False after each failure.
     """
 
     def __init__(
@@ -77,6 +85,7 @@ class PointToPointDevice(BaseDevice):
         self._move_result_task.set_result(None)
         self._monitor_move_task = asyncio.Future()
         self._monitor_move_task.set_result(None)
+        self.fail_next_command = False
         super().__init__(controller=controller, device_id=device_id)
 
     def assert_drive_all(self, command):
@@ -118,7 +127,13 @@ class PointToPointDevice(BaseDevice):
         # sometimes seen when running Docker on macOS.
         await asyncio.sleep(self.actuator.remaining_time() + 0.2)
         if not self._move_result_task.done():
-            self._move_result_task.set_result(None)
+            if self.fail_next_command:
+                self.fail_next_command = False
+                self._move_result_task.set_exception(
+                    RuntimeError("Failed by request: fail_next_command True")
+                )
+            else:
+                self._move_result_task.set_result(None)
 
     def supersede_move_command(self, command):
         """Report the current move command (if any) as superseded.
