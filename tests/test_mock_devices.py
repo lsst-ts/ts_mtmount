@@ -285,6 +285,17 @@ class MockDevicesTestCase(asynctest.TestCase):
                 device = self.device_dict[device_id]
                 await self.check_axis_device(device)
 
+    async def test_command_failure(self):
+        device = self.device_dict[MTMount.DeviceId.MIRROR_COVERS]
+        await self.run_command(MTMount.commands.MirrorCoversPower(drive=-1, on=True))
+        self.assertTrue(device.power_on)
+        device.fail_next_command = True
+        await self.run_command(
+            MTMount.commands.MirrorCoversDeploy(drive=-1),
+            min_timeout=0,
+            should_fail=True,
+        )
+
     async def check_axis_device(self, device):
         is_elaz = device.device_id in (
             MTMount.DeviceId.AZIMUTH_AXIS,
