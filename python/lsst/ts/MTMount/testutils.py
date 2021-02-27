@@ -29,8 +29,6 @@ import datetime
 import random
 import string
 
-import astropy.time
-
 from . import field_info
 
 
@@ -84,7 +82,7 @@ def get_random_value(finfo):
         nchar = random.randint(1, 100)
         return "".join(random.sample(string.printable, nchar))
     elif isinstance(finfo, field_info.TimestampFieldInfo):
-        return astropy.time.Time(get_random_date().isoformat())
+        return random.uniform(1000000000, 2000000000)
     raise ValueError(f"Unrecognized field type {finfo!r}")
 
 
