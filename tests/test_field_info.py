@@ -22,8 +22,7 @@
 import enum
 import unittest
 
-import astropy.time
-
+from lsst.ts import salobj
 from lsst.ts import MTMount
 
 
@@ -186,17 +185,21 @@ class FieldInfoTestCase(unittest.TestCase):
 
     def test_timestamp_field_info(self):
         field_info = MTMount.field_info.TimestampFieldInfo()
+        t0 = salobj.current_tai()
+        default = field_info.default
+        t1 = salobj.current_tai()
         self.assertEqual(field_info.name, "timestamp")
-        valid_date_str = "2020-04-06T22:33:57.335"
+        # The constant works around a non-monotonic time bug in macOS Docker.
+        self.assertLessEqual(t0 - 0.2, default)
+        self.assertGreaterEqual(t1 + 0.2, default)
         valid_times = (
-            astropy.time.Time(valid_date_str, format="isot", scale="utc"),
-            astropy.time.Time(2000, format="jyear", scale="utc"),
-            astropy.time.Time(58884, format="mjd", scale="utc"),
+            1614451963.1,
+            1000000000.2,
         )
         self.check_field_basics(
             field_info=field_info,
-            str_value_dict={t.isot: t for t in valid_times},
-            bad_values=(None, False, True, 1, 5.5, valid_date_str),
+            str_value_dict={str(t): t for t in valid_times},
+            bad_values=("2020-04-06T22:33:57.335",),
         )
 
     def test_reply_code_field_info(self):

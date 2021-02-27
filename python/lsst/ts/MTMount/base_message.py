@@ -23,8 +23,6 @@ __all__ = ["BaseMessage"]
 
 import enum
 
-import astropy.time
-
 
 class BaseMessage:
     """BaseMessage data.
@@ -139,8 +137,6 @@ class BaseMessage:
         value = getattr(self, name)
         if isinstance(value, enum.Enum):
             return repr(value)
-        elif isinstance(value, astropy.time.Time):
-            return value.isot
         return str(value)
 
     def __eq__(self, other):
