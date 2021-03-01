@@ -451,10 +451,15 @@ class Controller:
         except Exception as e:
             await self.write_cmd_rejected(command=command, explanation=repr(e))
             return
-        if timeout_task is None:
-            await self.write_cmd_acknowledged(command, timeout=None)
-            if command.command_code not in commands.AckOnlyCommandCodes:
-                await self.write_cmd_succeeded(command)
+        if command.command_code in commands.AckOnlyCommandCodes:
+            # Command is done when acknowledged;
+            # timeout=-1 is a special value to indicate this.
+            await self.write_cmd_acknowledged(command, timeout=-1)
+        elif timeout_task is None:
+            # Command takes no time. Note: timeout for commands that are
+            # not done when acknowledged must be > 0, so pick a small value.
+            await self.write_cmd_acknowledged(command, timeout=0.1)
+            await self.write_cmd_succeeded(command)
         else:
             timeout, task = timeout_task
             await self.write_cmd_acknowledged(command, timeout=timeout)
@@ -604,11 +609,9 @@ class Controller:
         ----------
         command : `Command`
             Command to report as acknowledged.
-        timeout : `float` or `None`
+        timeout : `float`
             Timeout for command (second)
         """
-        if timeout is None:
-            timeout = 0
         await self.write_reply(
             make_reply_dict(
                 id=enums.ReplyCode.CMD_ACKNOWLEDGED,
