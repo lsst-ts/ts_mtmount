@@ -599,6 +599,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def _basic_send_command(self, command):
         """Implementation of send_command. Ignores the command lock.
+
+        Parameters
+        ----------
+        command : `Command`
+            Command to send.
+
+        Returns
+        -------
+        command_futures : `command_futures.CommandFutures`
+            Futures that monitor the command.
         """
         if not self.connected:
             raise salobj.ExpectedError("Not connected to the low-level controller.")
@@ -610,26 +620,19 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_dict[command.sequence_id] = futures
         self.writer.write(command.encode())
         await self.writer.drain()
-        await asyncio.wait_for(futures.ack, self.config.ack_timeout)
-        if command.command_code in commands.AckOnlyCommandCodes:
+        timeout = await asyncio.wait_for(futures.ack, self.config.ack_timeout)
+        if timeout < 0:
             # This command only receives an Ack; mark it done.
             futures.done.set_result(None)
         elif not futures.done.done():
-            timeout = futures.timeout
-            if timeout > 0:
-                try:
-                    await asyncio.wait_for(
-                        futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
-                    )
-                except asyncio.TimeoutError:
-                    self.command_dict.pop(command.sequence_id, None)
-                    raise asyncio.TimeoutError(
-                        f"Timed out after {futures.timeout + TIMEOUT_BUFFER} seconds "
-                        f"waiting for the Done reply to {command}"
-                    )
-            else:
-                # Unknown timeout; wait forever.
-                await futures.done
+            try:
+                await asyncio.wait_for(futures.done, timeout=timeout + TIMEOUT_BUFFER)
+            except asyncio.TimeoutError:
+                self.command_dict.pop(command.sequence_id, None)
+                raise asyncio.TimeoutError(
+                    f"Timed out after {timeout + TIMEOUT_BUFFER} seconds "
+                    f"waiting for the Done reply to {command}"
+                )
         return futures
 
     async def send_commands(self, *commands, do_lock=True):
