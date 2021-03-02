@@ -6,6 +6,18 @@
 Version History
 ###############
 
+ccw_only 2
+==========
+
+Changes:
+
+* `MTMountCsc`: if the enable command fails, give up control.
+* Add config parameter camera_cable_wrap_interval.
+* `CommandFutures`: make setack safe even if ack is done.
+* `AckReply`: make the ``timeout_ms`` field required and fix the code that uses it
+  (the code was treating timeout_ms as 0.01 sec, not 0.001 sec).
+
+
 v0.13.0
 =======
 
