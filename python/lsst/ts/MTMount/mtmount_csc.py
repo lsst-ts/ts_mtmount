@@ -210,6 +210,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         as DISABLED.
         If initializing fails, go to FAULT state (in enable_devices).
         """
+        self.disable_task.cancel()
+        self.enable_task.cancel()
         await super().begin_enable(data)
         if not self.has_control:
             try:
@@ -223,30 +225,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     f"The CSC was not allowed to command the mount: {e!r}"
                 )
 
-        self.enable_task.cancel()
         self.enable_task = asyncio.create_task(self.enable_devices())
-        await self.enable_task
+        try:
+            await self.enable_task
+        except Exception:
+            self.log.warning(
+                "Could not enable devices; disabling devices and giving up control."
+            )
+            self.disable_task = asyncio.create_task(self.disable_devices())
+            await self.disable_task
+            raise
 
     async def begin_disable(self, data):
-        try:
-            await super().begin_disable(data)
-            if self.has_control and self.connected:
-                self.disable_task.cancel()
-                self.disable_task = asyncio.create_task(self.disable_devices())
-                await self.disable_task
-
-            try:
-                self.log.info("Give up command of the mount.")
-                await self.send_command(
-                    commands.AskForCommand(commander=enums.Source.NONE)
-                )
-                self.has_control = True
-            except Exception as e:
-                self.log.warning(
-                    f"The CSC was not able to give up command of the mount: {e!r}"
-                )
-        finally:
-            self.has_control = False
+        await super().begin_disable(data)
+        self.disable_task.cancel()
+        self.disable_task = asyncio.create_task(self.disable_devices())
+        await self.disable_task
 
     @property
     def connected(self):
@@ -509,6 +503,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.camera_cable_wrap_follow_start_task
 
     async def disable_devices(self):
+        """Disable all devices and yield control."""
         self.log.info("Disable devices")
         self.enable_task.cancel()
         self.camera_cable_wrap_follow_start_task.cancel()
@@ -528,6 +523,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
         self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
+
+        try:
+            self.log.info("Give up command of the mount.")
+            await self.send_command(commands.AskForCommand(commander=enums.Source.NONE))
+            self.has_control = False
+        except Exception as e:
+            self.log.warning(
+                f"The CSC was not able to give up command of the mount: {e!r}"
+            )
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
@@ -579,19 +583,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         futures = command_futures.CommandFutures()
         self.command_dict[command.sequence_id] = futures
         await self.communicator.write(command)
-        await asyncio.wait_for(futures.ack, self.config.ack_timeout)
-        if command.command_code in commands.AckOnlyCommandCodes:
+        timeout = await asyncio.wait_for(futures.ack, self.config.ack_timeout)
+        if command.command_code in commands.AckOnlyCommandCodes or timeout < 0:
             # This command only receives an Ack; mark it done.
             futures.done.set_result(None)
-        else:
+        elif not futures.done.done():
             try:
-                await asyncio.wait_for(
-                    futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
-                )
+                await asyncio.wait_for(futures.done, timeout=timeout + TIMEOUT_BUFFER)
             except asyncio.TimeoutError:
                 self.command_dict.pop(command.sequence_id, None)
                 raise asyncio.TimeoutError(
-                    f"Timed out after {futures.timeout + TIMEOUT_BUFFER} seconds "
+                    f"Timed out after {timeout + TIMEOUT_BUFFER} seconds "
                     f"waiting for the Done reply to {command}"
                 )
         return futures
