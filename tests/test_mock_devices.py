@@ -98,7 +98,7 @@ class MockDevicesTestCase(asynctest.TestCase):
             await task
             if should_noack:
                 self.fail(f"Command {command} succeeded but should_noack true")
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             if not should_noack:
                 self.fail(f"Command {command} failed but should_noack false: {e!r}")
 
