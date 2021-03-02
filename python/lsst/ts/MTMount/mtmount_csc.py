@@ -728,6 +728,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.evt_cameraCableWrapTarget.set_put(
                     position=position, velocity=velocity, taiTime=tai
                 )
+                await asyncio.sleep(self.config.camera_cable_wrap_interval)
 
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following ends")
