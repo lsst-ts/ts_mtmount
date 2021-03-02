@@ -64,6 +64,13 @@ properties:
       and the camera cable wrap when the rotator is offset or slewed to a new field.
     type: number
     default: 0.02
+  camera_cable_wrap_interval:
+    description: >-
+      Interval between camera cable wrap tracking commands (seconds).
+      The actual time between commans will be this interval
+      plus the time it takes to compute and issue the tracking command.
+    type: number
+    default: 0.1
   max_rotator_position_error:
     description: >-
       The maximum difference (in degrees) between camera rotator actual position and demand position

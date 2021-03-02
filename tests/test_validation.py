@@ -38,7 +38,16 @@ class ValidationTestCase(unittest.TestCase):
             connection_timeout=10,
             ack_timeout=10,
             camera_cable_wrap_advance_time=0.02,
+            camera_cable_wrap_interval=0.1,
             max_rotator_position_error=0.1,
+        )
+        self.nondefault = dict(
+            host="1.2.3.4",
+            connection_timeout=3.4,
+            ack_timeout=4.5,
+            camera_cable_wrap_advance_time=0.13,
+            camera_cable_wrap_interval=0.4,
+            max_rotator_position_error=1.5,
         )
 
     def test_default(self):
@@ -47,13 +56,7 @@ class ValidationTestCase(unittest.TestCase):
             self.assertEqual(result[field], expected_value)
 
     def test_some_specified(self):
-        data = dict(
-            host="1.2.3.4",
-            connection_timeout=3.4,
-            ack_timeout=4.5,
-            camera_cable_wrap_advance_time=0.1,
-        )
-        for field, value in data.items():
+        for field, value in self.nondefault.items():
             one_field_data = {field: value}
             with self.subTest(one_field_data=one_field_data):
                 result = self.validator.validate(one_field_data)
@@ -64,16 +67,8 @@ class ValidationTestCase(unittest.TestCase):
                         self.assertEqual(result[field], default_value)
 
     def test_all_specified(self):
-        data = dict(
-            host="1.2.3.4",
-            connection_timeout=3.4,
-            ack_timeout=4.5,
-            max_rotator_position_error=1.2,
-        )
-        data_copy = data.copy()
-        result = self.validator.validate(data)
-        self.assertEqual(data, data_copy)
-        for field, value in data.items():
+        result = self.validator.validate(self.nondefault)
+        for field, value in self.nondefault.items():
             self.assertEqual(result[field], value)
 
     def test_invalid_configs(self):
