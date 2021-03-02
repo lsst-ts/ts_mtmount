@@ -6,8 +6,35 @@
 Version History
 ###############
 
+v0.15.0
+-------
+
+Changes:
+
+* `MTMountCsc` (and, where relevant, `mock.Controller`) updates:
+
+    * Support new command acknowledgement events: ``superseded`` and ``failed``.
+    * Support new event format: json-encoded dict.
+    * Disable devices and give up control if the ``enable`` command fails.
+    * The ``stop`` command now stops mirror cover and mirror cover lock motion,
+      in addition to the main axes and camera cable wrap.
+
+* `Command`: update for command timestamps changing from UTC ISO to TAI unix seconds.
+* Add configuration parameter ``camera_cable_wrap_interval``.
+* Store the CSC configuration schema in code.
+  This requires ts_salobj 6.3.
+* Store the telemetry map in code instead of a separate yaml file.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.2
+
 v0.14.0
-=======
+-------
 
 Changes:
 
@@ -32,7 +59,7 @@ Requires:
 * IDL files for MTMount and MTRotator from ts_xml 7.2
 
 v0.13.0
-=======
+-------
 
 Changes:
 
@@ -64,7 +91,7 @@ Requires:
 * IDL files for MTMount and MTRotator from ts_xml 7.2
 
 v0.12.1
-=======
+-------
 
 Changes:
 
@@ -79,7 +106,7 @@ Requires:
 * IDL files for MTMount and MTRotator from ts_xml 7.1
 
 v0.12.0
-=======
+-------
 
 Changes:
 
@@ -107,7 +134,7 @@ Requires:
 * IDL files for MTMount and MTRotator from ts_xml 7.1
 
 v0.11.0
-=======
+-------
 
 Changes:
 
@@ -136,7 +163,7 @@ Requires:
 * IDL files for MTMount and MTRotator from ts_xml 7.1
 
 v0.10.0
-=======
+-------
 
 Changes:
 
@@ -160,7 +187,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and MTRotator from ts_xml 7
 
 v0.9.0
-======
+------
 
 Changes:
 
@@ -177,7 +204,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and MTRotator from ts_xml 7
 
 v0.8.1
-======
+------
 
 Changes:
 
@@ -193,7 +220,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and MTRotator from ts_xml 7
 
 v0.8.0
-======
+------
 
 Changes:
 
@@ -214,7 +241,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and MTRotator from ts_xml 7
 
 v0.7.4
-======
+------
 
 Changes:
 
@@ -229,7 +256,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.7.3
-======
+------
 
 Changes:
 
@@ -245,7 +272,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.7.2
-======
+------
 
 Changes:
 
@@ -261,7 +288,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.7.1
-======
+------
 
 Changes:
 
@@ -276,7 +303,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.7.0
-======
+------
 
 Changes:
 
@@ -293,7 +320,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.6.1
-======
+------
 
 Changes:
 
@@ -309,7 +336,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.6.0
-======
+------
 
 Changes:
 
@@ -331,7 +358,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.5.0
-======
+------
 
 Changes:
 
@@ -347,7 +374,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.4.0
-======
+------
 
 Changes:
 
@@ -362,7 +389,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.3.0
-======
+------
 
 Changes:
 
@@ -377,7 +404,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.2.0
-======
+------
 
 Changes:
 
@@ -396,7 +423,7 @@ Requires:
 * IDL files for NewMTMount, MTMount, and Rotator from ts_xml 4.8
 
 v0.1.0
-======
+------
 
 Initial release
 
