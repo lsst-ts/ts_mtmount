@@ -70,6 +70,7 @@ properties:
       The actual time between commans will be this interval
       plus the time it takes to compute and issue the tracking command.
     type: number
+    minimum: 0
     default: 0.1
   max_rotator_position_error:
     description: >-
