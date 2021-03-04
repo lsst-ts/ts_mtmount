@@ -31,7 +31,6 @@ test:
     - bin
     - tests
     - setup.cfg
-    - data
   commands:
     - py.test
 
