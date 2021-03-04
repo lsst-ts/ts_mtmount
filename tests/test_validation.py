@@ -74,11 +74,14 @@ class ValidationTestCase(unittest.TestCase):
     def test_invalid_configs(self):
         for name, badval in (
             #  ("host", "invalid hostname"),  # jsonschema 3.0.1 doesn't raise
-            ("host", 5),  # wrong type
-            ("connection_timeout", 0),  # not positive
-            ("ack_timeout", 0),  # not positive
-            ("connection_timeout", "1"),  # wrong type
             ("ack_timeout", "1"),  # wrong type
+            ("ack_timeout", 0),  # not positive
+            ("camera_cable_wrap_interval", -1),  # < 0
+            ("connection_timeout", "1"),  # wrong type
+            ("connection_timeout", 0),  # not positive
+            ("host", 5),  # wrong type
+            ("max_rotator_position_error", "1"),  # wrong type
+            ("max_rotator_position_error", 0),  # not positive
         ):
             bad_data = {name: badval}
             with self.subTest(bad_data=bad_data):
