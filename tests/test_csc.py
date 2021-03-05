@@ -225,7 +225,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.mock_controller.command_queue.get(), timeout=timeout
         )
 
-    async def test_camera_cable_wrap_tracking(self):
+    async def test_camera_cable_wrap_following(self):
         # Start the CSC in DISABLED state
         # so we can get the rotator remote running
         # before the camera cable wrap loop needs data from the rotator.
