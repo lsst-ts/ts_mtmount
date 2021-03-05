@@ -30,22 +30,29 @@ Acronyms used in Tekniker's code and (sparingly) in this package:
 Components
 ----------
 
-* EUI (LabVIEW). Sends commands to the PXI and reads command acknowledgements, using TCP/IP through the Operation Manager. Gets state from the PXI using LabVIEW Network Shared Variables.
+* EUI (LabVIEW). Sends commands to the PXI and reads command acknowledgements, using TCP/IP through the Operation Manager.
+  Gets state from the PXI using LabVIEW Network Shared Variables.
 * HHD (LabVIEW). Same communication scheme as the EUI.
-* TCS (C++). Tekniker's CSC code; written as part of the Operation Manager. Reads SAL MTMount Commands and writes SAL MTMount Events. Obsolete.
-* CSC (Python): the code in this ts_MTMount package. This replaces Tekniker's TCS code. Initially it will communicate with the Operation Manager using the HHD port, but we plan to ask Tekniker to provide us a new TCP/IP port dedicated to the CSC.
-* Operation Manager (C++). Talks to the EUI, HHD and PXI via TCP/IP. Coordinates who can talk to the PXI.
-* PXI (LabVIEW): there are two low level PXI computers running LabVIEW. One controls the azimuth and altitude axes and the other does the remaining low level control, including communication with the Operation Manager using TCP/IP and writing SAL MTMount Telemetry topics.
+* CSC (Python): the code in this ts_MTMount package.
+* Operation Manager (C++). Connects to the CSC, EUI, and HHD (using TCP/IP), and coordinates communication between them and the low-level controller.
+* PXI (LabVIEW): there are two PXI computers running LabVIEW that together implement the low-level controller.
+  These PXIs divide responsibilities approximately as follows:
+  
+  * One controls the azimuth and altitude axes.
+  * The other implements the remaining low level control tasks, including communication with the Operation Manager and maintaining the LabVIEW Network Shared Variables for the EUI.
 
 TCP/IP Protocol
 ---------------
 
 The TCP/IP communication protocol is as follows:
 
-* Each end connects via two sockets: one client and one server.
-* Each socket is only used for data in one direction, e.g. commands are written to one socket and command acknowledgements are read from the other.
-* Data is sent as ASCII with `\n` as a field separator and `\r\n` for "end of text".
-  The fields depend on the type of message.
+* Commands, replies and events go over one socket, with the server in the operation manager.
+* Telemetry is output on another socket, with the server in the EUI computer.
+* Data is sent as ASCII, with all messages terminated with `\r\n`.
+  Telemetry and events are formatted as a dict in json format.
+  Commands use a simple custom format with `\n`-separated fields;
+  these fields include a list of zero or more command-specific parameter values.
+  Commands do not include parameter names; commands and replies do.
 
 There are TCP/IP connections between the following components and the Operations Manager:
 
@@ -58,7 +65,7 @@ In addition we will ask Tekniker to provide a new port for the CSC.
 Commands
 ^^^^^^^^
 
-Commands have the following fields:
+Commands have the following fields, in order:
 
 * sequence_id (int): an incrementing value supplied by the commander (e.g. EUI or CSC) used to identify the command in replies.
 * command_code (int): the command code
@@ -69,49 +76,53 @@ Commands have the following fields:
 Replies
 ^^^^^^^
 
-Ack, NoAck and Done command replies have the following fields:
+Here are some sample replies:
 
-* reply_code (int): 0=Ack, 1=NoAck, 2=Done.
-* sequence_id (int): the value specified in the command.
-* source (int): who initiated the command
-* timestamp (str): timestamp in ISO format (UTC)
-* One additional parameter, if relevant:
+* CMD_ACKNOWLEDGED: {"id":1,"timestamp":3696497925.408238,"parameters":{"sequenceId":1500,"timeout":1.500000}}\r\n
+* CMD_REJECTED: {"id":2,"timestamp":3696498401.849609,"parameters":{"sequenceId":1500,"explanation":"Rejected explanation goes here."}}\r\n
+* CMD_SUCCEEDED: {"id":3,"timestamp":3696498414.471823,"parameters":{"sequenceId":1500}}\r\n
+* CMD_FAILED: {"id":4,"timestamp":3696498419.879615,"parameters":{"sequenceId":1500,"explanation":"Failed explanation goes here."}}\r\n
+* CMD_SUPERSEDED: {"id":5,"timestamp":3696498425.299656,"parameters":{"sequenceId":1500,"supersedingSequenceId":1499, "supersedingCommander":2,"supersedingCommandCode":1201}}\r\n
+* WARNING: {"id":10,"timestamp":3696569120.755037,"parameters":{"name":"This is the warning name.","subsystemId":1400,"subsystemInstance":"LP","active":false,"code":1402,"description":"This is the warning description."}}\r\n
+* ERROR: {"id":11,"timestamp":3696569097.115004,"parameters":{"name":"This is the alarm name.","subsystemId":1400,"subsystemInstance":"LP","active":false,"latched":false,"code":1402,"description":"This is the alarm description."}}\r\n
+* IN_POSITION: {"id":200,"timestamp":3696569018.128953,"parameters":{"axis":0,"inPosition":true}}\r\n
 
-  * Ack: command timeout value as an integer in milliseconds; this field may be empty.
-    Add 2 seconds to this value if you wish to use this for a timeout timer.
-  * NoAck: an explanation of why the command was rejected.
-  * Done: no additional parameters.
-    Warning: a command that fails after being acknowledged will still return Done.
-    The only hint that the command failed will be a Warning or Error message.
+All replies have the following fields:
+* id (int): a ReplyCode enum value.
+* timestamp (float): the time the message created or sent, as TAI unix.
 
-Warning and Error events have the following fields:
+CMD_x replies also have the following parameters:
 
-* reply_code (int): 3=Error, 4=Warning.
-* on (int) (*only present for Errors*): 1 = error latched.
-  When the error condition is first active this field is set to 1 and remains one until the error is reset.
-* active (int): 0 = condition is not present, 1 = condition is present.
+* sequenceId (int): the incrementing value specified by the client, used to identify replies for a given command.
+* CMD_ACKNOWLEDGED: ``timeout`` (double), expected command duration (seconds).
+  Add 2 seconds to this value if you wish to use this for a timeout timer.
+  -1 means "no known timeout (wait forever).
+* CMD_REJECTED and CMD_FAILED: ``explanation`` (str): text explaining why the command was rejected.
+* CMD_SUPERSEDED: ``supersedingSequenceId`` (int), ``supersedingCommander`` (int), ``supersedingCommandCode`` (int):
+  information about the superseding command, where ``supersedingCommander`` is a `SourceId` (e.g. HHD).
+
+WARNING and ERROR replies have the following parameters:
+
+* ERROR: latched (bool): has the error condition been seen?
+  When the error condition is first seen this field is set to true;
+  it remains true until the error is reset (which can only happen if the error condition is no longer active).
+* active (bool): is the error condition present?
 * code (int): code number of event.
-  The code numbers consist of a `SubsystemId` plus a condition-specific value.
-* subsystem (str): subsystem with the problem, in the format f"{subsystem_id}. {component}", where:
-
-    * ``subsystem_id`` (int): subsystem ID: a `SubsystemId` value.
-    * ``component`` (str): the component of the subsystem.
-      Here are three examples provided by Alberto: "Azimuth", "Trajectory generator", "MyTopVI/MyNextVI/MyNextNextVI".
-* timestamp (str): timestamp in ISO format (UTC).
+  The code numbers consist of a ``subsystemId`` plus a condition-specific value.
+* subsystemId (int): ID of subsystem, a `Source`
+* subsystemInstance (str): subsytem component.
+  Here are three examples provided by Alberto: "Azimuth", "Trajectory generator", "MyTopVI/MyNextVI/MyNextNextVI".
+* timestamp (float): time of message, TAI unix seconds
 * description (str): description of the problem.
-  Note: Tekniker's code includes all remaining message text in this field, but Tekniker assures me that the string will never include `\n`.
 
-OnStateInfo replies report the state of the TCS. They are the only replies initiated by the Operation Manager instead of the PXI:
+STATE_INFO replies report internal state details.
+It is not likely the CSC will need to pay attention to them, but it should probably log them at debug level.
+I am not sure if this list of parameters is correct:
 
-* reply_code (int): 5=OnStateInfo.
-* timestamp (str): timestamp in ISO format (UTC).
-* description (str): primary and secondary state, concatenated. For example "PublishOnlyWaitingForCommand".
-  I do not know all possible values, but we don't plan to use the TCS so it doesn't matter.
+* description (str): description of the state.
 
-InPositionReply replies indicate if the Azimuth or Elevation axes are in position.
-Tekniker is still working on the details.
-The current format (which is not adequate) is as follows:
+IN_POSITION replies indicate if the Azimuth or Elevation axes are in position.
+Parameters:
 
-* reply_code (int): 6=InPositionReply.
-* timestamp (str): timestamp in ISO format (UTC).
-* in_position (bool): in position?
+* axis (int): 0 for Azimuth, 1 for Elevation
+* inPosition (bool): in position?

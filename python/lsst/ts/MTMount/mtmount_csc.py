@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -22,20 +22,20 @@
 __all__ = ["MTMountCsc"]
 
 import asyncio
+import json
 import math
-import pathlib
 import re
 import signal
 import subprocess
 
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import DriveState
+from .config_schema import CONFIG_SCHEMA
 from . import constants
 from . import command_futures
 from . import commands
 from . import enums
 from . import limits
-from . import replies
 from . import __version__
 
 # Extra time to wait for commands to be done (sec)
@@ -121,9 +121,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         mock_command_port=None,
         mock_telemetry_port=None,
     ):
-        schema_path = (
-            pathlib.Path(__file__).resolve().parents[4] / "schema" / "MTMount.yaml"
-        )
         if simulation_mode == 0:
             command_port = constants.CSC_COMMAND_PORT
             telemetry_port = constants.CSC_COMMAND_PORT
@@ -206,7 +203,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         super().__init__(
             name="MTMount",
             index=0,
-            schema_path=schema_path,
+            config_schema=CONFIG_SCHEMA,
             config_dir=config_dir,
             initial_state=initial_state,
             simulation_mode=simulation_mode,
@@ -235,6 +232,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         as DISABLED.
         If initializing fails, go to FAULT state (in enable_devices).
         """
+        self.disable_task.cancel()
+        self.enable_task.cancel()
         await super().begin_enable(data)
         if not self.has_control:
             try:
@@ -248,30 +247,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     f"The CSC was not allowed to command the mount: {e!r}"
                 )
 
-        self.enable_task.cancel()
         self.enable_task = asyncio.create_task(self.enable_devices())
-        await self.enable_task
+        try:
+            await self.enable_task
+        except Exception:
+            self.log.warning(
+                "Could not enable devices; disabling devices and giving up control."
+            )
+            self.disable_task = asyncio.create_task(self.disable_devices())
+            await self.disable_task
+            raise
 
     async def begin_disable(self, data):
-        try:
-            await super().begin_disable(data)
-            if self.has_control and self.connected:
-                self.disable_task.cancel()
-                self.disable_task = asyncio.create_task(self.disable_devices())
-                await self.disable_task
-
-            try:
-                self.log.info("Give up command of the mount.")
-                await self.send_command(
-                    commands.AskForCommand(commander=enums.Source.NONE)
-                )
-                self.has_control = True
-            except Exception as e:
-                self.log.warning(
-                    f"The CSC was not able to give up command of the mount: {e!r}"
-                )
-        finally:
-            self.has_control = False
+        await super().begin_disable(data)
+        self.disable_task.cancel()
+        self.disable_task = asyncio.create_task(self.disable_devices())
+        await self.disable_task
 
     @property
     def connected(self):
@@ -486,7 +477,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
             writer = self.writer
             self.writer = None
             writer.close()
-            await writer.wait_closed()
+            # In Python 3.8.6 writer.wait_closed may hang indefinitely
+            try:
+                await asyncio.wait_for(writer.wait_closed(), timeout=1)
+            except asyncio.TimeoutError:
+                self.log.warning(
+                    "Timed out waiting for the writer to close; continuing"
+                )
 
         # Kill the telemetry process
         if (
@@ -536,6 +533,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.camera_cable_wrap_follow_start_task
 
     async def disable_devices(self):
+        """Disable all devices and yield control."""
         self.log.info("Disable devices")
         self.enable_task.cancel()
         self.camera_cable_wrap_follow_start_task.cancel()
@@ -555,6 +553,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
         self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
+
+        try:
+            self.log.info("Give up command of the mount.")
+            await self.send_command(commands.AskForCommand(commander=enums.Source.NONE))
+            self.has_control = False
+        except Exception as e:
+            self.log.warning(
+                f"The CSC was not able to give up command of the mount: {e!r}"
+            )
 
     async def handle_summary_state(self):
         if self.disabled_or_enabled:
@@ -596,6 +603,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def _basic_send_command(self, command):
         """Implementation of send_command. Ignores the command lock.
+
+        Parameters
+        ----------
+        command : `Command`
+            Command to send.
+
+        Returns
+        -------
+        command_futures : `command_futures.CommandFutures`
+            Futures that monitor the command.
         """
         if not self.connected:
             raise salobj.ExpectedError("Not connected to the low-level controller.")
@@ -607,19 +624,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_dict[command.sequence_id] = futures
         self.writer.write(command.encode())
         await self.writer.drain()
-        await asyncio.wait_for(futures.ack, self.config.ack_timeout)
-        if command.command_code in commands.AckOnlyCommandCodes:
+        timeout = await asyncio.wait_for(futures.ack, self.config.ack_timeout)
+        if timeout < 0:
             # This command only receives an Ack; mark it done.
             futures.done.set_result(None)
-        else:
+        elif not futures.done.done():
             try:
-                await asyncio.wait_for(
-                    futures.done, timeout=futures.timeout + TIMEOUT_BUFFER
-                )
+                await asyncio.wait_for(futures.done, timeout=timeout + TIMEOUT_BUFFER)
             except asyncio.TimeoutError:
                 self.command_dict.pop(command.sequence_id, None)
                 raise asyncio.TimeoutError(
-                    f"Timed out after {futures.timeout + TIMEOUT_BUFFER} seconds "
+                    f"Timed out after {timeout + TIMEOUT_BUFFER} seconds "
                     f"waiting for the Done reply to {command}"
                 )
         return futures
@@ -636,11 +651,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         do_lock : `bool`, optional
             Lock the port while using it?
             Specify False for emergency commands.
-
-        Returns
-        -------
-        futures_list : `List` [`CommandFutures`]
-            Command future for each command.
         """
         future = None
         try:
@@ -752,8 +762,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     await self.send_command(
                         commands.CameraCableWrapEnableTracking(on=True)
                     )
-                position, velocity, tai = position_velocity_tai
 
+                position, velocity, tai = position_velocity_tai
                 command = commands.CameraCableWrapTrack(
                     position=position, velocity=velocity, tai=tai,
                 )
@@ -761,6 +771,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.evt_cameraCableWrapTarget.set_put(
                     position=position, velocity=velocity, taiTime=tai
                 )
+                await asyncio.sleep(self.config.camera_cable_wrap_interval)
 
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following ends")
@@ -782,69 +793,82 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Read and process replies from the low-level controller.
         """
         self.log.debug("Read loop begins")
+        cmd_reply_codes = frozenset(
+            (
+                enums.ReplyCode.CMD_ACKNOWLEDGED,
+                enums.ReplyCode.CMD_REJECTED,
+                enums.ReplyCode.CMD_SUCCEEDED,
+                enums.ReplyCode.CMD_FAILED,
+                enums.ReplyCode.CMD_SUPERSEDED,
+            )
+        )
+        failed_reply_codes = frozenset(
+            (enums.ReplyCode.CMD_REJECTED, enums.ReplyCode.CMD_FAILED)
+        )
         while self.should_be_connected and self.connected:
             try:
                 read_bytes = await self.reader.readuntil(b"\r\n")
                 try:
-                    reply = replies.parse_reply(read_bytes.decode(errors="ignore"))
-                    self.log.debug("Read %s; bytes %s", reply, read_bytes)
+                    reply = json.loads(read_bytes)
+                    self.log.debug("Read %s", reply)
                 except Exception as e:
                     self.log.warning(f"Ignoring unparsable reply: {read_bytes}: {e!r}")
 
-                if isinstance(reply, replies.AckReply):
-                    # Command acknowledged. Set timeout but leave
-                    # futures in command_dict.
-                    futures = self.command_dict.get(reply.sequence_id, None)
+                reply_id = reply["id"]
+                if reply_id in cmd_reply_codes:
+                    sequence_id = reply["parameters"]["sequenceId"]
+                    if reply_id == enums.ReplyCode.CMD_ACKNOWLEDGED:
+                        futures = self.command_dict.get(sequence_id, None)
+                    else:
+                        futures = self.command_dict.pop(sequence_id, None)
                     if futures is None:
                         self.log.warning(
-                            f"Got Ack for non-existent command {reply.sequence_id}"
+                            f"Got reply with code {enums.ReplyCode(reply_id)!r} "
+                            f"for non-existent command {sequence_id}"
                         )
                         continue
-                    futures.setack(reply.timeout_ms / 100.0)
-                elif isinstance(reply, replies.NoAckReply):
-                    # Command failed. Pop the command_dict entry
-                    # and report failure.
-                    futures = self.command_dict.pop(reply.sequence_id, None)
-                    if futures is None:
-                        self.log.warning(
-                            f"Got NoAck for non-existent command {reply.sequence_id}"
-                        )
-                        continue
-                    futures.setnoack(reply.explanation)
-                elif isinstance(reply, replies.DoneReply):
-                    futures = self.command_dict.pop(reply.sequence_id, None)
-                    if futures is None:
-                        self.log.warning(
-                            f"Got Done for non-existent command {reply.sequence_id}"
-                        )
-                        continue
-                    futures.setdone()
-                elif isinstance(reply, replies.WarningReply):
+                    if reply_id == enums.ReplyCode.CMD_ACKNOWLEDGED:
+                        # Command acknowledged. Set timeout but leave
+                        # futures in command_dict.
+                        futures.setack(reply["parameters"]["timeout"])
+                    elif reply_id in failed_reply_codes:
+                        # Command failed (before or after being acknowledged).
+                        # Pop the command_dict entry and report failure.
+                        futures.setnoack(reply["parameters"]["explanation"])
+                    elif reply_id == enums.ReplyCode.CMD_SUCCEEDED:
+                        futures.setdone()
+                    elif reply_id == enums.ReplyCode.CMD_SUPERSEDED:
+                        futures.setnoack("Superseded")
+                    else:
+                        raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
+                elif reply_id == enums.ReplyCode.WARNING:
                     self.evt_warning.set_put(
-                        code=reply.code,
-                        active=reply.active,
-                        text="\n".join(reply.extra_data),
+                        code=reply["parameters"]["code"],
+                        active=reply["parameters"]["active"],
+                        text="\n".join(reply["parameters"]["description"]),
                         force_output=True,
                     )
-                elif isinstance(reply, replies.ErrorReply):
+                elif reply_id == enums.ReplyCode.ERROR:
                     self.evt_error.set_put(
-                        code=reply.code,
-                        latched=reply.on,
-                        active=reply.active,
-                        text="\n".join(reply.extra_data),
+                        code=reply["parameters"]["code"],
+                        latched=reply["parameters"]["on"],
+                        active=reply["parameters"]["active"],
+                        text="\n".join(reply["parameters"]["description"]),
                         force_output=True,
                     )
-                elif isinstance(reply, replies.OnStateInfoReply):
-                    self.log.debug(f"Ignoring OnStateInfo reply: {reply}")
-                elif isinstance(reply, replies.InPositionReply):
-                    if reply.what == 0:
-                        self.evt_axesInPosition.set_put(azimuth=reply.in_position)
-                    elif reply.what == 1:
-                        self.evt_axesInPosition.set_put(elevation=reply.in_position)
+                elif reply_id == enums.ReplyCode.IN_POSITION:
+                    axis = reply["parameters"]["axis"]
+                    in_position = reply["parameters"]["inPosition"]
+                    if axis == 0:
+                        self.evt_axesInPosition.set_put(azimuth=in_position)
+                    elif axis == 1:
+                        self.evt_axesInPosition.set_put(elevation=in_position)
                     else:
                         self.log.warning(
-                            f"Unrecognized what={reply.what} in InPositionReply"
+                            f"Unrecognized axis={axis} in IN_POSITION reply"
                         )
+                elif reply_id == enums.ReplyCode.STATE_INFO:
+                    pass
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
@@ -1001,7 +1025,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stop(self, data):
         self.assert_enabled()
         await self.send_commands(
-            commands.BothAxesStop(), commands.CameraCableWrapStop(), do_lock=False,
+            commands.BothAxesStop(),
+            commands.CameraCableWrapStop(),
+            commands.MirrorCoverLocksStop(),
+            commands.MirrorCoversStop(),
+            do_lock=False,
         )
 
     async def do_stopTracking(self, data):

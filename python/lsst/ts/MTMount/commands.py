@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -92,7 +92,7 @@ MAX_SEQUENCE_ID = (1 << 31) - 1
 NUM_HEADER_FIELDS = 4
 
 
-# Command that are done when ACK is received
+# Command that are done when CMD_ACKNOWLEDGED is received
 AckOnlyCommandCodes = set(
     (
         enums.CommandCode.BOTH_AXES_TRACK,

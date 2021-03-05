@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -28,8 +28,6 @@ __all__ = [
 import datetime
 import random
 import string
-
-import astropy.time
 
 from . import field_info
 
@@ -84,7 +82,7 @@ def get_random_value(finfo):
         nchar = random.randint(1, 100)
         return "".join(random.sample(string.printable, nchar))
     elif isinstance(finfo, field_info.TimestampFieldInfo):
-        return astropy.time.Time(get_random_date().isoformat())
+        return random.uniform(1000000000, 2000000000)
     raise ValueError(f"Unrecognized field type {finfo!r}")
 
 

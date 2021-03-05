@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -36,8 +36,7 @@ __all__ = [
 import abc
 import enum
 
-import astropy.time
-
+from lsst.ts import salobj
 from . import enums
 
 
@@ -277,60 +276,21 @@ class StrFieldInfo(BaseFieldInfo):
         return strval
 
 
-class TimestampFieldInfo(BaseFieldInfo):
-    """UTC timestamp field.
+# Convenience versions of the fields above
 
-    The str representation is ISO-8601, with "T" between the date and time.
-    For example: "2020-02-27T14:48:27.469". It will never have leap seconds
-    (see notes).
 
-    Parameters
-    ----------
-    name : `str`
-        Name of field. Must be a valid Python identifier.
-    doc : `str`, optional
-        Description of the field.
-    scale : `str`
-        One of "tai" or "utc", where "utc" is an approximation
-        without leap seconds (see notes).
-    default : `True` or `None`
-        If `True` then the current date is used as a default.
-        If `None` then the date must be specified.
-
-    Notes
-    -----
-    The time is not exactly UTC; it is a an approximation to UTC which has
-    no leap seconds. On the day of a leap second the time time is uniformly
-    stretched so there are the usual number of seconds in the day.
-    Tekniker's code only uses UTC time for *unimportant* message timestamps,
-    and this avoids the risk of passing Tekniker's code a timestamp value
-    that it cannot handle.
+class TimestampFieldInfo(FloatFieldInfo):
+    """Timestamp field (TAI, unix seconds).
     """
 
     def __init__(self):
         super().__init__(
-            name="timestamp",
-            doc="Time at which the message was sent.",
-            dtype=astropy.time.Time,
-            default=None,
+            name="timestamp", doc="Time at which the message was sent.", default=None,
         )
 
     @property
     def default(self):
-        return astropy.time.Time.now()
-
-    def assert_value_ok(self, value):
-        if not isinstance(value, astropy.time.Time):
-            raise ValueError(f"value={value!r} is not an astropy.time.Time")
-
-    def value_from_str(self, strval):
-        return astropy.time.Time(strval, scale="utc")
-
-    def str_from_value(self, value):
-        return value.isot
-
-
-# Convenience versions of the fields above
+        return salobj.current_tai()
 
 
 class CommandCodeFieldInfo(FixedEnumFieldInfo):

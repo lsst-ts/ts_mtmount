@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -22,8 +22,6 @@
 __all__ = ["BaseMessage"]
 
 import enum
-
-import astropy.time
 
 
 class BaseMessage:
@@ -139,8 +137,6 @@ class BaseMessage:
         value = getattr(self, name)
         if isinstance(value, enum.Enum):
             return repr(value)
-        elif isinstance(value, astropy.time.Time):
-            return value.isot
         return str(value)
 
     def __eq__(self, other):

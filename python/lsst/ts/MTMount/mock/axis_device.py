@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -27,6 +27,7 @@ from lsst.ts import salobj
 from lsst.ts import simactuators
 from .. import enums
 from .. import limits
+from ..exceptions import CommandSupersededException
 from .base_device import BaseDevice
 
 
@@ -75,6 +76,9 @@ class AxisDevice(BaseDevice):
             start_position=start_position,
         )
         self._monitor_move_task = asyncio.Future()
+        self._monitor_move_task.set_result(None)
+        self._move_result_task = asyncio.Future()
+        self._move_result_task.set_result(None)
         super().__init__(controller=controller, device_id=device_id)
 
     @property
@@ -106,6 +110,7 @@ class AxisDevice(BaseDevice):
     async def close(self):
         await super().close()
         self._monitor_move_task.cancel()
+        self._move_result_task.cancel()
 
     def monitor_move_command(self, command):
         """Return a task that is set done when the move is done.
@@ -121,8 +126,10 @@ class AxisDevice(BaseDevice):
             A task that is set done when the move is done.
         """
         self._monitor_move_task.cancel()
+        self._move_result_task.cancel()
+        self._move_result_task = asyncio.Future()
         self._monitor_move_task = asyncio.create_task(self._monitor_move(command))
-        return self._monitor_move_task
+        return self._move_result_task
 
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command.
@@ -131,10 +138,16 @@ class AxisDevice(BaseDevice):
         # sometimes seen when running Docker on macOS.
         duration = 0.2 + self.end_tai - salobj.current_tai()
         await asyncio.sleep(duration)
+        if not self._move_result_task.done():
+            self._move_result_task.set_result(None)
 
-    def supersede_move_command(self):
+    def supersede_move_command(self, command):
         """Report the current move command (if any) as superseded.
         """
+        if not self._move_result_task.done():
+            self._move_result_task.set_exception(
+                CommandSupersededException(command=command)
+            )
         self._monitor_move_task.cancel()
 
     def abort(self):
@@ -147,7 +160,7 @@ class AxisDevice(BaseDevice):
 
         Abort motion and disable tracking.
         """
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         self.abort()
         self.tracking_enabled = False
         self.tracking_paused = False
@@ -161,7 +174,7 @@ class AxisDevice(BaseDevice):
         Abort motion, disable tracking, disable the drive.
         """
         self.assert_on()
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         self.abort()
         self.tracking_enabled = False
         self.tracking_paused = False
@@ -173,7 +186,7 @@ class AxisDevice(BaseDevice):
         The drive must be enabled.
         """
         self.assert_enabled()
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         self.actuator.stop()
         self.has_target = False
         # Camera cable wrap enable tracking has an "on" parameter:
@@ -225,7 +238,7 @@ class AxisDevice(BaseDevice):
 
     def do_power(self, command):
         if not command.on:
-            self.supersede_move_command()
+            self.supersede_move_command(command)
             self.tracking_enabled = False
             self.actuator.stop()
         super().do_power(command)
@@ -235,7 +248,7 @@ class AxisDevice(BaseDevice):
         """Stop the actuator.
         """
         self.assert_enabled()
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         self.tracking_enabled = False
         self.actuator.stop()
         # I am not sure if this should clear the target.
@@ -250,7 +263,7 @@ class AxisDevice(BaseDevice):
         """
         self.assert_enabled()
         self.assert_tracking_enabled(True)
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         if self.tracking_paused:
             return
         self.actuator.set_target(
@@ -277,10 +290,10 @@ class AxisDevice(BaseDevice):
         """
         self.assert_enabled()
         self.assert_tracking_enabled(False)
-        self.supersede_move_command()
+        self.supersede_move_command(command)
         tai = salobj.current_tai()
         self.actuator.set_target(tai=tai, position=position, velocity=0)
         self.has_target = True
-        self.monitor_move_command(command)
         timeout = self.end_tai - tai
-        return timeout, self._monitor_move_task
+        task = self.monitor_move_command(command)
+        return timeout, task

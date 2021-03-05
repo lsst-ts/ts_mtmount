@@ -19,26 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# Set __version__ before importing the CSC
-try:
-    from .version import *
-except ImportError:
-    __version__ = "?"
+__all__ = ["CommandSupersededException"]
 
-from .config_schema import *
-from .constants import *
-from .exceptions import *
-from .enums import *
-from .utils import *
-from .limits import *
-from . import field_info
-from . import base_message
-from . import commands
-from .command_futures import *
-from .telemetry_map import *
-from .telemetry_client import *
-from .mtmount_commander import *
-from .mtmount_csc import *
-from .tma_commander import *
-from . import mock
-from . import testutils
+
+class CommandSupersededException(Exception):
+    def __init__(self, command):
+        self.command = command
+        super().__init__("Superseded")
