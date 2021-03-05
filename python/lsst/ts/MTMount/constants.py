@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -24,6 +24,7 @@ __all__ = [
     "HHD_COMMAND_PORT",
     "TELEMETRY_PORT",
     "MIRROR_COVER_DRIVES",
+    "LINE_TERMINATOR",
     "AxisStateDict",
     "DriveStateDict",
 ]
@@ -36,6 +37,9 @@ TELEMETRY_PORT = 50035
 
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
+
+# TCP/IP line terminator (bytes)
+LINE_TERMINATOR = b"\r\n"
 
 # Axis state from the low-level controller: AxisState enum value.
 AxisStateDict = {

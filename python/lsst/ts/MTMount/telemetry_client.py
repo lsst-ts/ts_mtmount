@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -29,12 +29,10 @@ import asyncio
 import json
 import logging
 import math
-import pathlib
-
-import yaml
 
 from lsst.ts import salobj
 from . import constants
+from .telemetry_map import TELEMETRY_MAP
 
 
 class TelemetryTopicHandler:
@@ -97,20 +95,13 @@ class TelemetryClient:
         self.log = self.controller.log.getChild("TelemetryClient")
 
         self.connection_timeout = connection_timeout
-        telemetry_map_path = (
-            pathlib.Path(__file__).parents[4] / "data" / "telemetry_map.yaml"
-        )
-        with open(telemetry_map_path, "r") as f:
-            raw_translation_data = f.read()
-        translation_dict = yaml.safe_load(raw_translation_data)
-        # dict of low-level controller topic ID: TelemetryTopicHandler
         self.topic_handlers = {
             topic_id: TelemetryTopicHandler(
                 topic=getattr(self.controller, f"tel_{sal_topic_name}"),
                 field_dict=field_dict,
                 preprocessor=self.get_preprocessor(sal_topic_name),
             )
-            for topic_id, (sal_topic_name, field_dict) in translation_dict.items()
+            for topic_id, (sal_topic_name, field_dict) in TELEMETRY_MAP.items()
         }
         # Keep track of unsupported topic IDs
         # in order to report new ones.
@@ -197,7 +188,12 @@ class TelemetryClient:
         self.writer = None
         if writer:
             writer.close()
-            await writer.wait_closed()
+            try:
+                await asyncio.wait_for(writer.wait_closed(), timeout=1)
+            except asyncio.TimeoutError:
+                self.log.warning(
+                    "Timed out waiting for the writer to close; continuing"
+                )
         self.done_task.set_result(None)
 
     def get_preprocessor(self, sal_topic_name):

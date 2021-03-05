@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -49,11 +49,6 @@ class MessageTestCase(unittest.TestCase):
         for command_type in MTMount.commands.Commands:
             with self.subTest(command_type=command_type.__name__):
                 self.check_message_type(command_type)
-
-    def test_replies(self):
-        for reply_type in MTMount.replies.Replies:
-            with self.subTest(reply_type=reply_type.__name__):
-                self.check_message_type(reply_type)
 
 
 if __name__ == "__main__":

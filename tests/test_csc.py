@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -357,6 +357,39 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
                 )
                 self.assertTrue(ccw_device.tracking_enabled)
 
+    async def test_command_failed(self):
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            mock_device = self.mock_controller.device_dict[
+                MTMount.DeviceId.MIRROR_COVERS
+            ]
+            mock_device.fail_next_command = True
+
+            # Open the mirror covers.
+            with salobj.assertRaisesAckError(ack=salobj.SalRetCode.CMD_FAILED):
+                await self.remote.cmd_closeMirrorCovers.start(
+                    timeout=MIRROR_COVER_TIMEOUT
+                )
+
+    async def test_command_superseded(self):
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            # Slow the device way down so there's plenty of time
+            # to supersede the move.
+            mock_device = self.mock_controller.device_dict[
+                MTMount.DeviceId.MIRROR_COVERS
+            ]
+            mock_device.actuator.speed /= 10
+
+            # Start opening the mirror covers, then stop all motion.
+            task = asyncio.create_task(
+                self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
+            )
+            await asyncio.sleep(0.1)
+            await self.remote.cmd_stop.start(timeout=STD_TIMEOUT)
+            # Note that SAL has no "superseded" CMD_x code,
+            # so the CSC uses CMD_FAILED.
+            with salobj.assertRaisesAckError(ack=salobj.SalRetCode.CMD_FAILED):
+                await task
+
     async def test_mirror_covers(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
             self.mock_controller.set_command_queue(maxsize=0)
@@ -370,9 +403,6 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.assertFalse(actuator.moving())
 
             # Open the mirror covers.
-            # Instead of waiting for the command to finish,
-            # check the intermediate state and obtain the expected duration,
-            # then wait for the command to finish.
             t0 = time.monotonic()
             await self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
             dt = time.monotonic() - t0
@@ -499,7 +529,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             kwargs = self.make_track_target_kwargs(
                 azimuth=initial_azimuth, elevation=initial_elevation, taiTime=tai,
             )
-            with salobj.assertRaisesAckError():
+            with salobj.assertRaisesAckError(ack=salobj.SalRetCode.CMD_FAILED):
                 await self.remote.cmd_trackTarget.set_start(
                     **kwargs, timeout=STD_TIMEOUT
                 )
