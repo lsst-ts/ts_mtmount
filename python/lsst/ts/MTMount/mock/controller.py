@@ -483,20 +483,6 @@ class Controller:
                 asyncio.create_task(self.close())
         self.log.debug("Read loop ends")
 
-    async def reply_to_command(self, command):
-        try:
-            await self.communicator.write(
-                replies.AckReply(sequence_id=command.sequence_id, timeout_ms=1000)
-            )
-            if command.command_code not in commands.AckOnlyCommandCodes:
-                await asyncio.sleep(0.1)
-                await self.communicator.write(
-                    replies.DoneReply(sequence_id=command.sequence_id)
-                )
-        except Exception:
-            self.log.exception(f"reply_to_command({command}) failed")
-            raise
-
     def signal_handler(self):
         asyncio.create_task(self.close())
 
