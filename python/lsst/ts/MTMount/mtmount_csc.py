@@ -774,7 +774,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             f"Got Ack for non-existent command {reply.sequence_id}"
                         )
                         continue
-                    futures.setack(reply.timeout_ms / 100.0)
+                    futures.setack(reply.timeout_ms / 1000)
                 elif isinstance(reply, replies.NoAckReply):
                     # Command failed. Pop the command_dict entry
                     # and report failure.
