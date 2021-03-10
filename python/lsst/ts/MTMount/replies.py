@@ -96,7 +96,7 @@ _ResponseFieldInfos = (
     field_info.IntFieldInfo(
         name="sequence_id", doc="sequence_id of command being acknowledged."
     ),
-    field_info.SourceFieldInfo(what="command being replied to"),
+    field_info.SourceFieldInfo(what="command"),
     field_info.TimestampFieldInfo(),
 )
 
