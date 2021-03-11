@@ -20,24 +20,18 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
-import pathlib
 
 import jsonschema
-import yaml
 
 from lsst.ts import salobj
+from lsst.ts import MTMount
 
 
 class ValidationTestCase(unittest.TestCase):
     """Test validation of the config schema."""
 
     def setUp(self):
-        schemaname = "MTMount.yaml"
-        pkg_dir = pathlib.Path(__file__).parents[1]
-        schemapath = pkg_dir / "schema" / schemaname
-        with open(schemapath, "r") as f:
-            rawschema = f.read()
-        self.schema = yaml.safe_load(rawschema)
+        self.schema = MTMount.CONFIG_SCHEMA
         self.validator = salobj.DefaultingValidator(schema=self.schema)
         self.default = dict(
             host="ccw-mgmt.cp.lsst.org",

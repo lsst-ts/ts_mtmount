@@ -23,11 +23,11 @@ __all__ = ["MTMountCsc"]
 
 import asyncio
 import math
-import pathlib
 import signal
 
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import DriveState
+from .config_schema import CONFIG_SCHEMA
 from . import constants
 from . import command_futures
 from . import commands
@@ -116,9 +116,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         mock_telemetry_port=None,
         run_mock_controller=True,
     ):
-        schema_path = (
-            pathlib.Path(__file__).resolve().parents[4] / "schema" / "MTMount.yaml"
-        )
         self.mock_command_port = (
             mock_command_port
             if mock_command_port is not None
@@ -185,7 +182,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         super().__init__(
             name="MTMount",
             index=0,
-            schema_path=schema_path,
+            config_schema=CONFIG_SCHEMA,
             config_dir=config_dir,
             initial_state=initial_state,
             simulation_mode=simulation_mode,

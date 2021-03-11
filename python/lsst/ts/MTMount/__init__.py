@@ -25,6 +25,7 @@ try:
 except ImportError:
     __version__ = "?"
 
+from .config_schema import *
 from .constants import *
 from .enums import *
 from .utils import *
