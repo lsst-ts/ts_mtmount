@@ -59,21 +59,14 @@ async def wait_tasks(*tasks):
 class Controller:
     """Simulate the TMA controller (Operation Manager).
 
-    If the commander is `Source.HHD` then acknowledge all commands and mark
+    If the commander is `Source.CSC` then acknowledge all commands and mark
     as done. If not, then reject all commands except `Command.ASK_FOR_COMMAND`.
     Also output a few other replies, to exercise the code.
 
     Parameters
     ----------
-    command_port : `int`
-        Port for reading commands from the CSC and writing replies.
-    telemetry_port : `int`
-        Port for the telemetry server.
     log : `logging.Logger`
         Logger.
-    reconnect : `bool`, optional
-        Try to reconnect if the connection is lost?
-        Defaults to False for unit tests.
     commander : `Source`, optional
         Who initially has command. Defaults to `Source.NONE`,
         which matches the real controller. Two values are special:
@@ -84,11 +77,12 @@ class Controller:
           other commander. This reflects the real system, because nobody
           can take command from the handheld device. This offers a convenient
           way to test `Command.ASK_FOR_COMMAND` failures.
+    random_ports : `bool`
+        Use random ports for commands and telemetry, instead of the
+        standard ports? Random ports are intended for unit tests.
     """
 
-    def __init__(
-        self, command_port, telemetry_port, log, commander=enums.Source.NONE,
-    ):
+    def __init__(self, log, commander=enums.Source.NONE, random_ports=False):
         self.log = log.getChild("MockController")
         self.commander = enums.Source(commander)
         self.closing = False
@@ -128,6 +122,8 @@ class Controller:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self.signal_handler)
 
+        command_port = 0 if random_ports else constants.CSC_COMMAND_PORT
+        telemetry_port = 0 if random_ports else constants.TELEMETRY_PORT
         self.command_server = hexrotcomm.OneClientServer(
             name="MockControllerCommands",
             host=salobj.LOCAL_HOST,
@@ -147,16 +143,11 @@ class Controller:
     async def amain(cls):
         parser = argparse.ArgumentParser("Simulate the TMA controller")
         parser.add_argument(
-            "--command-port",
-            type=int,
-            default=constants.CSC_COMMAND_PORT,
-            help="TCP/IP port for commands.",
-        )
-        parser.add_argument(
-            "--telemetry-port",
-            type=int,
-            default=constants.TELEMETRY_PORT,
-            help="TCP/IP port for telemetry.",
+            "--random-ports",
+            action="store_true",
+            default=False,
+            help="Use random available ports for commands and telemetry? "
+            "Intended for unit tests.",
         )
         parser.add_argument(
             "--loglevel",
@@ -167,21 +158,18 @@ class Controller:
         namespace = parser.parse_args()
         log = logging.getLogger("TMASimulator")
         log.setLevel(namespace.loglevel)
-        print(
-            "Mock TMA controller: "
-            f"command_port={namespace.command_port}; "
-            f"telemetry_port={namespace.telemetry_port}"
-        )
-        mock_controller = cls(
-            command_port=namespace.command_port,
-            telemetry_port=namespace.telemetry_port,
-            log=log,
-        )
+        print("Mock TMA controller")
+        mock_controller = cls(random_ports=namespace.random_ports, log=log,)
         try:
             await mock_controller.start_task
-            # This message is read by the CSC; if you change the message
-            # please update the CSC.
-            print("Mock TMA controller running", flush=True)
+            # Warning: this message is read by the CSC; if you change
+            # the message please update the CSC:
+            print(
+                "Mock TMA controller running: "
+                f"command_port={mock_controller.command_server.port}, "
+                f"telemetry_port={mock_controller.telemetry_server.port}",
+                flush=True,
+            )
             await mock_controller.done_task
         except asyncio.CancelledError:
             print("Mock TMA controller done", flush=True)
@@ -584,7 +572,7 @@ class Controller:
         ----------
         command : `Command`
             Command to report as acknowledged.
-        timeout : `float` or `None`
+        timeout : `float`
             Timeout for command (second)
         """
         if timeout is None:
