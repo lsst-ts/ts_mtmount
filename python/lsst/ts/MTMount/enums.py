@@ -261,7 +261,7 @@ class Source(enum.IntEnum):
 class TelemetryTopicId(enum.IntEnum):
     """Telemetry topic ID values.
 
-    These must match the data in telemetry_map.yaml
+    These must match the data in `TELEMETRY_MAP`
     """
 
     AZIMUTH = 6

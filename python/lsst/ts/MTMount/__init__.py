@@ -37,6 +37,7 @@ from . import replies
 from .client_server_pair import *
 from .communicator import *
 from .command_futures import *
+from .telemetry_map import *
 from .telemetry_client import *
 from .mtmount_commander import *
 from .mtmount_csc import *
