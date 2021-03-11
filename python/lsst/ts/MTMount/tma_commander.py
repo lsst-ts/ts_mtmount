@@ -383,7 +383,7 @@ ask_for_command 3
                     # cmd_futures in command_futures_dict.
                     cmd_futures = self.command_futures_dict.get(reply.sequence_id, None)
                     if cmd_futures is not None:
-                        cmd_futures.setack(reply.timeout_ms / 100.0)
+                        cmd_futures.setack(reply.timeout_ms / 1000)
                 elif isinstance(reply, replies.NoAckReply):
                     # Command failed. Pop the command_futures_dict entry
                     # and report failure.

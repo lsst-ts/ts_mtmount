@@ -58,7 +58,8 @@ class CommandFutures:
         timeout : `float`
             Max time for command to complete (sec).
         """
-        self.ack.set_result(timeout)
+        if not self.ack.done():
+            self.ack.set_result(timeout)
 
     def setnoack(self, explanation):
         """Report a command as failed.
