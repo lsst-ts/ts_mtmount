@@ -31,14 +31,12 @@ import asynctest
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
-START_TIME = 20  # Time for startup (sec)
+START_TIMEOUT = 20  # Time for startup (sec)
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
 # Padding for the time limit returned by device do_methods
-TIMEOUT_PADDING = 2
+TIMEOUT_PADDING = 5
 
 logging.basicConfig()
-
-port_generator = salobj.index_generator(imin=3000)
 
 
 UNSUPPORTED_COMMAND_CODE = (
@@ -59,13 +57,13 @@ class MockControllerTestCase(asynctest.TestCase):
         del MTMount.commands.CommandDict[UNSUPPORTED_COMMAND_CODE]
 
     @contextlib.asynccontextmanager
-    async def make_controller(self, commander=MTMount.Source.HHD):
+    async def make_controller(self, commander=MTMount.Source.CSC):
         """Make a mock controller as self.controller.
 
         Parameters
         ----------
         commander : `Source`, optional
-            Who initially has command. Defaults to `Source.HHD`,
+            Who initially has command. Defaults to `Source.CSC`,
             so tests need not issue the ``ASK_FOR_COMMAND`` command
             before issuing other commands.
 
@@ -78,51 +76,52 @@ class MockControllerTestCase(asynctest.TestCase):
           a convenient way to test ``ASK_FOR_COMMAND`` failures.
         """
         log = logging.getLogger()
-        command_port = next(port_generator)
-        next(port_generator)  # for reply port
-        telemetry_port = next(port_generator)
-        self.communicator = MTMount.Communicator(
-            name="communicator",
-            client_host=salobj.LOCAL_HOST,
-            client_port=command_port,
-            server_host=salobj.LOCAL_HOST,
-            # Tekniker uses repy port = command port + 1
-            server_port=command_port + 1,
-            log=log,
-            read_replies=True,
-            connect=False,
-            connect_callback=None,
-        )
         self.controller = MTMount.mock.Controller(
-            command_port=command_port,
-            telemetry_port=telemetry_port,
-            log=log,
-            commander=commander,
+            command_port=0, telemetry_port=0, log=log, commander=commander,
         )
-        connect_task = asyncio.create_task(self.communicator.connect())
+        t0 = time.monotonic()
+        await asyncio.wait_for(self.controller.start_task, timeout=START_TIMEOUT)
+
         # Dict of task_id: parsed data
         self.telemetry_dict = {topic_id: None for topic_id in MTMount.TelemetryTopicId}
-        t0 = time.monotonic()
-        await asyncio.wait_for(
-            asyncio.gather(self.controller.start_task, connect_task), timeout=START_TIME
+
+        # Connect to the command port
+        connect_coro = asyncio.open_connection(
+            host=salobj.LOCAL_HOST, port=self.controller.command_server.port
         )
+        self.command_reader, self.command_writer = await asyncio.wait_for(
+            connect_coro, timeout=STD_TIMEOUT
+        )
+
+        # Connect to the telemetry port
         telemetry_connect_coro = asyncio.open_connection(
-            host=salobj.LOCAL_HOST, port=telemetry_port
+            host=salobj.LOCAL_HOST, port=self.controller.telemetry_server.port
         )
         self.telemetry_reader, self.telemetry_writer = await asyncio.wait_for(
-            telemetry_connect_coro, timeout=START_TIME
+            telemetry_connect_coro, timeout=STD_TIMEOUT
         )
         self.telemetry_task = asyncio.create_task(self.telemetry_read_loop())
         dt = time.monotonic() - t0
+
         print(f"Time to start up: {dt:0.2f} sec")
         try:
             yield
         finally:
             self.telemetry_writer.close()
-            await self.communicator.close()
+            await self.telemetry_writer.wait_closed()
+            self.command_writer.close()
+            await self.command_writer.wait_closed()
             await self.controller.close()
 
-    async def read_replies(self, reply_types, return_others, timeout=STD_TIMEOUT):
+    async def read_one_reply(self, timeout=STD_TIMEOUT):
+        """Read, parse, and return one reply from the mock controller.
+        """
+        read_bytes = await asyncio.wait_for(
+            self.command_reader.readuntil(b"\r\n"), timeout=timeout
+        )
+        return MTMount.replies.parse_reply(read_bytes.decode())
+
+    async def read_replies(self, reply_types, return_others):
         """Wait for one or more replies of the specified types.
 
         Return a list of the all replies read.
@@ -148,7 +147,7 @@ class MockControllerTestCase(asynctest.TestCase):
         reply_types_remaining = reply_types.copy()
         replies = []
         while reply_types_remaining:
-            reply = await asyncio.wait_for(self.communicator.read(), timeout=timeout)
+            reply = await self.read_one_reply()
             if type(reply) in reply_types_remaining:
                 reply_types_remaining.remove(type(reply))
                 replies.append(reply)
@@ -175,7 +174,7 @@ class MockControllerTestCase(asynctest.TestCase):
         command : `MTMount.Command`
             Command to send.
         use_read_loop : `bool`
-            If True then send the command via the communicator.
+            If True then send the command via TCP/IP.
             If False then call self.controller.handle_command directly.
         should_fail : `bool`
             Should the command fail before the first ask?
@@ -220,7 +219,8 @@ class MockControllerTestCase(asynctest.TestCase):
                 )
 
         if use_read_loop:
-            await self.communicator.write(command)
+            self.command_writer.write(command.encode())
+            await self.command_writer.drain()
         else:
             await self.controller.handle_command(command)
         nonack_replies = list()
@@ -233,9 +233,7 @@ class MockControllerTestCase(asynctest.TestCase):
                 nonack_replies.append(reply)
             elif return_others:
                 nonack_replies.append(reply)
-            reply = await asyncio.wait_for(
-                self.communicator.read(), timeout=STD_TIMEOUT
-            )
+            reply = await asyncio.wait_for(self.read_one_reply(), timeout=STD_TIMEOUT)
         if should_fail:
             self.assertIsInstance(reply, MTMount.replies.NoAckReply)
             self.assertEqual(reply.sequence_id, command.sequence_id)
@@ -253,13 +251,14 @@ class MockControllerTestCase(asynctest.TestCase):
                     elif return_others:
                         nonack_replies.append(reply)
                     reply = await asyncio.wait_for(
-                        self.communicator.read(), timeout=timeout
+                        self.read_one_reply(), timeout=timeout
                     )
                 self.assertIsInstance(reply, MTMount.replies.DoneReply)
                 self.assertEqual(reply.sequence_id, command.sequence_id)
         if reply_types_remaining:
-            nonack_replies += await self.read_replies(
-                reply_types_remaining, timeout=timeout, return_others=True
+            nonack_replies += await asyncio.wait_for(
+                self.read_replies(reply_types_remaining, return_others=True),
+                timeout=timeout,
             )
         if return_others:
             self.assertGreaterEqual(len(nonack_replies), len(noack_reply_types))
@@ -297,6 +296,26 @@ class MockControllerTestCase(asynctest.TestCase):
             await self.run_command(MTMount.commands.AskForCommand(), use_read_loop=True)
             for command in sample_commands:
                 await self.run_command(command, use_read_loop=True)
+
+    async def test_ask_for_command_fail(self):
+        async with self.make_controller(commander=MTMount.Source.HHD):
+            # commander=HHD prevents assigning command to any other commander.
+            sample_commands = (
+                MTMount.commands.AskForCommand(commander=MTMount.Source.NONE),
+                MTMount.commands.AskForCommand(commander=MTMount.Source.CSC),
+                MTMount.commands.AskForCommand(commander=MTMount.Source.EUI),
+                MTMount.commands.AskForCommand(),  # defaults to CSC
+                MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
+                MTMount.commands.AzimuthAxisPower(on=True),
+                MTMount.commands.ElevationAxisPower(on=True),
+            )
+            for command in sample_commands:
+                await self.run_command(command, should_fail=True, use_read_loop=True)
+            # Asking for command by the HHD should work, though it is a no-op.
+            await self.run_command(
+                MTMount.commands.AskForCommand(commander=MTMount.Source.HHD),
+                use_read_loop=True,
+            )
 
     async def test_read_loop(self):
         await self.check_command_sequence(use_read_loop=True)
@@ -472,10 +491,12 @@ class MockControllerTestCase(asynctest.TestCase):
         """Test the <axis>AxisTrack command and InPosition replies.
         """
         async with self.make_controller():
-            replies = await self.read_replies(
-                reply_types=[MTMount.replies.InPositionReply] * 2,
-                timeout=10,
-                return_others=False,
+            replies = await asyncio.wait_for(
+                self.read_replies(
+                    reply_types=[MTMount.replies.InPositionReply] * 2,
+                    return_others=False,
+                ),
+                timeout=START_TIMEOUT,
             )
             for reply in replies:
                 self.assertFalse(reply.in_position)
@@ -545,11 +566,14 @@ class MockControllerTestCase(asynctest.TestCase):
         """Test the <axis>AxisMove command and InPosition replies.
         """
         async with self.make_controller():
-            replies = await self.read_replies(
-                reply_types=[MTMount.replies.InPositionReply] * 2,
-                timeout=10,
-                return_others=False,
+            replies = await asyncio.wait_for(
+                self.read_replies(
+                    reply_types=[MTMount.replies.InPositionReply] * 2,
+                    return_others=False,
+                ),
+                timeout=START_TIMEOUT,
             )
+
             self.assertEqual(len(replies), 2)
             for reply in replies:
                 self.assertFalse(reply.in_position)

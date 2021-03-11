@@ -220,7 +220,7 @@ class AskForCommand(Command):
                 name="commander",
                 doc="Who should have command",
                 dtype=enums.Source,
-                default=enums.Source.HHD,
+                default=enums.Source.CSC,
             ),
         ),
     )

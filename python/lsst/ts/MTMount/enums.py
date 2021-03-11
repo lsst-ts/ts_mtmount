@@ -252,7 +252,7 @@ class Source(enum.IntEnum):
     """
 
     NONE = 0
-    TCS = 1
+    CSC = 1
     EUI = 2
     HHD = 3
     PXI = 100
