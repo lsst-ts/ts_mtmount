@@ -20,8 +20,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
-    "EUI_COMMAND_PORT",
-    "HHD_COMMAND_PORT",
     "CSC_COMMAND_PORT",
     "TELEMETRY_PORT",
     "MIRROR_COVER_DRIVES",
@@ -31,14 +29,7 @@ __all__ = [
 ]
 from lsst.ts.idl.enums.MTMount import AxisState, DriveState
 
-
-# For reference and testing against Tekniker simulators.
-# Reply ports are one larger.
-EUI_COMMAND_PORT = 60005
-HHD_COMMAND_PORT = 40005
-# CSC TCP/IP default configuration
-# Update this when Tekniker adds a dedicated pair of ports for the CSC.
-CSC_COMMAND_PORT = HHD_COMMAND_PORT
+CSC_COMMAND_PORT = 30005
 
 TELEMETRY_PORT = 50035
 
