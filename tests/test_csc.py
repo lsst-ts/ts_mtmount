@@ -26,8 +26,6 @@ import logging
 import time
 import unittest
 
-import asynctest
-
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
@@ -41,14 +39,7 @@ port_generator = salobj.index_generator(imin=3200)
 logging.basicConfig()
 
 
-class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
-    def setUp(self):
-        self.mock_controller = None
-
-    async def tearDown(self):
-        if self.mock_controller is not None:
-            await self.mock_controller.close()
-
+class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     def basic_make_csc(
         self, initial_state, config_dir, simulation_mode, internal_mock_controller
     ):
@@ -102,6 +93,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.mock_controller = MTMount.mock.Controller(
                 log=logging.getLogger(), random_ports=True,
             )
+            self.addAsyncCleanup(self.mock_controller.close)
             await self.mock_controller.start_task
         else:
             self.mock_controller = None

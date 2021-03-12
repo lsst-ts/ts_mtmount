@@ -26,7 +26,6 @@ import logging
 import time
 import unittest
 
-import asynctest
 import numpy as np
 
 from lsst.ts import salobj
@@ -40,8 +39,8 @@ STD_TIMEOUT = 5
 CONNECT_TIMEOUT = 5
 
 
-class TelemetryClientTestCase(asynctest.TestCase):
-    async def setUp(self):
+class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
         self.log = logging.getLogger()
         self.log.setLevel(logging.INFO)
         self.log.addHandler(logging.StreamHandler())
