@@ -130,6 +130,12 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             initial_state=salobj.State.ENABLED, internal_mock_controller=False
         ):
             await self.assert_next_sample(
+                self.remote.evt_softwareVersions,
+                cscVersion=MTMount.__version__,
+                subsystemVersions="",
+            )
+
+            await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
 
