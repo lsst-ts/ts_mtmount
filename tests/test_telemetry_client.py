@@ -279,7 +279,7 @@ class TelemetryClientTestCase(asynctest.TestCase):
             Low-level controller telemetry data.
         """
         data_json = json.dumps(llv_data)
-        self.server.writer.write(data_json.encode() + b"\r\n")
+        self.server.writer.write(data_json.encode() + MTMount.LINE_TERMINATOR)
         await self.server.writer.drain()
 
 

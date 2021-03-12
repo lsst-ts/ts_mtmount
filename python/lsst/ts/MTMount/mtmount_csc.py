@@ -808,7 +808,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.debug("Read loop begins")
         while self.should_be_connected and self.connected:
             try:
-                read_bytes = await self.reader.readuntil(b"\r\n")
+                read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
                 try:
                     reply = replies.parse_reply(read_bytes.decode(errors="ignore"))
                     self.log.debug("Read %s; bytes %s", reply, read_bytes)

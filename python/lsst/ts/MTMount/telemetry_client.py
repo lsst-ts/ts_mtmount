@@ -207,7 +207,7 @@ class TelemetryClient:
         """
         while True:
             try:
-                data = await self.reader.readuntil(b"\r\n")
+                data = await self.reader.readuntil(constants.LINE_TERMINATOR)
             except asyncio.CancelledError:
                 return
             except (ConnectionResetError, asyncio.IncompleteReadError):

@@ -241,7 +241,9 @@ class Controller:
 
     async def write_telemetry(self, data_dict):
         data_str = json.dumps(data_dict)
-        self.telemetry_server.writer.write(data_str.encode() + b"\r\n")
+        self.telemetry_server.writer.write(
+            data_str.encode() + constants.LINE_TERMINATOR
+        )
         await self.telemetry_server.writer.drain()
 
     def telemetry_connect_callback(self, server):
@@ -434,7 +436,9 @@ class Controller:
         self.log.debug("Read loop begins")
         try:
             while self.command_server.connected:
-                read_bytes = await self.command_server.reader.readuntil(b"\r\n")
+                read_bytes = await self.command_server.reader.readuntil(
+                    constants.LINE_TERMINATOR
+                )
                 try:
                     command = commands.parse_command(read_bytes.decode())
                 except Exception as e:
