@@ -528,7 +528,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.error(f"Failed to power on one or more devices: {e!r}")
             raise
         self.camera_cable_wrap_follow_start_task = asyncio.create_task(
-            self.camera_cable_wrap_start_following()
+            self.start_camera_cable_wrap_following()
         )
         await self.camera_cable_wrap_follow_start_task
 
@@ -536,8 +536,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Disable all devices and yield control."""
         self.log.info("Disable devices")
         self.enable_task.cancel()
-        self.camera_cable_wrap_follow_start_task.cancel()
-        self.camera_cable_wrap_follow_loop_task.cancel()
+        await self.stop_camera_cable_wrap_following()
         if not self.connected:
             return
         for command in [
@@ -699,7 +698,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.telemetry_client_process = None
         return processes
 
-    async def camera_cable_wrap_start_following(self):
+    async def start_camera_cable_wrap_following(self):
         """Make the camera cable wrap start following the camera rotator.
 
         Camera cable wrap following is divided into two tasks so that the
@@ -720,28 +719,33 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following canceled before it starts")
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            # Try to stop the camera cable wrap on a best-effort basis.
+            await self.send_command(commands.CameraCableWrapStop())
             raise
         except Exception as e:
+            err_msg = "Camera cable wrap following could not be started"
             if isinstance(e, salobj.ExpectedError):
-                self.log.error(
-                    f"Camera cable wrap tracking could not be enabled: {e!r}"
-                )
+                self.log.error(f"{err_msg}: {e!r}")
             else:
-                self.log.exception("Camera cable wrap tracking could not be enabled")
+                self.log.exception(err_msg)
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            # Try to stop the camera cable wrap on a best-effort basis.
+            # This should succeed if things are working, but they
+            # may not be in this exception branch.
+            await self.send_command(commands.CameraCableWrapStop())
             raise
 
     async def _camera_cable_wrap_follow_loop(self):
         """Implement the camera cable wrap following the camera rotator.
 
-        This should be called by camera_cable_wrap_start_following.
+        This should be called by start_camera_cable_wrap_following.
         Camera cable wrap tracking must be enabled before this is called.
         """
         self.log.info("Camera cable wrap following begins")
         self.rotator_position_error_excessive = False
         paused = False
         try:
-            while True:
+            while self.camera_cable_wrap_following_enabled:
                 try:
                     position_velocity_tai = await self.get_camera_cable_wrap_demand()
                 except asyncio.TimeoutError:
@@ -771,7 +775,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.evt_cameraCableWrapTarget.set_put(
                     position=position, velocity=velocity, taiTime=tai
                 )
-                await asyncio.sleep(self.config.camera_cable_wrap_interval)
+                if self.camera_cable_wrap_following_enabled:
+                    await asyncio.sleep(self.config.camera_cable_wrap_interval)
 
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following ends")
@@ -781,6 +786,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.exception("Camera cable wrap following failed")
         finally:
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+
+    @property
+    def camera_cable_wrap_following_enabled(self):
+        return self.evt_cameraCableWrapFollowing.data.enabled
 
     async def configure(self, config):
         self.config = config
@@ -935,7 +944,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         self.evt_cameraCableWrapFollowing.set_put(enabled=False)
-
         await super().start()
 
     async def do_clearError(self, data):
@@ -972,17 +980,30 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands.MirrorCoverLocksPower(on=False),
         )
 
+    async def stop_camera_cable_wrap_following(self):
+        self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+        self.camera_cable_wrap_follow_start_task.cancel()
+        if self.camera_cable_wrap_follow_loop_task.done():
+            return
+        try:
+            await asyncio.wait_for(
+                self.camera_cable_wrap_follow_loop_task,
+                timeout=self.config.camera_cable_wrap_interval + 0.1,
+            )
+        except asyncio.TimeoutError:
+            self.camera_cable_wrap_follow_loop_task.cancel()
+        finally:
+            await self.send_command(commands.CameraCableWrapStop())
+
     async def do_disableCameraCableWrapFollowing(self, data):
         self.assert_enabled()
-        self.camera_cable_wrap_follow_start_task.cancel()
-        self.camera_cable_wrap_follow_loop_task.cancel()
-        await self.send_command(commands.CameraCableWrapStop())
+        await self.stop_camera_cable_wrap_following()
 
     async def do_enableCameraCableWrapFollowing(self, data):
         self.assert_enabled()
         if self.camera_cable_wrap_follow_loop_task.done():
             self.camera_cable_wrap_follow_start_task = asyncio.create_task(
-                self.camera_cable_wrap_start_following()
+                self.start_camera_cable_wrap_following()
             )
             await self.camera_cable_wrap_follow_start_task
 
