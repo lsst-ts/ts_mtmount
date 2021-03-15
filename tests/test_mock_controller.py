@@ -26,8 +26,6 @@ import logging
 import time
 import unittest
 
-import asynctest
-
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
@@ -48,7 +46,7 @@ class UnsupportedCommand(MTMount.commands.Command):
     field_infos = MTMount.commands.make_command_field_infos(UNSUPPORTED_COMMAND_CODE)
 
 
-class MockControllerTestCase(asynctest.TestCase):
+class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.assertNotIn(UNSUPPORTED_COMMAND_CODE, MTMount.commands.CommandDict)
         MTMount.commands.CommandDict[UNSUPPORTED_COMMAND_CODE] = UnsupportedCommand

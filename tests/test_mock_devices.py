@@ -23,8 +23,6 @@ import asyncio
 import logging
 import unittest
 
-import asynctest
-
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
@@ -39,7 +37,7 @@ class TrivialMockController:
         self.log = logging.getLogger()
 
 
-class MockDevicesTestCase(asynctest.TestCase):
+class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.controller = TrivialMockController()
         axis_devices = [

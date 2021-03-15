@@ -24,8 +24,7 @@ import contextlib
 import pathlib
 import logging
 import time
-
-import asynctest
+import unittest
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
@@ -38,14 +37,7 @@ TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config
 logging.basicConfig()
 
 
-class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
-    def setUp(self):
-        self.mock_controller = None
-
-    async def tearDown(self):
-        if self.mock_controller is not None:
-            await self.mock_controller.close()
-
+class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     def basic_make_csc(
         self, initial_state, config_dir, simulation_mode, internal_mock_controller
     ):
@@ -99,6 +91,7 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             self.mock_controller = MTMount.mock.Controller(
                 log=logging.getLogger(), random_ports=True,
             )
+            self.addAsyncCleanup(self.mock_controller.close)
             await self.mock_controller.start_task
         else:
             self.mock_controller = None
