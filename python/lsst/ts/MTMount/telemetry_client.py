@@ -95,6 +95,7 @@ class TelemetryClient:
         self.log = self.controller.log.getChild("TelemetryClient")
 
         self.connection_timeout = connection_timeout
+        # dict of low-level controller topic ID: TelemetryTopicHandler
         self.topic_handlers = {
             topic_id: TelemetryTopicHandler(
                 topic=getattr(self.controller, f"tel_{sal_topic_name}"),
