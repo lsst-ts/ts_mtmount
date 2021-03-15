@@ -807,7 +807,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
         while self.should_be_connected and self.connected:
             try:
-                read_bytes = await self.reader.readuntil(b"\r\n")
+                read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
                 try:
                     reply = json.loads(read_bytes)
                     self.log.debug("Read %s", reply)

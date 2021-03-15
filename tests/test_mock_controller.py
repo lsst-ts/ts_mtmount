@@ -121,7 +121,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         """Read, parse, and return one reply from the mock controller.
         """
         read_bytes = await asyncio.wait_for(
-            self.command_reader.readuntil(b"\r\n"), timeout=timeout
+            self.command_reader.readuntil(MTMount.LINE_TERMINATOR), timeout=timeout,
         )
         return json.loads(read_bytes)
 
@@ -277,7 +277,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     async def telemetry_read_loop(self):
         while True:
             try:
-                data = await self.telemetry_reader.readuntil(b"\r\n")
+                data = await self.telemetry_reader.readuntil(MTMount.LINE_TERMINATOR)
                 decoded_data = data.decode()
                 llv_data = json.loads(decoded_data)
                 topic_id = llv_data.get("topicID")

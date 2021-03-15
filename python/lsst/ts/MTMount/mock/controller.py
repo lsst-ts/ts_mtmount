@@ -472,7 +472,9 @@ class Controller:
         self.log.debug("Read loop begins")
         try:
             while self.command_server.connected:
-                read_bytes = await self.command_server.reader.readuntil(b"\r\n")
+                read_bytes = await self.command_server.reader.readuntil(
+                    constants.LINE_TERMINATOR
+                )
                 try:
                     command = commands.parse_command(read_bytes.decode())
                 except Exception as e:

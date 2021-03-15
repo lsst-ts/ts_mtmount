@@ -23,6 +23,8 @@ __all__ = ["BaseMessage"]
 
 import enum
 
+from . import constants
+
 
 class BaseMessage:
     """BaseMessage data.
@@ -119,8 +121,8 @@ class BaseMessage:
         """Return the data encoded as a bytes string,
         including the standard terminator.
         """
-        data_str = "\n".join(self.str_fields()) + "\r\n"
-        return data_str.encode()
+        data_str = "\n".join(self.str_fields())
+        return data_str.encode() + constants.LINE_TERMINATOR
 
     def str_fields(self):
         """Return the data as a list of string fields.

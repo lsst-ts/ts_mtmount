@@ -348,7 +348,7 @@ ask_for_command 1
         """
         try:
             while self.connected:
-                read_bytes = await self.reader.readuntil(b"\r\n")
+                read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
                 try:
                     reply = json.loads(read_bytes)
                     self.log.debug("Read %s; bytes %s", reply, read_bytes)
