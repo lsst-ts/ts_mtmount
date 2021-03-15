@@ -95,5 +95,14 @@ class CommandFutures:
 
         Return None if command not acknowledged.
         Raise an exception if the command failed before being acknowledged.
+
+        Raises
+        ------
+        InvalidStateError
+            If ``ack`` is not done.
+        CancelledError
+            If ``ack`` was cancelled.
+        The exception set by `asyncio.Future.set_exception`
+            If ``ack`` was set to an exception.
         """
         return self.ack.result()
