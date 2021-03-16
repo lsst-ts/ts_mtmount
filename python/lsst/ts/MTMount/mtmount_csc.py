@@ -123,7 +123,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     ):
         if simulation_mode == 0:
             command_port = constants.CSC_COMMAND_PORT
-            telemetry_port = constants.CSC_COMMAND_PORT
+            telemetry_port = constants.TELEMETRY_PORT
         else:
             if run_mock_controller:
                 # Set this in start, when the mock controller is run
