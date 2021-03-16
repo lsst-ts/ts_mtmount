@@ -625,7 +625,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.writer.write(command.encode())
         await self.writer.drain()
         timeout = await asyncio.wait_for(futures.ack, self.config.ack_timeout)
-        if command.command_code in commands.AckOnlyCommandCodes:
+        if timeout < 0:
             # This command only receives an Ack; mark it done.
             futures.done.set_result(None)
         elif not futures.done.done():

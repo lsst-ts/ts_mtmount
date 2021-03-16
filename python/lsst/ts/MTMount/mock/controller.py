@@ -420,10 +420,16 @@ class Controller:
         except Exception as e:
             await self.write_noack(command=command, explanation=repr(e))
             return
-        if timeout_task is None:
-            await self.write_ack(command, timeout=None)
-            if command.command_code not in commands.AckOnlyCommandCodes:
-                await self.write_done(command)
+        if command.command_code in commands.AckOnlyCommandCodes:
+            # Command is done when acknowledged.
+            # timeout_ms = -1 is a special value to indicate this
+            # (though for my CSC any negative value will do).
+            await self.write_ack(command, timeout=-0.001)
+        elif timeout_task is None:
+            # Command takes no time. Note: timeout for commands that are
+            # not done when acknowledged must be > 0, so pick a small value.
+            await self.write_ack(command, timeout=0.001)
+            await self.write_done(command)
         else:
             timeout, task = timeout_task
             await self.write_ack(command, timeout=timeout)
@@ -456,26 +462,6 @@ class Controller:
             self.log.exception("Read loop failed")
             await self.command_server.close_client()
         self.log.debug("Read loop ends")
-
-    async def reply_to_command(self, command):
-        if not self.command_server.connected:
-            raise RuntimeError(f"reply_to_command({command}) failed: not connected")
-        try:
-            await self.write_reply(
-                replies.AckReply(sequence_id=command.sequence_id, timeout_ms=1000)
-            )
-            if command.command_code not in commands.AckOnlyCommandCodes:
-                await asyncio.sleep(0.1)
-                if not self.command_server.connected:
-                    raise RuntimeError(
-                        f"reply_to_command({command}) failed: disconnected before writing Done"
-                    )
-                await self.write_reply(
-                    replies.DoneReply(sequence_id=command.sequence_id)
-                )
-        except Exception:
-            self.log.exception(f"reply_to_command({command}) failed")
-            raise
 
     def command_connect_callback(self, server):
         state_str = "connected to" if server.connected else "disconnected from"
@@ -579,8 +565,6 @@ class Controller:
         timeout : `float`
             Timeout for command (second)
         """
-        if timeout is None:
-            timeout = 0
         reply = replies.AckReply(
             sequence_id=command.sequence_id,
             source=command.source,
