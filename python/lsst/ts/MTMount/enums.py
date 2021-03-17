@@ -237,8 +237,8 @@ class ReplyCode(enum.IntEnum):
     """Command accepted and begun.
 
     For commands in AckOnlyCommandCodes: the command succeeded
-    and you will see no more CMD_ replies for it.
-    For all other commands: you will see one more CMD_ reply.
+    and you will see no more CMD_x replies for it.
+    For all other commands: you will see one more CMD_x reply.
     """
 
     CMD_REJECTED = 2
