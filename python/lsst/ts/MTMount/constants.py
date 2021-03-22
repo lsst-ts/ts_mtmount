@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -21,7 +21,6 @@
 
 __all__ = [
     "CSC_COMMAND_PORT",
-    "HHD_COMMAND_PORT",
     "TELEMETRY_PORT",
     "MIRROR_COVER_DRIVES",
     "LINE_TERMINATOR",
@@ -31,7 +30,6 @@ __all__ = [
 from lsst.ts.idl.enums.MTMount import AxisState, DriveState
 
 CSC_COMMAND_PORT = 30005
-HHD_COMMAND_PORT = 40005
 
 TELEMETRY_PORT = 50035
 

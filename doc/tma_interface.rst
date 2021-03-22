@@ -1,31 +1,42 @@
 .. py:currentmodule:: lsst.ts.MTMount
 
-.. _lsst.ts.MTMount-tekniker_info:
+.. _lsst.ts.MTMount-tma_interface:
 
-Interactions with Tekniker's software
-=====================================
+Interface with the Telescope Mount Assembly
+===========================================
+
+The low-level controller, written by Tekniker, is called the Telescope Mount Assembly (TMA).
+Communication with the CSC is via two TCP/IP ports:
+
+* One port is used for commands, replies and events (reports of changes to discrete state).
+* The other port is used for telemetry; this a read-only connection.
+
+Telemetry is output on a separate port because we were afraid the CSC would be overwhelmed
+if it had to deal with telemetry as well as commands, replies, and status.
+This allows the CSC to launch a background process to handle telemetry.
 
 Acronyms
 --------
 
 Acronyms used in Tekniker's code and (sparingly) in this package:
 
-* AZ: Azimuth axis
-* EL: Elevation axis
-* BAL: Balance motors
-* CW: Cable Wrap
-* DP: Deployable Platform
-* EIB: encoder interface box: EIB is a Heidenhain term.
-* EUI: Engineering User Interface
-* HHD: Hand-Held Device
-* HMI: Human-machine interface: both the EUI and HHD
-* LP: Locking Pin
-* MC: Mirror Covers
+* AZ: Azimuth axis.
+* EL: Elevation axis.
+* BAL: Balance motors.
+* CW: Cable Wrap.
+* DP: Deployable Platform.
+* EIB: encoder interface box (EIB is a Heidenhain term).
+* EUI: Engineering User Interface.
+* HHD: Hand-Held Device.
+* HMI: Human-machine interface this refers to both the EUI and HHD.
+* LP: Locking Pin.
+* MC: Mirror Covers.
 * MCL: Mirror Cover Locks which lock the mirror covers when retracted.
-* MPS: Main Power Supply
-* OSS: Oil Supply System
-* TEC: Top-End Chiller
-* TF: Transfer Function
+* MPS: Main Power Supply.
+* OSS: Oil Supply System.
+* TEC: Top-End Chiller.
+* TF: Transfer Function.
+* TMA: Telescope mount assembly; the low-level controller.
 
 Components
 ----------

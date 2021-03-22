@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -26,7 +26,6 @@ import logging
 import time
 import unittest
 
-import asynctest
 import numpy as np
 
 from lsst.ts import salobj
@@ -40,8 +39,8 @@ STD_TIMEOUT = 5
 CONNECT_TIMEOUT = 5
 
 
-class TelemetryClientTestCase(asynctest.TestCase):
-    async def setUp(self):
+class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
         self.log = logging.getLogger()
         self.log.setLevel(logging.INFO)
         self.log.addHandler(logging.StreamHandler())
@@ -279,7 +278,7 @@ class TelemetryClientTestCase(asynctest.TestCase):
             Low-level controller telemetry data.
         """
         data_json = json.dumps(llv_data)
-        self.server.writer.write(data_json.encode() + b"\r\n")
+        self.server.writer.write(data_json.encode() + MTMount.LINE_TERMINATOR)
         await self.server.writer.drain()
 
 

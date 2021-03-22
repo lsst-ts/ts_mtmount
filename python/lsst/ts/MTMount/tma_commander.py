@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -348,7 +348,7 @@ ask_for_command 1
         """
         try:
             while self.connected:
-                read_bytes = await self.reader.readuntil(b"\r\n")
+                read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
                 try:
                     reply = json.loads(read_bytes)
                     self.log.debug("Read %s; bytes %s", reply, read_bytes)
