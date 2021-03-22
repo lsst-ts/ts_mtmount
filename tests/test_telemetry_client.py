@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -23,12 +23,9 @@ import asyncio
 import contextlib
 import json
 import logging
-import pathlib
 import time
 import unittest
 
-import asynctest
-import yaml
 import numpy as np
 
 from lsst.ts import salobj
@@ -42,17 +39,8 @@ STD_TIMEOUT = 5
 CONNECT_TIMEOUT = 5
 
 
-class TelemetryClientTestCase(asynctest.TestCase):
-    async def setUp(self):
-        telemetry_map_path = (
-            pathlib.Path(__file__).parents[1] / "data" / "telemetry_map.yaml"
-        )
-        with open(telemetry_map_path, "r") as f:
-            raw_translation_data = f.read()
-        # Dict of topic ID: [SAL telemetry topic name, field dict]
-        # where field dict is SAL field name: low-level controller field name
-        self.translation_dict = yaml.safe_load(raw_translation_data)
-
+class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
         self.log = logging.getLogger()
         self.log.setLevel(logging.INFO)
         self.log.addHandler(logging.StreamHandler())
@@ -235,7 +223,7 @@ class TelemetryClientTestCase(asynctest.TestCase):
             Dict of low-level field name: value telemetry data.
         """
         llv_data = dict(topicID=topic_id)
-        field_dict = self.translation_dict[topic_id][1]
+        field_dict = MTMount.TELEMETRY_MAP[topic_id][1]
         for key, value in dds_data.items():
             llv_key = field_dict[key]
             self.convert_dds_item_to_llv(
@@ -290,7 +278,7 @@ class TelemetryClientTestCase(asynctest.TestCase):
             Low-level controller telemetry data.
         """
         data_json = json.dumps(llv_data)
-        self.server.writer.write(data_json.encode() + b"\r\n")
+        self.server.writer.write(data_json.encode() + MTMount.LINE_TERMINATOR)
         await self.server.writer.drain()
 
 

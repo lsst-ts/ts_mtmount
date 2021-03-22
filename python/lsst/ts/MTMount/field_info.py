@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -376,8 +376,7 @@ class SourceFieldInfo(EnumFieldInfo):
             name="source",
             doc=f"Source of the {what}; a `Source`",
             dtype=enums.Source,
-            # TODO: change this when we have a value for the CSC
-            default=enums.Source.HHD,
+            default=enums.Source.CSC,
         )
 
 

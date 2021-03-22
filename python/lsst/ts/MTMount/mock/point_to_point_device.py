@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -73,6 +73,7 @@ class PointToPointDevice(base_device.BaseDevice):
         )
         self.multi_drive = multi_drive
         self._monitor_move_task = asyncio.Future()
+        self._monitor_move_task.set_result(None)
         super().__init__(controller=controller, device_id=device_id)
 
     def assert_drive_all(self, command):

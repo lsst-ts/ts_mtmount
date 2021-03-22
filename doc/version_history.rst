@@ -6,6 +6,26 @@
 Version History
 ###############
 
+ccw_only 3
+==========
+
+* Changes
+
+* Use a single socket for commands and replies.
+* Use timeout_ms=-1 in `AckReply` replies to indicate a command that is done when acknowledged.
+* Move the config schema and telemetry map from yaml files to code.
+* Added ``LINE_TERMINATOR`` constant.
+* `mock.Controller` related changes: 
+
+    * Replaced ``command_port`` and ``telemetry_port`` constructor argument with ``random_ports``
+    * Removed the ``reconnect`` argument.
+    * Updated the command-line arguments of ``run_mock_tma.py`` to match.
+
+* Stop using the abandoned ``asynctest`` library.
+* Modernize the documentation: add a User Guide section to the main documentation page
+  and move the developer information to a separate Developer Guide.
+* Modernize doc/conf.py for documenteer 0.6.
+
 ccw_only 2
 ==========
 
@@ -16,7 +36,6 @@ Changes:
 * `CommandFutures`: make setack safe even if ack is done.
 * `AckReply`: make the ``timeout_ms`` field required and fix the code that uses it
   (the code was treating timeout_ms as 0.01 sec, not 0.001 sec).
-
 
 v0.13.0
 =======

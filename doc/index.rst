@@ -4,47 +4,51 @@
 lsst.ts.MTMount
 ###############
 
-A CSC that controls the Simonyi Survey Telescope main axes and related components.
+.. image:: https://img.shields.io/badge/SAL\ Interface-gray.svg
+    :target: https://ts-xml.lsst.io/sal_interfaces/MTMount.html
+.. image:: https://img.shields.io/badge/GitHub-gray.svg
+    :target: https://github.com/lsst-ts/ts_MTMount
+.. image:: https://img.shields.io/badge/Jira-gray.svg
+    :target: https://jira.lsstcorp.org/issues/?jql=labels+%3D+ts_MTMount
 
-It communicates with a low level controller written by Tekniker. For more information see :ref:`lsst.ts.MTMount-tekniker_info`.
+MTMount controls the Simonyi Survey Telescope main axes and related components at Vera C. Rubin Observatory.
 
-.. .. _lsst.ts.MTMount-using:
+MTMount communicates with the low level Telescope Mount Assembly (TMA) controller, written by Tekniker.
+MTMount also monitors MTRotator in order to command the camera cable wrap (CCW) to follow the rotator.
 
-.. Using lsst.ts.MTMount
-.. =====================
+.. .. _lsst.ts.MTMount-user_guide:
 
-Tekniker Info
-=============
+User Guide
+==========
 
-.. toctree::
-    tekniker_info
-    :maxdepth: 2
+Start the MTMount CSC as follows:
 
-.. _lsst.ts.MTMount-contributing:
+.. prompt:: bash
 
-Contributing
-============
+    run_mtmount.py
 
-``lsst.ts.MTMount`` is developed at https://github.com/lsst-ts/ts_MTMount.
-You can find Jira issues for this module using `labels=ts_MTMount <https://jira.lsstcorp.org/issues/?jql=project%20%3D%20DM%20AND%20labels%20%20%3D%20ts_MTMount>`_.
+Stop the CSC by sending it to the OFFLINE state.
 
+See MTMount `SAL communication interface <https://ts-xml.lsst.io/sal_interfaces/MTMount.html>`_ for commands, events and telemetry.
+
+When MTMount is started (sent from STANDBY to DISABLED state) it launches a background process
+to read telemetry from the low-level controller and publish it as SAL/DDS.
+
+To control the MTMount CSC from the command line (e.g. for engineering), you may use the CSC commander.
+Please only do this if you are sure it will not interfere with operations:
+
+.. prompt:: bash
+
+    command_mtmount.py --host ccw-mgmt.cp.lsst.org
 
 .. _lsst.ts.MTMount-pyapi:
 
-Python API reference
-====================
+Developer Guide
+===============
 
-.. automodapi:: lsst.ts.MTMount
-    :no-main-docstr:
-.. automodapi:: lsst.ts.MTMount.field_info
-    :no-main-docstr:
-.. automodapi:: lsst.ts.MTMount.commands
-    :no-main-docstr:
-    :no-inheritance-diagram:
-.. automodapi:: lsst.ts.MTMount.replies
-    :no-main-docstr:
-.. automodapi:: lsst.ts.MTMount.mock
-    :no-main-docstr:
+.. toctree::
+    developer_guide
+    :maxdepth: 1
 
 Version History
 ===============

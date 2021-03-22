@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -103,8 +103,7 @@ class BaseDevice:
         """
         prefix = f"{self._device_prefix}_"
         prefix_len = len(prefix)
-        # Iterate over commands that this CSC supports,
-        # which is probably not all commands in `CommandCode`.
+        # Iterate over commands that this device supports.
         for command_code in commands.CommandDict:
             if command_code.name.startswith(prefix):
                 command_name_lower = command_code.name[prefix_len:].lower()

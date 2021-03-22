@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -24,6 +24,7 @@ __all__ = ["BaseMessage"]
 import enum
 
 import astropy.time
+from . import constants
 
 
 class BaseMessage:
@@ -121,8 +122,8 @@ class BaseMessage:
         """Return the data encoded as a bytes string,
         including the standard terminator.
         """
-        data_str = "\n".join(self.str_fields()) + "\r\n"
-        return data_str.encode()
+        data_str = "\n".join(self.str_fields())
+        return data_str.encode() + constants.LINE_TERMINATOR
 
     def str_fields(self):
         """Return the data as a list of string fields.

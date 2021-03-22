@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -25,6 +25,7 @@ try:
 except ImportError:
     __version__ = "?"
 
+from .config_schema import *
 from .constants import *
 from .enums import *
 from .utils import *
@@ -33,9 +34,8 @@ from . import field_info
 from . import base_message
 from . import commands
 from . import replies
-from .client_server_pair import *
-from .communicator import *
 from .command_futures import *
+from .telemetry_map import *
 from .telemetry_client import *
 from .mtmount_commander import *
 from .mtmount_csc import *

@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -95,5 +95,14 @@ class CommandFutures:
 
         Return None if command not acknowledged.
         Raise an exception if the command failed before being acknowledged.
+
+        Raises
+        ------
+        InvalidStateError
+            If ``ack`` is not done.
+        CancelledError
+            If ``ack`` was cancelled.
+        The exception set by `asyncio.Future.set_exception`
+            If ``ack`` was set to an exception.
         """
         return self.ack.result()

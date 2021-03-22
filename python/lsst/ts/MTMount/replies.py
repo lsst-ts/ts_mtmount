@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -234,20 +234,26 @@ def _make_reply_dict():
 ReplyDict = _make_reply_dict()
 
 
-def parse_reply(fields):
-    """Parse a set of strings as a reply.
+def parse_reply(reply_str):
+    """Parse a string as a `Reply`.
 
     Parameters
     ----------
-    fields : `List` [`str`]
-        Fields from a read message.
-        The fields should not be terminated with ``\n``.
+    reply_str : `str`
+        Reply encoded as a sequence of ``\n``-separated fields.
+        Leading and trailing whitespace, ``\n``, and/or ``\r`` are ignored.
+
+    Returns
+    -------
+    reply : `Reply`
+        The parsed reply.
 
     Raises
     ------
     ValueError
-        If the data cannot be parsed.
+        If the string cannot be parsed.
     """
+    fields = reply_str.strip().split("\n")
     if len(fields) < 1:
         raise ValueError("No fields provided")
     reply_code = enums.ReplyCode(int(fields[0]))

@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -20,29 +20,24 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
-    "EUI_COMMAND_PORT",
-    "HHD_COMMAND_PORT",
     "CSC_COMMAND_PORT",
     "TELEMETRY_PORT",
     "MIRROR_COVER_DRIVES",
+    "LINE_TERMINATOR",
     "AxisStateDict",
     "DriveStateDict",
 ]
 from lsst.ts.idl.enums.MTMount import AxisState, DriveState
 
-
-# For reference and testing against Tekniker simulators.
-# Reply ports are one larger.
-EUI_COMMAND_PORT = 60005
-HHD_COMMAND_PORT = 40005
-# CSC TCP/IP default configuration
-# Update this when Tekniker adds a dedicated pair of ports for the CSC.
-CSC_COMMAND_PORT = HHD_COMMAND_PORT
+CSC_COMMAND_PORT = 30005
 
 TELEMETRY_PORT = 50035
 
 # We probably don't need this, because -1 means "all drives".
 MIRROR_COVER_DRIVES = (0, 1, 2, 3)
+
+# TCP/IP line terminator (bytes)
+LINE_TERMINATOR = b"\r\n"
 
 # Axis state from the low-level controller: AxisState enum value.
 AxisStateDict = {

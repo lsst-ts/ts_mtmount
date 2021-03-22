@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -26,8 +26,6 @@ import logging
 import time
 import unittest
 
-import asynctest
-
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
@@ -41,21 +39,16 @@ port_generator = salobj.index_generator(imin=3200)
 logging.basicConfig()
 
 
-class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
-    def setUp(self):
-        self.mock_controller = None
-
-    async def tearDown(self):
-        if self.mock_controller is not None:
-            await self.mock_controller.close()
-
+class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     def basic_make_csc(
         self, initial_state, config_dir, simulation_mode, internal_mock_controller
     ):
-        mock_command_port = next(port_generator)
-        # discard a value for the reply port
-        next(port_generator)
-        mock_telemetry_port = next(port_generator)
+        if simulation_mode != 0 and not internal_mock_controller:
+            mock_command_port = self.mock_controller.command_server.port
+            mock_telemetry_port = self.mock_controller.telemetry_server.port
+        else:
+            mock_command_port = None
+            mock_telemetry_port = None
         csc = MTMount.MTMountCsc(
             initial_state=initial_state,
             config_dir=config_dir,
@@ -64,16 +57,8 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             mock_telemetry_port=mock_telemetry_port,
             run_mock_controller=internal_mock_controller,
         )
-        if internal_mock_controller:
+        if simulation_mode != 0 and internal_mock_controller:
             self.mock_controller = csc.mock_controller
-        elif simulation_mode != 0:
-            mock_ctrl_log = logging.getLogger()
-            mock_ctrl_log.setLevel(csc.log.level)
-            self.mock_controller = MTMount.mock.Controller(
-                command_port=mock_command_port,
-                telemetry_port=mock_telemetry_port,
-                log=mock_ctrl_log,
-            )
         return csc
 
     @contextlib.asynccontextmanager
@@ -104,6 +89,14 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
             Should the CSC run the mock controller?
             Ignored if ``simulation_mode == 0``.
         """
+        if simulation_mode != 0 and not internal_mock_controller:
+            self.mock_controller = MTMount.mock.Controller(
+                log=logging.getLogger(), random_ports=True,
+            )
+            self.addAsyncCleanup(self.mock_controller.close)
+            await self.mock_controller.start_task
+        else:
+            self.mock_controller = None
         async with super().make_csc(
             initial_state=initial_state,
             config_dir=config_dir,
@@ -136,6 +129,12 @@ class CscTestCase(salobj.BaseCscTestCase, asynctest.TestCase):
         async with self.make_csc(
             initial_state=salobj.State.ENABLED, internal_mock_controller=False
         ):
+            await self.assert_next_sample(
+                self.remote.evt_softwareVersions,
+                cscVersion=MTMount.__version__,
+                subsystemVersions="",
+            )
+
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )

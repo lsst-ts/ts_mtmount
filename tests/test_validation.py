@@ -20,24 +20,18 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
-import pathlib
 
 import jsonschema
-import yaml
 
 from lsst.ts import salobj
+from lsst.ts import MTMount
 
 
 class ValidationTestCase(unittest.TestCase):
     """Test validation of the config schema."""
 
     def setUp(self):
-        schemaname = "MTMount.yaml"
-        pkg_dir = pathlib.Path(__file__).parents[1]
-        schemapath = pkg_dir / "schema" / schemaname
-        with open(schemapath, "r") as f:
-            rawschema = f.read()
-        self.schema = yaml.safe_load(rawschema)
+        self.schema = MTMount.CONFIG_SCHEMA
         self.validator = salobj.DefaultingValidator(schema=self.schema)
         self.default = dict(
             host="ccw-mgmt.cp.lsst.org",
@@ -80,11 +74,14 @@ class ValidationTestCase(unittest.TestCase):
     def test_invalid_configs(self):
         for name, badval in (
             #  ("host", "invalid hostname"),  # jsonschema 3.0.1 doesn't raise
-            ("host", 5),  # wrong type
-            ("connection_timeout", 0),  # not positive
-            ("ack_timeout", 0),  # not positive
-            ("connection_timeout", "1"),  # wrong type
             ("ack_timeout", "1"),  # wrong type
+            ("ack_timeout", 0),  # not positive
+            ("camera_cable_wrap_interval", -1),  # < 0
+            ("connection_timeout", "1"),  # wrong type
+            ("connection_timeout", 0),  # not positive
+            ("host", 5),  # wrong type
+            ("max_rotator_position_error", "1"),  # wrong type
+            ("max_rotator_position_error", 0),  # not positive
         ):
             bad_data = {name: badval}
             with self.subTest(bad_data=bad_data):

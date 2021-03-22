@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera Rubin Observatory.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -252,7 +252,7 @@ class Source(enum.IntEnum):
     """
 
     NONE = 0
-    TCS = 1
+    CSC = 1
     EUI = 2
     HHD = 3
     PXI = 100
@@ -261,7 +261,7 @@ class Source(enum.IntEnum):
 class TelemetryTopicId(enum.IntEnum):
     """Telemetry topic ID values.
 
-    These must match the data in telemetry_map.yaml
+    These must match the data in `TELEMETRY_MAP`
     """
 
     AZIMUTH = 6
