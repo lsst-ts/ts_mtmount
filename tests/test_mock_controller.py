@@ -25,8 +25,7 @@ import json
 import logging
 import time
 import unittest
-
-import asynctest
+import unittest.mock
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
@@ -48,14 +47,7 @@ class UnsupportedCommand(MTMount.commands.Command):
     field_infos = MTMount.commands.make_command_field_infos(UNSUPPORTED_COMMAND_CODE)
 
 
-class MockControllerTestCase(asynctest.TestCase):
-    def setUp(self):
-        self.assertNotIn(UNSUPPORTED_COMMAND_CODE, MTMount.commands.CommandDict)
-        MTMount.commands.CommandDict[UNSUPPORTED_COMMAND_CODE] = UnsupportedCommand
-
-    def tearDown(self):
-        del MTMount.commands.CommandDict[UNSUPPORTED_COMMAND_CODE]
-
+class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     @contextlib.asynccontextmanager
     async def make_controller(self, commander=MTMount.Source.CSC):
         """Make a mock controller as self.controller.
@@ -123,7 +115,7 @@ class MockControllerTestCase(asynctest.TestCase):
         """Read, parse, and return one reply from the mock controller.
         """
         read_bytes = await asyncio.wait_for(
-            self.command_reader.readuntil(b"\r\n"), timeout=timeout
+            self.command_reader.readuntil(MTMount.LINE_TERMINATOR), timeout=timeout
         )
         return json.loads(read_bytes)
 
@@ -279,7 +271,7 @@ class MockControllerTestCase(asynctest.TestCase):
     async def telemetry_read_loop(self):
         while True:
             try:
-                data = await self.telemetry_reader.readuntil(b"\r\n")
+                data = await self.telemetry_reader.readuntil(MTMount.LINE_TERMINATOR)
                 decoded_data = data.decode()
                 llv_data = json.loads(decoded_data)
                 topic_id = llv_data.get("topicID")
@@ -447,13 +439,23 @@ class MockControllerTestCase(asynctest.TestCase):
                 use_read_loop=use_read_loop,
             )
 
-            # Try an unsupported command
+            # Try a command not supported by the mock controller.
+            # Add it to MTMount.commands.CommandDict so the mock controller
+            # can parse it as a command.
             unsupported_command = UnsupportedCommand()
-            await self.run_command(
-                unsupported_command,
-                final_reply_code=MTMount.ReplyCode.CMD_REJECTED,
-                use_read_loop=use_read_loop,
+            self.assertNotIn(
+                unsupported_command.command_code, MTMount.commands.CommandDict
             )
+            new_command_dict = MTMount.commands.CommandDict.copy()
+            new_command_dict[unsupported_command.command_code] = UnsupportedCommand
+            with unittest.mock.patch(
+                "lsst.ts.MTMount.commands.CommandDict", new_command_dict
+            ):
+                await self.run_command(
+                    unsupported_command,
+                    final_reply_code=MTMount.ReplyCode.CMD_REJECTED,
+                    use_read_loop=use_read_loop,
+                )
 
     async def next_telemetry(self, topic_id, timeout=STD_TIMEOUT):
         """Wait for a new instance of the specified telemetry topic."""

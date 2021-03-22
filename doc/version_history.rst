@@ -6,6 +6,28 @@
 Version History
 ###############
 
+v0.16.0
+-------
+
+Changes:
+
+* `MTMountCsc`: improve camera cable wrap following startup and shutdown,
+  including more reliably stopping the axis.
+* `MTMountCsc`: bug fix: it was using the wrong telemetry port in normal mode (not simulating).
+* Update unit tests to use `unittest.IsolatedAsyncioTestCase` instead of the abandoned ``asynctest`` package.
+* Update code to use the ``LINE_TERMINATOR`` constant.
+* Modernize the documentation: add a User Guide section to the main documentation page
+  and move the developer information to a separate Developer Guide.
+* Modernize doc/conf.py for documenteer 0.6.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.2
+
 v0.15.0
 -------
 

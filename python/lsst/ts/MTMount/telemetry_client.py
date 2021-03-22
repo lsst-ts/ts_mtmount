@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -95,6 +95,7 @@ class TelemetryClient:
         self.log = self.controller.log.getChild("TelemetryClient")
 
         self.connection_timeout = connection_timeout
+        # dict of low-level controller topic ID: TelemetryTopicHandler
         self.topic_handlers = {
             topic_id: TelemetryTopicHandler(
                 topic=getattr(self.controller, f"tel_{sal_topic_name}"),
@@ -211,7 +212,7 @@ class TelemetryClient:
         """
         while True:
             try:
-                data = await self.reader.readuntil(b"\r\n")
+                data = await self.reader.readuntil(constants.LINE_TERMINATOR)
             except asyncio.CancelledError:
                 return
             except (ConnectionResetError, asyncio.IncompleteReadError):

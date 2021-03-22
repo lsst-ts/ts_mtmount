@@ -1,6 +1,6 @@
 # This file is part of ts_MTMount.
 #
-# Developed for Vera C. Rubin Observatory Telescope and Site Systems.
+# Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -472,7 +472,9 @@ class Controller:
         self.log.debug("Read loop begins")
         try:
             while self.command_server.connected:
-                read_bytes = await self.command_server.reader.readuntil(b"\r\n")
+                read_bytes = await self.command_server.reader.readuntil(
+                    constants.LINE_TERMINATOR
+                )
                 try:
                     command = commands.parse_command(read_bytes.decode())
                 except Exception as e:
