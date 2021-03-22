@@ -1,9 +1,9 @@
 .. py:currentmodule:: lsst.ts.MTMount
 
-.. _lsst.ts.MTMount-tekniker_info:
+.. _lsst.ts.MTMount-tma_interface:
 
-Interactions with Tekniker's software
-=====================================
+Interface with the Telescope Mount Assembly
+===========================================
 
 Acronyms
 --------
