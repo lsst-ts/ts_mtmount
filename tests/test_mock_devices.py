@@ -312,6 +312,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             "power",
             "stop",
             "track",
+            "reset_alarm",
         ]
         if is_elaz:
             short_command_names.append("home")
@@ -346,6 +347,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         power_off_command = command_classes["power"](on=False)
         power_on_command = command_classes["power"](on=True)
         stop_command = command_classes["stop"]()
+        reset_alarm_command = command_classes["reset_alarm"]()
+        move_command_class = command_classes["move"]
+        track_command_class = command_classes["track"]
 
         # drive_reset fails if off
         self.assertFalse(device.power_on)
@@ -376,8 +380,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             enable_tracking_on_command,
             stop_command,
             home_command,
-            command_classes["move"](position=device.actuator.min_position + 1),
-            command_classes["track"](
+            move_command_class(position=device.actuator.min_position + 1),
+            track_command_class(
                 position=device.actuator.min_position + 1,
                 velocity=0,
                 tai=salobj.current_tai(),
@@ -411,7 +415,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(start_segment.velocity, 0)
         start_position = start_segment.position
         end_position = start_position + 2
-        move_command = command_classes["move"](position=end_position)
+        move_command = move_command_class(position=end_position)
         task = asyncio.create_task(self.run_command(move_command, min_timeout=0.5))
 
         await asyncio.sleep(0.1)  # give command time to start
@@ -434,7 +438,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         else:
             start_position = start_segment.position
             end_position = start_position + 10
-            slow_move_command = command_classes["move"](position=end_position)
+            slow_move_command = move_command_class(position=end_position)
         task = asyncio.create_task(
             self.run_command(
                 slow_move_command, min_timeout=0.5, should_be_superseded=True
@@ -450,7 +454,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.has_target)
 
         # The tracking command should fail when not in tracking mode.
-        track_command = command_classes["track"](
+        track_command = track_command_class(
             position=device.actuator.min_position + 1,
             velocity=0,
             tai=salobj.current_tai(),
@@ -493,7 +497,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             dt = tai - tai0
             velocity = 0.1 + 0.001 * i
             position = position0 + velocity * dt
-            track_command = command_classes["track"](
+            track_command = track_command_class(
                 position=position, velocity=velocity, tai=tai,
             )
             await self.run_command(track_command)
@@ -502,6 +506,35 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertAlmostEqual(device.actuator.target.tai, tai, delta=1e-5)
             self.assertTrue(device.has_target)
             await asyncio.sleep(0.1)
+
+        # Wait for tracking to time out; add some time to deal with
+        # clock errors in macOS Docker.
+        await asyncio.sleep(MTMount.mock.MAX_TRACKING_DELAY + 0.2)
+        self.assertTrue(device.alarm_on)
+        self.assertFalse(device.power_on)
+        self.assertFalse(device.enabled)
+        self.assertFalse(device.tracking_enabled)
+        self.assertFalse(device.tracking_paused)
+        self.assertFalse(device.has_target)
+
+        # Re-enable tracking and supply one tracking update
+        await self.run_command(reset_alarm_command)
+        await self.run_command(power_on_command)
+        await self.run_command(enable_tracking_on_command)
+        self.assertTrue(device.power_on)
+        self.assertTrue(device.enabled)
+        self.assertTrue(device.tracking_enabled)
+        self.assertFalse(device.tracking_paused)
+        self.assertFalse(device.has_target)
+
+        await self.run_command(
+            track_command_class(
+                position=device.actuator.path[-1].position,
+                velocity=0,
+                tai=salobj.current_tai(),
+            )
+        )
+        self.assertTrue(device.has_target)
 
         # If camera cable wrap, pause tracking and check state
         if not is_elaz:
@@ -521,7 +554,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(device.tracking_paused)
             self.assertFalse(device.has_target)
 
-        # Check that stop disable tracking (after r
+        # Check that stop disables tracking
         await self.run_command(stop_command)
         self.assertTrue(device.power_on)
         self.assertTrue(device.enabled)

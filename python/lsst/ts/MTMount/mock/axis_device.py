@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["AxisDevice"]
+__all__ = ["MAX_TRACKING_DELAY", "AxisDevice"]
 
 import asyncio
 
@@ -29,6 +29,12 @@ from .. import enums
 from .. import limits
 from ..exceptions import CommandSupersededException
 from .base_device import BaseDevice
+
+
+# Maximum time (seconds) after the end time of one track command
+# before another must arrive. In other words, the maximum amount
+# of time the axis is willing to extrapolate a track command.
+MAX_TRACKING_DELAY = 1
 
 
 class AxisDevice(BaseDevice):
@@ -79,6 +85,8 @@ class AxisDevice(BaseDevice):
         self._monitor_move_task.set_result(None)
         self._move_result_task = asyncio.Future()
         self._move_result_task.set_result(None)
+        self._tracking_timeout_task = asyncio.Future()
+        self._tracking_timeout_task.set_result(None)
         super().__init__(controller=controller, device_id=device_id)
 
     @property
@@ -111,6 +119,7 @@ class AxisDevice(BaseDevice):
         await super().close()
         self._monitor_move_task.cancel()
         self._move_result_task.cancel()
+        self._tracking_timeout_task.cancel()
 
     def monitor_move_command(self, command):
         """Return a task that is set done when the move is done.
@@ -150,20 +159,12 @@ class AxisDevice(BaseDevice):
             )
         self._monitor_move_task.cancel()
 
-    def abort(self):
-        self.actuator.abort()
-        self.actuator.stop()
-        self.has_target = False
-
     def do_drive_enable(self, command):
         """Enable or disable the drive.
 
         Abort motion and disable tracking.
         """
-        self.supersede_move_command(command)
-        self.abort()
-        self.tracking_enabled = False
-        self.tracking_paused = False
+        self._stop_motion(command=command, gently=False)
         self.enabled = command.on
 
     def do_drive_reset(self, command):
@@ -174,10 +175,7 @@ class AxisDevice(BaseDevice):
         Abort motion, disable tracking, disable the drive.
         """
         self.assert_on()
-        self.supersede_move_command(command)
-        self.abort()
-        self.tracking_enabled = False
-        self.tracking_paused = False
+        self._stop_motion(command=command, gently=False)
         self.enabled = False
 
     def do_enable_tracking(self, command):
@@ -204,8 +202,8 @@ class AxisDevice(BaseDevice):
                 raise RuntimeError(
                     "Tracking cannot be paused because tracking is not enabled"
                 )
+            self._tracking_timeout_task.cancel()
             self.tracking_paused = True
-            self.actuator.stop()
 
     def do_home(self, command):
         """Home the actuator.
@@ -237,10 +235,10 @@ class AxisDevice(BaseDevice):
         raise NotImplementedError("Not implemented")
 
     def do_power(self, command):
-        if not command.on:
-            self.supersede_move_command(command)
-            self.tracking_enabled = False
-            self.actuator.stop()
+        if command.on == self.power_on and self.enabled == self.power_on:
+            # Nothing to do; don't stop existing motion
+            return
+        self._stop_motion(command=command, gently=False)
         super().do_power(command)
         self.enabled = command.on
 
@@ -248,13 +246,7 @@ class AxisDevice(BaseDevice):
         """Stop the actuator.
         """
         self.assert_enabled()
-        self.supersede_move_command(command)
-        self.tracking_enabled = False
-        self.actuator.stop()
-        # I am not sure if this should clear the target.
-        # It depends what the real controller reports for the "in position"
-        # event when an axis is stopped.
-        self.has_target = False
+        self._stop_motion(command=command, gently=True)
 
     def do_track(self, command):
         """Specify a tracking target position, velocity, and time.
@@ -265,7 +257,9 @@ class AxisDevice(BaseDevice):
         self.assert_tracking_enabled(True)
         self.supersede_move_command(command)
         if self.tracking_paused:
+            self._tracking_timeout_task.cancel()
             return
+        self.start_tracking_timer(command)
         self.actuator.set_target(
             tai=command.tai, position=command.position, velocity=command.velocity
         )
@@ -297,3 +291,52 @@ class AxisDevice(BaseDevice):
         timeout = self.end_tai - tai
         task = self.monitor_move_command(command)
         return timeout, task
+
+    def start_tracking_timer(self, command):
+        """Start or restart the tracking timer.
+
+        Call this whenever a tracking command is received
+        (if tracking is not paused).
+        """
+        self._tracking_timeout_task.cancel()
+        duration = MAX_TRACKING_DELAY + command.tai - salobj.current_tai()
+        if duration <= 0:
+            raise RuntimeError(f"track command too late by {-duration:0.2} seconds")
+        self._tracking_timeout_task = asyncio.create_task(
+            self._tracking_timer(duration)
+        )
+
+    async def _tracking_timer(self, duration):
+        """Wait for the specified duration (seconds) and kill tracking.
+
+        start_tracking_timer re-starts this for every track command
+        (while tracking is not paused).
+        """
+        await asyncio.sleep(duration)
+        self.log.error("Tracking timed out")
+        self.alarm_on = True
+        self.power_on = False
+        self.enabled = False
+        self._stop_motion(command=None, gently=False)
+
+    def _stop_motion(self, command, gently):
+        """Stop motion, if any, and clear tracking_x and has_target flags.
+
+        Parameters
+        ----------
+        command : `Command` or `None`
+            New command, if any.
+            Used to mark the existing motion command (if any) as superseded.
+        gently : `bool`
+            If True then stop motion gently, else abruptly.
+        """
+        self.has_target = False
+        self.tracking_enabled = False
+        self.tracking_paused = False
+        self._tracking_timeout_task.cancel()
+        if command is not None:
+            self.supersede_move_command(command)
+        if gently:
+            self.actuator.stop()
+        else:
+            self.actuator.abort()
