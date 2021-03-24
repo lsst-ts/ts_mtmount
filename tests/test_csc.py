@@ -453,12 +453,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # Use a short move to speed up the test,
             # but make the azimuth move significantly shorter
             # so it finishes first.
-            # Instead of waiting for the command to finish,
-            # check the intermediate state and obtain the expected duration,
-            # then wait for the command to finish.
+            # Check that the command outputs the target event
+            # before it finishes.
             target_azimuth = azimuth_pvt.position + 1
             target_elevation = elevation_pvt.position + 2
-            estimated_move_time = 2  # seconds
             print(
                 f"start test_moveToTarget(azimuth={target_azimuth:0.2f}, "
                 f"elevation={target_elevation:0.2f})"
@@ -467,10 +465,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 self.remote.cmd_moveToTarget.set_start(
                     azimuth=target_azimuth,
                     elevation=target_elevation,
-                    timeout=estimated_move_time + STD_TIMEOUT,
+                    timeout=STD_TIMEOUT,
                 )
             )
-            await asyncio.sleep(0.1)  # Give the command a chance to start
+            data = await self.remote.evt_target.next(flush=False, timeout=STD_TIMEOUT)
+            self.assertAlmostEqual(data.elevation, target_elevation)
+            self.assertAlmostEqual(data.azimuth, target_azimuth)
+            self.assertFalse(task.done())
+
             # Print move duration; the elevation move will take longer
             duration = mock_elevation.end_tai - salobj.current_tai()
             print(f"axis move duration={duration:0.2f} sec")

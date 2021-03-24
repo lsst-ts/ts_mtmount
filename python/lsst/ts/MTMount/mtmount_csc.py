@@ -61,6 +61,15 @@ TELEMETRY_START_TIMEOUT = 30
 # for check setpoint"; on 2020-02-01 the value was 5 seconds.
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
+# Maximum time (seconds) to fully deploy or retract the mirror covers,
+# including dealing with the mirror cover locks.
+# 60 is the maximum allowed by our requirements,
+# so it is not necessarily accurate.
+# If Tekniker provides a single command to handle the mirror covers
+# then this will no longer be necessary; we can use the timeout provided
+# by the low-level controller, which is likely to be more accurate.
+MIRROR_COVER_TIMEOUT = 60
+
 
 class MTMountCsc(salobj.ConfigurableCsc):
     """MTMount CSC
@@ -493,6 +502,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Terminate the telemetry subprocess")
             self.telemetry_client_process.terminate()
             await self.telemetry_client_process.wait()
+            self.log.info("Telemetry subprocess terminated")
 
     async def enable_devices(self):
         self.log.info("Enable devices")
@@ -571,7 +581,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             await self.disconnect()
 
-    async def send_command(self, command, do_lock=True):
+    async def send_command(self, command, do_lock=True, wait_done=True):
         """Send a command to the operation manager and wait for it to finish.
 
         Parameters
@@ -579,9 +589,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
         command : `Command`
             Command to send.
         do_lock : `bool`, optional
-            Lock the port while using it?
+            Lock the port while this method runs?
             Specify False for emergency commands
             or if being called by send_commands.
+        wait_done : `bool`, optional
+            Wait for the command to finish?
+            If False then only wait for the command to be acknowledged;
+            if ``do_lock`` true then release the lock when acknowledged.
+            Note that a few commands are done when acknowledged;
+            this argument has no effect for those.
 
         Returns
         -------
@@ -591,22 +607,29 @@ class MTMountCsc(salobj.ConfigurableCsc):
         try:
             if do_lock:
                 async with self.command_lock:
-                    return await self._basic_send_command(command=command)
+                    return await self._basic_send_command(
+                        command=command, wait_done=wait_done
+                    )
             else:
-                return await self._basic_send_command(command=command)
+                return await self._basic_send_command(
+                    command=command, wait_done=wait_done
+                )
         except ConnectionResetError:
             raise
         except Exception as e:
             self.log.exception(f"Failed to send command {command}: {e!r}")
             raise
 
-    async def _basic_send_command(self, command):
+    async def _basic_send_command(self, command, wait_done=True):
         """Implementation of send_command. Ignores the command lock.
 
         Parameters
         ----------
         command : `Command`
             Command to send.
+        wait_done : `bool`, optional
+            Wait for the command to finish?
+            If False then only wait for the command to be acknowledged.
 
         Returns
         -------
@@ -627,7 +650,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if timeout < 0:
             # This command only receives an Ack; mark it done.
             futures.done.set_result(None)
-        elif not futures.done.done():
+        elif not futures.done.done() and wait_done:
             try:
                 await asyncio.wait_for(futures.done, timeout=timeout + TIMEOUT_BUFFER)
             except asyncio.TimeoutError:
@@ -952,6 +975,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_closeMirrorCovers(self, data):
         self.assert_enabled()
+        self.cmd_openMirrorCovers.ack_in_progress(
+            data=data, timeout=MIRROR_COVER_TIMEOUT
+        )
         # Deploy the mirror cover locks/guides.
         await self.send_commands(
             commands.MirrorCoverLocksPower(on=True),
@@ -967,6 +993,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_openMirrorCovers(self, data):
         self.assert_enabled()
+        self.cmd_openMirrorCovers.ack_in_progress(
+            data=data, timeout=MIRROR_COVER_TIMEOUT
+        )
         # Retract the mirror covers.
         await self.send_commands(
             commands.MirrorCoversPower(on=True),
@@ -1009,9 +1038,23 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_moveToTarget(self, data):
         self.assert_enabled()
-        await self.send_command(
+        cmd_futures = await self.send_command(
             commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
         )
+        timeout = cmd_futures.timeout + TIMEOUT_BUFFER
+        self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
+        self.evt_target.set_put(
+            azimuth=data.azimuth,
+            elevation=data.elevation,
+            azimuthVelocity=0,
+            elevationVelocity=0,
+            taiTime=salobj.current_tai(),
+            trackId=0,
+            tracksys="LOCAL",
+            radesys="",
+            force_output=True,
+        )
+        await cmd_futures.done
 
     async def do_trackTarget(self, data):
         self.assert_enabled()
