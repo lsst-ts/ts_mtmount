@@ -160,7 +160,7 @@ class TelemetryClient:
     async def start(self):
         """Connect to the telemetry port and start the read loop.
         """
-        self.log.debug("start")
+        self.log.debug("connecting")
         if self.connected:
             raise RuntimeError("Already connected")
         try:
@@ -168,7 +168,6 @@ class TelemetryClient:
             self.reader, self.writer = await asyncio.wait_for(
                 connect_coro, timeout=self.connection_timeout
             )
-            self.log.debug("connected")
         except Exception as e:
             err_msg = f"Could not open connection to host={self.host}, port={self.port}"
             self.log.exception(err_msg)
@@ -176,11 +175,12 @@ class TelemetryClient:
             return
 
         self.read_task = asyncio.create_task(self.read_loop())
+        self.log.info("running")
 
     async def close(self):
         """Disconnect from the TCP/IP controller.
         """
-        self.log.debug("disconnect")
+        self.log.info("disconnecting")
         self.start_task.cancel()
         self.read_task.cancel()
         await self.controller.close()
@@ -195,6 +195,7 @@ class TelemetryClient:
                 self.log.warning(
                     "Timed out waiting for the writer to close; continuing"
                 )
+        self.log.info("done")
         self.done_task.set_result(None)
 
     def get_preprocessor(self, sal_topic_name):
