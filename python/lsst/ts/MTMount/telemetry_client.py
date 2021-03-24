@@ -29,6 +29,7 @@ import asyncio
 import json
 import logging
 import math
+import signal
 
 from lsst.ts import salobj
 from . import constants
@@ -113,6 +114,10 @@ class TelemetryClient:
         self.read_task = asyncio.Future()
         self.done_task = asyncio.Future()
 
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self.signal_handler)
+
     @property
     def connected(self):
         if None in (self.reader, self.writer):
@@ -177,6 +182,20 @@ class TelemetryClient:
         self.read_task = asyncio.create_task(self.read_loop())
         self.log.info("running")
 
+    def signal_handler(self):
+        self.log.info("signal_handler")
+        self.start_task.cancel()
+        self.read_task.cancel()
+        self.controller.salinfo.basic_close()
+        self.controller.salinfo.domain.basic_close()
+        writer = self.writer
+        self.reader = None
+        self.writer = None
+        if writer:
+            writer.close()
+        if not self.done_task.done():
+            self.done_task.set_result(None)
+
     async def close(self):
         """Disconnect from the TCP/IP controller.
         """
@@ -196,7 +215,8 @@ class TelemetryClient:
                     "Timed out waiting for the writer to close; continuing"
                 )
         self.log.info("done")
-        self.done_task.set_result(None)
+        if not self.done_task.done():
+            self.done_task.set_result(None)
 
     def get_preprocessor(self, sal_topic_name):
         """Get the preprocessor for this topic, if it exists, else None.

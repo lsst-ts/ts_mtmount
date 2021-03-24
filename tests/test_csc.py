@@ -29,9 +29,13 @@ import unittest
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
-STD_TIMEOUT = 10  # standard command timeout (sec)
+STD_TIMEOUT = 60  # standard command timeout (sec)
 # timeout for opening or closing mirror covers (sec)
 MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
+
+# timeout for reading telemetry that should not appear (sec)
+NOTELEMETRY_TIMEOUT = 2
+
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
 logging.basicConfig()
@@ -498,6 +502,29 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 await self.assert_next_sample(
                     self.remote.evt_axesInPosition, azimuth=False, elevation=False,
                 )
+
+    async def test_telemetry_reconnection(self):
+        async with self.make_csc(initial_state=salobj.State.STANDBY):
+            await self.assert_next_summary_state(salobj.State.STANDBY)
+            with self.assertRaises(asyncio.TimeoutError):
+                await self.remote.tel_cameraCableWrap.next(
+                    flush=True, timeout=NOTELEMETRY_TIMEOUT
+                )
+
+            await self.remote.cmd_start.start(timeout=STD_TIMEOUT)
+            await self.assert_next_summary_state(salobj.State.DISABLED)
+            await self.remote.tel_cameraCableWrap.next(flush=True, timeout=STD_TIMEOUT)
+
+            await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
+            await self.assert_next_summary_state(salobj.State.STANDBY)
+            with self.assertRaises(asyncio.TimeoutError):
+                await self.remote.tel_cameraCableWrap.next(
+                    flush=True, timeout=NOTELEMETRY_TIMEOUT
+                )
+
+            await self.remote.cmd_start.start(timeout=STD_TIMEOUT)
+            await self.assert_next_summary_state(salobj.State.DISABLED)
+            await self.remote.tel_cameraCableWrap.next(flush=True, timeout=STD_TIMEOUT)
 
     async def test_tracking(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
