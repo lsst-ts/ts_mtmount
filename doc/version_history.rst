@@ -6,6 +6,31 @@
 Version History
 ###############
 
+v0.17.0
+-------
+
+Changes:
+
+* Fix two bugs that prevented the CSC from outputting telemetry after going to standby and back to disabled state:
+
+    * `MTMountCsc`: the CSC was not reliably shutting down the telemetry client.
+    * `mock.Controller`: the mock simulator was not reliably stopping and restarting the telemetry loop.
+      This was due a bug in `lsst.ts.hexrotcomm.OneClientServer` (fixed in v0.17.0),
+      but I added simple workaround in the mock controller for that kind of error.
+* `mock.AxisDevice`: implement realistic handling of late tracking commands.
+* `MtMountCsc`: improve handling of several commands:
+
+    * moveToTarget: output the ``target`` event and return an IN_PROGRESS ack with a realistic timeout.
+    * open/closeMirrorCovers: return an IN_PROGRESS ack with an upper limit timeout.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.2
+
 v0.16.0
 -------
 
