@@ -326,6 +326,10 @@ class Controller:
         except Exception:
             self.log.exception("Telemetry monitoring read failed")
             await self.telemetry_server.close_client()
+        finally:
+            # Make sure telemetry stops, even if telemetry_connect_callback
+            # is not called.
+            self.telemetry_loop_task.cancel()
         self.log.debug("Telemetry monitor read ends")
 
     def add_all_devices(self):

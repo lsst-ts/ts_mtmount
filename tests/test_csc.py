@@ -29,9 +29,13 @@ import unittest
 from lsst.ts import salobj
 from lsst.ts import MTMount
 
-STD_TIMEOUT = 10  # standard command timeout (sec)
+STD_TIMEOUT = 60  # standard command timeout (sec)
 # timeout for opening or closing mirror covers (sec)
 MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
+
+# timeout for reading telemetry that should not appear (sec)
+NOTELEMETRY_TIMEOUT = 2
+
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
 logging.basicConfig()
@@ -449,12 +453,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # Use a short move to speed up the test,
             # but make the azimuth move significantly shorter
             # so it finishes first.
-            # Instead of waiting for the command to finish,
-            # check the intermediate state and obtain the expected duration,
-            # then wait for the command to finish.
+            # Check that the command outputs the target event
+            # before it finishes.
             target_azimuth = azimuth_pvt.position + 1
             target_elevation = elevation_pvt.position + 2
-            estimated_move_time = 2  # seconds
             print(
                 f"start test_moveToTarget(azimuth={target_azimuth:0.2f}, "
                 f"elevation={target_elevation:0.2f})"
@@ -463,10 +465,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 self.remote.cmd_moveToTarget.set_start(
                     azimuth=target_azimuth,
                     elevation=target_elevation,
-                    timeout=estimated_move_time + STD_TIMEOUT,
+                    timeout=STD_TIMEOUT,
                 )
             )
-            await asyncio.sleep(0.1)  # Give the command a chance to start
+            data = await self.remote.evt_target.next(flush=False, timeout=STD_TIMEOUT)
+            self.assertAlmostEqual(data.elevation, target_elevation)
+            self.assertAlmostEqual(data.azimuth, target_azimuth)
+            self.assertFalse(task.done())
+
             # Print move duration; the elevation move will take longer
             duration = mock_elevation.end_tai - salobj.current_tai()
             print(f"axis move duration={duration:0.2f} sec")
@@ -498,6 +504,29 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 await self.assert_next_sample(
                     self.remote.evt_axesInPosition, azimuth=False, elevation=False,
                 )
+
+    async def test_telemetry_reconnection(self):
+        async with self.make_csc(initial_state=salobj.State.STANDBY):
+            await self.assert_next_summary_state(salobj.State.STANDBY)
+            with self.assertRaises(asyncio.TimeoutError):
+                await self.remote.tel_cameraCableWrap.next(
+                    flush=True, timeout=NOTELEMETRY_TIMEOUT
+                )
+
+            await self.remote.cmd_start.start(timeout=STD_TIMEOUT)
+            await self.assert_next_summary_state(salobj.State.DISABLED)
+            await self.remote.tel_cameraCableWrap.next(flush=True, timeout=STD_TIMEOUT)
+
+            await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
+            await self.assert_next_summary_state(salobj.State.STANDBY)
+            with self.assertRaises(asyncio.TimeoutError):
+                await self.remote.tel_cameraCableWrap.next(
+                    flush=True, timeout=NOTELEMETRY_TIMEOUT
+                )
+
+            await self.remote.cmd_start.start(timeout=STD_TIMEOUT)
+            await self.assert_next_summary_state(salobj.State.DISABLED)
+            await self.remote.tel_cameraCableWrap.next(flush=True, timeout=STD_TIMEOUT)
 
     async def test_tracking(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
