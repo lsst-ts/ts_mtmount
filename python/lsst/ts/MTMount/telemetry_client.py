@@ -29,6 +29,7 @@ import asyncio
 import json
 import logging
 import math
+import signal
 
 from lsst.ts import salobj
 from . import constants
@@ -113,6 +114,10 @@ class TelemetryClient:
         self.read_task = asyncio.Future()
         self.done_task = asyncio.Future()
 
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self.signal_handler)
+
     @property
     def connected(self):
         if None in (self.reader, self.writer):
@@ -160,7 +165,7 @@ class TelemetryClient:
     async def start(self):
         """Connect to the telemetry port and start the read loop.
         """
-        self.log.debug("start")
+        self.log.debug("connecting")
         if self.connected:
             raise RuntimeError("Already connected")
         try:
@@ -168,7 +173,6 @@ class TelemetryClient:
             self.reader, self.writer = await asyncio.wait_for(
                 connect_coro, timeout=self.connection_timeout
             )
-            self.log.debug("connected")
         except Exception as e:
             err_msg = f"Could not open connection to host={self.host}, port={self.port}"
             self.log.exception(err_msg)
@@ -176,11 +180,26 @@ class TelemetryClient:
             return
 
         self.read_task = asyncio.create_task(self.read_loop())
+        self.log.info("running")
+
+    def signal_handler(self):
+        self.log.info("signal_handler")
+        self.start_task.cancel()
+        self.read_task.cancel()
+        self.controller.salinfo.basic_close()
+        self.controller.salinfo.domain.basic_close()
+        writer = self.writer
+        self.reader = None
+        self.writer = None
+        if writer:
+            writer.close()
+        if not self.done_task.done():
+            self.done_task.set_result(None)
 
     async def close(self):
         """Disconnect from the TCP/IP controller.
         """
-        self.log.debug("disconnect")
+        self.log.info("disconnecting")
         self.start_task.cancel()
         self.read_task.cancel()
         await self.controller.close()
@@ -195,7 +214,9 @@ class TelemetryClient:
                 self.log.warning(
                     "Timed out waiting for the writer to close; continuing"
                 )
-        self.done_task.set_result(None)
+        self.log.info("done")
+        if not self.done_task.done():
+            self.done_task.set_result(None)
 
     def get_preprocessor(self, sal_topic_name):
         """Get the preprocessor for this topic, if it exists, else None.
