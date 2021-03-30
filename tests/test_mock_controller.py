@@ -112,8 +112,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             await self.controller.close()
 
     async def read_one_reply(self, timeout=STD_TIMEOUT):
-        """Read, parse, and return one reply from the mock controller.
-        """
+        """Read, parse, and return one reply from the mock controller."""
         read_bytes = await asyncio.wait_for(
             self.command_reader.readuntil(MTMount.LINE_TERMINATOR), timeout=timeout
         )
@@ -558,8 +557,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertGreater(ccw_telem["timestamp"], tai0)
 
     async def test_tracking(self):
-        """Test the <axis>AxisTrack command and InPosition replies.
-        """
+        """Test the <axis>AxisTrack command and InPosition replies."""
         async with self.make_controller():
             replies = await asyncio.wait_for(
                 self.read_replies(
@@ -595,7 +593,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 if tai <= previous_tai:
                     tai = previous_tai + 0.001
                 track_command = MTMount.commands.AzimuthAxisTrack(
-                    position=end_position, velocity=0, tai=tai,
+                    position=end_position,
+                    velocity=0,
+                    tai=tai,
                 )
                 non_cmd_replies = await self.run_command(
                     track_command,
@@ -633,8 +633,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(reply["parameters"]["axis"], 0)
 
     async def test_move(self):
-        """Test the <axis>AxisMove command and InPosition replies.
-        """
+        """Test the <axis>AxisMove command and InPosition replies."""
         async with self.make_controller():
             replies = await asyncio.wait_for(
                 self.read_replies(

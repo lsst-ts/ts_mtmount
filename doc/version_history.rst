@@ -6,6 +6,21 @@
 Version History
 ###############
 
+v0.17.1
+-------
+
+Changes:
+
+* Format the code with black 20.8b1.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_hexrotcomm 0.9
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.2
+
 v0.17.0
 -------
 

@@ -59,8 +59,7 @@ class OilSupplySystemDevice(BaseDevice):
 
     @property
     def power_on(self):
-        """Return True if all three subsystems are powered on.
-        """
+        """Return True if all three subsystems are powered on."""
         return self.cooling_on and self.main_pump_on and self.oil_on
 
     @power_on.setter
