@@ -120,8 +120,7 @@ class Command(base_message.BaseMessage):
 
 
 def make_command_doc(cls):
-    """Make and attach a doc string to a command class.
-    """
+    """Make and attach a doc string to a command class."""
     param_strings = []
     for finfo in cls.field_infos:
         param_doc = utils.wrap_parameter_doc(finfo.doc)
@@ -169,7 +168,8 @@ _TrackingParameters = (
     field_info.FloatFieldInfo(name="position", doc="Target position (deg) at tai"),
     field_info.FloatFieldInfo(name="velocity", doc="Target velocity (deg/sec) at tai"),
     field_info.FloatFieldInfo(
-        name="tai", doc="Target TAI time for position and velocity (unix seconds)",
+        name="tai",
+        doc="Target TAI time for position and velocity (unix seconds)",
     ),
 )
 
@@ -333,10 +333,12 @@ class BothAxesTrack(Command):
                 name="elevation", doc="Target elevation at tai (deg)"
             ),
             field_info.FloatFieldInfo(
-                name="azimuth_velocity", doc="Target azimuth velocity at tai (deg)",
+                name="azimuth_velocity",
+                doc="Target azimuth velocity at tai (deg)",
             ),
             field_info.FloatFieldInfo(
-                name="elevation_velocity", doc="Target elevation velocity at tai (deg)",
+                name="elevation_velocity",
+                doc="Target elevation velocity at tai (deg)",
             ),
             field_info.IntFieldInfo(
                 name="negate_azimuth",
@@ -610,25 +612,29 @@ class MirrorCoversStop(Command):
 
 class OilSupplySystemPower(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER, _OnOffParameters,
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER,
+        _OnOffParameters,
     )
 
 
 class OilSupplySystemPowerCooling(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_COOLING, _OnOffParameters,
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_COOLING,
+        _OnOffParameters,
     )
 
 
 class OilSupplySystemPowerMainPump(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_MAIN_PUMP, _OnOffParameters,
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_MAIN_PUMP,
+        _OnOffParameters,
     )
 
 
 class OilSupplySystemPowerOil(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_OIL, _OnOffParameters,
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_OIL,
+        _OnOffParameters,
     )
 
 
@@ -652,7 +658,8 @@ class SafetyReset(Command):
 
 class TopEndChillerPower(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.TOP_END_CHILLER_POWER, _OnOffParameters,
+        enums.CommandCode.TOP_END_CHILLER_POWER,
+        _OnOffParameters,
     )
 
 

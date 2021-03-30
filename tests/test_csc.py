@@ -93,7 +93,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         """
         if simulation_mode != 0 and not internal_mock_controller:
             self.mock_controller = MTMount.mock.Controller(
-                log=logging.getLogger(), random_ports=True,
+                log=logging.getLogger(),
+                random_ports=True,
             )
             self.addAsyncCleanup(self.mock_controller.close)
             await self.mock_controller.start_task
@@ -109,7 +110,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
     async def test_bin_script(self):
         await self.check_bin_script(
-            name="MTMount", index=None, exe_name="run_mtmount.py",
+            name="MTMount",
+            index=None,
+            exe_name="run_mtmount.py",
         )
 
     def test_class_attributes(self):
@@ -214,8 +217,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         tracksys="sidereal",
         radesys="ICRS",
     ):
-        """Make keyword argumetns for the trackTarget command.
-        """
+        """Make keyword argumetns for the trackTarget command."""
         if taiTime is None:
             taiTime = salobj.current_tai()
         return dict(
@@ -230,8 +232,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         )
 
     async def next_lowlevel_command(self, timeout=STD_TIMEOUT):
-        """Get the next low level command.
-        """
+        """Get the next low level command."""
         return await asyncio.wait_for(
             self.mock_controller.command_queue.get(), timeout=timeout
         )
@@ -328,7 +329,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 )
                 command = await self.next_lowlevel_command()
                 self.assertEqual(
-                    command.command_code, MTMount.CommandCode.CAMERA_CABLE_WRAP_STOP,
+                    command.command_code,
+                    MTMount.CommandCode.CAMERA_CABLE_WRAP_STOP,
                 )
                 self.assertTrue(ccw_device.enabled)
                 self.assertFalse(ccw_device.tracking_enabled)
@@ -477,10 +479,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             duration = mock_elevation.end_tai - salobj.current_tai()
             print(f"axis move duration={duration:0.2f} sec")
             await self.assert_next_sample(
-                self.remote.evt_axesInPosition, azimuth=True, elevation=False,
+                self.remote.evt_axesInPosition,
+                azimuth=True,
+                elevation=False,
             )
             await self.assert_next_sample(
-                self.remote.evt_axesInPosition, azimuth=True, elevation=True,
+                self.remote.evt_axesInPosition,
+                azimuth=True,
+                elevation=True,
             )
             await task
             tai = salobj.current_tai()
@@ -498,11 +504,15 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
             try:
                 await self.assert_next_sample(
-                    self.remote.evt_axesInPosition, azimuth=False, elevation=False,
+                    self.remote.evt_axesInPosition,
+                    azimuth=False,
+                    elevation=False,
                 )
             except AssertionError:
                 await self.assert_next_sample(
-                    self.remote.evt_axesInPosition, azimuth=False, elevation=False,
+                    self.remote.evt_axesInPosition,
+                    azimuth=False,
+                    elevation=False,
                 )
 
     async def test_telemetry_reconnection(self):
@@ -549,7 +559,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             # Check that tracking is rejected if not enabled
             kwargs = self.make_track_target_kwargs(
-                azimuth=initial_azimuth, elevation=initial_elevation, taiTime=tai,
+                azimuth=initial_azimuth,
+                elevation=initial_elevation,
+                taiTime=tai,
             )
             with salobj.assertRaisesAckError(ack=salobj.SalRetCode.CMD_FAILED):
                 await self.remote.cmd_trackTarget.set_start(
@@ -609,14 +621,15 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.assertIn(False, (data.azimuth, data.elevation))
             if True in (data.azimuth, data.elevation):
                 await self.assert_next_sample(
-                    self.remote.evt_axesInPosition, azimuth=False, elevation=False,
+                    self.remote.evt_axesInPosition,
+                    azimuth=False,
+                    elevation=False,
                 )
 
     async def track_target_loop(
         self, azimuth, elevation, azimuth_velocity, elevation_velocity
     ):
-        """Provide a stream of trackTarget commands until cancelled.
-        """
+        """Provide a stream of trackTarget commands until cancelled."""
         # Slew and track until both axes are in position
         mock_azimuth = self.mock_controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
         mock_elevation = self.mock_controller.device_dict[

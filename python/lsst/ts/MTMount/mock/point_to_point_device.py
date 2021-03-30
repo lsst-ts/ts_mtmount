@@ -89,8 +89,7 @@ class PointToPointDevice(BaseDevice):
         super().__init__(controller=controller, device_id=device_id)
 
     def assert_drive_all(self, command):
-        """Assert that the drive argument is -1 (all drives).
-        """
+        """Assert that the drive argument is -1 (all drives)."""
         if command.drive != -1:
             raise RuntimeError(
                 f"drive={command.drive}; must be -1 (all actuators) for this mock"
@@ -121,8 +120,7 @@ class PointToPointDevice(BaseDevice):
         return self._move_result_task
 
     async def _monitor_move(self, command):
-        """Do most of the work for monitor_move_command.
-        """
+        """Do most of the work for monitor_move_command."""
         # Provide some slop for non-monotonic clocks, which are
         # sometimes seen when running Docker on macOS.
         await asyncio.sleep(self.actuator.remaining_time() + 0.2)
@@ -136,8 +134,7 @@ class PointToPointDevice(BaseDevice):
                 self._move_result_task.set_result(None)
 
     def supersede_move_command(self, command):
-        """Report the current move command (if any) as superseded.
-        """
+        """Report the current move command (if any) as superseded."""
         if not self._move_result_task.done():
             self._move_result_task.set_exception(
                 CommandSupersededException(command=command)
@@ -157,8 +154,7 @@ class PointToPointDevice(BaseDevice):
         return self.move(position=100, command=command)
 
     def do_stop(self, command):
-        """Stop the actuator.
-        """
+        """Stop the actuator."""
         self.supersede_move_command(command)
         self.actuator.stop()
 
