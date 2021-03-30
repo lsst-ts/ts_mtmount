@@ -498,7 +498,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             velocity = 0.1 + 0.001 * i
             position = position0 + velocity * dt
             track_command = track_command_class(
-                position=position, velocity=velocity, tai=tai,
+                position=position,
+                velocity=velocity,
+                tai=tai,
             )
             await self.run_command(track_command)
             self.assertAlmostEqual(device.actuator.target.position, position)
@@ -675,8 +677,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         power_on_min_timeout,
     ):
         def assert_at_end(at_min):
-            """Assert the device is its min or max position.
-            """
+            """Assert the device is its min or max position."""
             if at_min:
                 self.assertAlmostEqual(
                     device.actuator.position(), device.actuator.min_position
@@ -700,11 +701,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         # so the should_fail argument is not relevant.
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                command=goto_min_command, min_timeout=move_min_timeout,
+                command=goto_min_command,
+                min_timeout=move_min_timeout,
             )
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                command=goto_max_command, min_timeout=move_min_timeout,
+                command=goto_max_command,
+                min_timeout=move_min_timeout,
             )
 
         await self.run_command(

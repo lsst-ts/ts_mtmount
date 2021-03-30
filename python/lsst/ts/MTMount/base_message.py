@@ -125,8 +125,7 @@ class BaseMessage:
         return data_str.encode() + constants.LINE_TERMINATOR
 
     def str_fields(self):
-        """Return the data as a list of string fields.
-        """
+        """Return the data as a list of string fields."""
         str_list = [
             field.str_from_value(getattr(self, field.name))
             for field in self.field_infos

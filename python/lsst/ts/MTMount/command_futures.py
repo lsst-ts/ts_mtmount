@@ -82,8 +82,7 @@ class CommandFutures:
             self.done.set_exception(salobj.ExpectedError(explanation))
 
     def setdone(self):
-        """Report a command as done.
-        """
+        """Report a command as done."""
         if not self.ack.done():
             self.ack.set_result(0)
         if not self.done.done():

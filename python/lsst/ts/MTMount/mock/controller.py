@@ -51,10 +51,11 @@ INITIAL_POSITION = {
 
 
 def make_reply_dict(id, **parameters):
-    """Make a reply dict.
-    """
+    """Make a reply dict."""
     return dict(
-        id=enums.ReplyCode(id), timestamp=salobj.current_tai(), parameters=parameters,
+        id=enums.ReplyCode(id),
+        timestamp=salobj.current_tai(),
+        parameters=parameters,
     )
 
 
@@ -174,7 +175,10 @@ class Controller:
         log = logging.getLogger("TMASimulator")
         log.setLevel(namespace.loglevel)
         print("Mock TMA controller")
-        mock_controller = cls(random_ports=namespace.random_ports, log=log,)
+        mock_controller = cls(
+            random_ports=namespace.random_ports,
+            log=log,
+        )
         try:
             await mock_controller.start_task
             # Warning: this message is read by the CSC; if you change
@@ -549,10 +553,12 @@ class Controller:
 
     def do_both_axes_move(self, command):
         azimuth_command = commands.AzimuthAxisMove(
-            sequence_id=command.sequence_id, position=command.azimuth,
+            sequence_id=command.sequence_id,
+            position=command.azimuth,
         )
         elevation_command = commands.ElevationAxisMove(
-            sequence_id=command.sequence_id, position=command.elevation,
+            sequence_id=command.sequence_id,
+            position=command.elevation,
         )
         azimuth_time, azimuth_task = self.device_dict[
             enums.DeviceId.AZIMUTH_AXIS

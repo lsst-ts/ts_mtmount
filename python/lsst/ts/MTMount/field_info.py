@@ -95,8 +95,7 @@ class BaseFieldInfo(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
     def str_from_value(self, value):
-        """Return a string representation of the value.
-        """
+        """Return a string representation of the value."""
         return str(value)
 
 
@@ -280,12 +279,13 @@ class StrFieldInfo(BaseFieldInfo):
 
 
 class TimestampFieldInfo(FloatFieldInfo):
-    """Timestamp field (TAI, unix seconds).
-    """
+    """Timestamp field (TAI, unix seconds)."""
 
     def __init__(self):
         super().__init__(
-            name="timestamp", doc="Time at which the message was sent.", default=None,
+            name="timestamp",
+            doc="Time at which the message was sent.",
+            default=None,
         )
 
     @property
