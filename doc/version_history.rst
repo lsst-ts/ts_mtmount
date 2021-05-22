@@ -6,6 +6,22 @@
 Version History
 ###############
 
+v0.18.0
+-------
+
+Changes:
+
+* Update to use ts_tcpip instead of ts_hexrotcomm.
+* Test black formatting with pytest, instead of tests/test_black.py.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.2
+
 v0.17.1
 -------
 
