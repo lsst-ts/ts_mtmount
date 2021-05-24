@@ -28,7 +28,7 @@ import logging
 import signal
 
 from lsst.ts import salobj
-from lsst.ts import hexrotcomm
+from lsst.ts import tcpip
 from ..exceptions import CommandSupersededException
 from .. import commands
 from .. import constants
@@ -140,14 +140,14 @@ class Controller:
 
         command_port = 0 if random_ports else constants.CSC_COMMAND_PORT
         telemetry_port = 0 if random_ports else constants.TELEMETRY_PORT
-        self.command_server = hexrotcomm.OneClientServer(
+        self.command_server = tcpip.OneClientServer(
             name="MockControllerCommands",
             host=salobj.LOCAL_HOST,
             port=command_port,
             log=self.log,
             connect_callback=self.command_connect_callback,
         )
-        self.telemetry_server = hexrotcomm.OneClientServer(
+        self.telemetry_server = tcpip.OneClientServer(
             name="MockControllerTelemetry",
             host=salobj.LOCAL_HOST,
             port=telemetry_port,
