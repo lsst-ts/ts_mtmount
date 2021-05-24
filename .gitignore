@@ -5,6 +5,7 @@
 pytest_session.txt
 .scon*
 *.log
+.vscode
 __pycache__
 tests/.tests
 version.py
