@@ -27,6 +27,7 @@ import math
 import re
 import signal
 import subprocess
+import types
 
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import DriveState
@@ -846,14 +847,19 @@ class MTMountCsc(salobj.ConfigurableCsc):
             try:
                 read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
                 try:
-                    reply = json.loads(read_bytes)
-                    self.log.debug("Read %s", reply)
+                    reply_dict = json.loads(read_bytes)
+                    self.log.debug("Read %s", reply_dict)
+                    reply = types.SimpleNamespace(
+                        id=reply_dict["id"],
+                        timestamp=reply_dict["timestamp"],
+                        **reply_dict["parameters"],
+                    )
                 except Exception as e:
                     self.log.warning(f"Ignoring unparsable reply: {read_bytes}: {e!r}")
 
-                reply_id = reply["id"]
+                reply_id = reply.id
                 if reply_id in cmd_reply_codes:
-                    sequence_id = reply["parameters"]["sequenceId"]
+                    sequence_id = reply.sequenceId
                     if reply_id == enums.ReplyCode.CMD_ACKNOWLEDGED:
                         futures = self.command_dict.get(sequence_id, None)
                     else:
@@ -867,11 +873,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     if reply_id == enums.ReplyCode.CMD_ACKNOWLEDGED:
                         # Command acknowledged. Set timeout but leave
                         # futures in command_dict.
-                        futures.setack(reply["parameters"]["timeout"])
+                        futures.setack(reply.timeout)
                     elif reply_id in failed_reply_codes:
                         # Command failed (before or after being acknowledged).
                         # Pop the command_dict entry and report failure.
-                        futures.setnoack(reply["parameters"]["explanation"])
+                        futures.setnoack(reply.explanation)
                     elif reply_id == enums.ReplyCode.CMD_SUCCEEDED:
                         futures.setdone()
                     elif reply_id == enums.ReplyCode.CMD_SUPERSEDED:
@@ -880,22 +886,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
                 elif reply_id == enums.ReplyCode.WARNING:
                     self.evt_warning.set_put(
-                        code=reply["parameters"]["code"],
-                        active=reply["parameters"]["active"],
-                        text="\n".join(reply["parameters"]["description"]),
+                        code=reply.code,
+                        active=reply.active,
+                        text="\n".join(reply.description),
                         force_output=True,
                     )
                 elif reply_id == enums.ReplyCode.ERROR:
                     self.evt_error.set_put(
-                        code=reply["parameters"]["code"],
-                        latched=reply["parameters"]["on"],
-                        active=reply["parameters"]["active"],
-                        text="\n".join(reply["parameters"]["description"]),
+                        code=reply.code,
+                        latched=reply.on,
+                        active=reply.active,
+                        text="\n".join(reply.description),
                         force_output=True,
                     )
                 elif reply_id == enums.ReplyCode.IN_POSITION:
-                    axis = reply["parameters"]["axis"]
-                    in_position = reply["parameters"]["inPosition"]
+                    axis = reply.axis
+                    in_position = reply.inPosition
                     if axis == 0:
                         self.evt_axesInPosition.set_put(azimuth=in_position)
                     elif axis == 1:
