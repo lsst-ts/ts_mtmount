@@ -87,6 +87,19 @@ Commands have the following fields, in order:
 Replies
 ^^^^^^^
 
+All replies are in json format and have the following fields:
+
+* id (int): a ReplyId enum value.
+* timestamp (float): the time the message created or sent, as TAI unix.
+* parameters (dict): additional parameters which vary depending on the id.
+
+The vendor's documentation for replies ("events") is
+https://gitlab.tekniker.es/aut/projects/3151-LSST/LabVIEWCode/documentation/pxicontroller_documentation/-/blob/develop/02%20CommandsAndEventsManagement/03%20Events.md
+
+Some supplemental information:
+
+* motionState: the position field is the target position for point to point moves.
+
 Here are some sample replies:
 
 * CMD_ACKNOWLEDGED: {"id":1,"timestamp":3696497925.408238,"parameters":{"sequenceId":1500,"timeout":1.500000}}\r\n
@@ -95,14 +108,10 @@ Here are some sample replies:
 * CMD_FAILED: {"id":4,"timestamp":3696498419.879615,"parameters":{"sequenceId":1500,"explanation":"Failed explanation goes here."}}\r\n
 * CMD_SUPERSEDED: {"id":5,"timestamp":3696498425.299656,"parameters":{"sequenceId":1500,"supersedingSequenceId":1499, "supersedingCommander":2,"supersedingCommandCode":1201}}\r\n
 * WARNING: {"id":10,"timestamp":3696569120.755037,"parameters":{"name":"This is the warning name.","subsystemId":1400,"subsystemInstance":"LP","active":false,"code":1402,"description":"This is the warning description."}}\r\n
-* ERROR: {"id":11,"timestamp":3696569097.115004,"parameters":{"name":"This is the alarm name.","subsystemId":1400,"subsystemInstance":"LP","active":false,"latched":false,"code":1402,"description":"This is the alarm description."}}\r\n
+* ALARM: {"id":11,"timestamp":3696569097.115004,"parameters":{"name":"This is the alarm name.","subsystemId":1400,"subsystemInstance":"LP","active":false,"latched":false,"code":1402,"description":"This is the alarm description."}}\r\n
 * IN_POSITION: {"id":200,"timestamp":3696569018.128953,"parameters":{"axis":0,"inPosition":true}}\r\n
 
-All replies have the following fields:
-* id (int): a ReplyCode enum value.
-* timestamp (float): the time the message created or sent, as TAI unix.
-
-CMD_x replies also have the following parameters:
+CMD_x replies have the following parameters:
 
 * sequenceId (int): the incrementing value specified by the client, used to identify replies for a given command.
 * CMD_ACKNOWLEDGED: ``timeout`` (double), expected command duration (seconds).
@@ -112,12 +121,12 @@ CMD_x replies also have the following parameters:
 * CMD_SUPERSEDED: ``supersedingSequenceId`` (int), ``supersedingCommander`` (int), ``supersedingCommandCode`` (int):
   information about the superseding command, where ``supersedingCommander`` is a `SourceId` (e.g. HHD).
 
-WARNING and ERROR replies have the following parameters:
+WARNING and ALARM replies have the following parameters:
 
-* ERROR: latched (bool): has the error condition been seen?
-  When the error condition is first seen this field is set to true;
-  it remains true until the error is reset (which can only happen if the error condition is no longer active).
-* active (bool): is the error condition present?
+* ALARM: latched (bool): has the alarm condition been seen?
+  When the alarm condition is first seen this field is set to true;
+  it remains true until the alarm is reset (which can only happen if the alarm condition is no longer active).
+* active (bool): is the alarm condition present?
 * code (int): code number of event.
   The code numbers consist of a ``subsystemId`` plus a condition-specific value.
 * subsystemId (int): ID of subsystem, a `Source`
@@ -125,12 +134,6 @@ WARNING and ERROR replies have the following parameters:
   Here are three examples provided by Alberto: "Azimuth", "Trajectory generator", "MyTopVI/MyNextVI/MyNextNextVI".
 * timestamp (float): time of message, TAI unix seconds
 * description (str): description of the problem.
-
-STATE_INFO replies report internal state details.
-It is not likely the CSC will need to pay attention to them, but it should probably log them at debug level.
-I am not sure if this list of parameters is correct:
-
-* description (str): description of the state.
 
 IN_POSITION replies indicate if the Azimuth or Elevation axes are in position.
 Parameters:
