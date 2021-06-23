@@ -24,11 +24,17 @@ import contextlib
 import json
 import logging
 import time
+import types
 import unittest
 import unittest.mock
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
+from lsst.ts.idl.enums.MTMount import (
+    AxisMotionState,
+    DeployableMotionState,
+    ElevationLockingPinMotionState,
+)
 
 START_TIMEOUT = 20  # Time for startup (sec)
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
@@ -111,6 +117,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 print("Timed out waiting for the command writer to close; continuing")
             await self.controller.close()
 
+    async def flush_replies(self):
+        """Flush all replies."""
+        try:
+            await asyncio.wait_for(self.command_reader.read(), timeout=0.01)
+            self.fail("flush read did not time out")
+        except asyncio.TimeoutError:
+            return
+
     async def read_one_reply(self, timeout=STD_TIMEOUT):
         """Read, parse, and return one reply from the mock controller."""
         read_bytes = await asyncio.wait_for(
@@ -118,7 +132,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         )
         return json.loads(read_bytes)
 
-    async def read_replies(self, reply_codes, return_others):
+    async def read_replies(
+        self, wait_reply_codes, other_reply_codes=(), return_all_replies=False
+    ):
         """Wait for one or more replies of the specified types.
 
         Return a list of the all replies read.
@@ -126,13 +142,20 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         Parameters
         ----------
 
-        reply_codes : `list` [`MTMount.Reply`]
-            Types of replies to wait for.
-            If a type is listed N times then wait for N such replies.
-        return_others : `bool`
-            Return other replies, in addition to those specified in
-            ``reply_codes``?
-        timeout : `float`
+        wait_reply_codes : `list` [`MTMount.Reply`]
+            Reply codes of messages to wait for, one reply per entry,
+            but not necessarily in order.
+            If a reply code is listed N times then wait for N such replies.
+            Extra replies with these reply codes are ignored,
+            unless the reply code also appears in ``other_reply_codes``.
+        other_reply_codes : `list` [`MTMount.Reply`], optional
+            Reply codes of other messages to return, if seen.
+            These are not "used up" they simply acts as a filter.
+            Duplicates are silently ignored.
+        return_all_replies : `bool`, optional
+            Return all replies?
+            If True then other_reply_codes must be empty.
+        timeout : `float`, optional
             Timeout waiting for the Done reply (second).
             Ignored for other reads.
 
@@ -141,14 +164,15 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         replies : `List` [`MTMount.Reply`]
             The read replies.
         """
-        nonack_reply_codes_remaining = reply_codes.copy()
+        nonack_reply_codes_remaining = wait_reply_codes.copy()
+        other_reply_codes = set(other_reply_codes)
         replies = []
         while nonack_reply_codes_remaining:
             reply = await self.read_one_reply()
             if reply["id"] in nonack_reply_codes_remaining:
                 nonack_reply_codes_remaining.remove(reply["id"])
                 replies.append(reply)
-            elif return_others:
+            elif return_all_replies or reply["id"] in other_reply_codes:
                 replies.append(reply)
         return replies
 
@@ -156,9 +180,11 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         self,
         command,
         use_read_loop,
-        final_reply_code=MTMount.ReplyCode.CMD_SUCCEEDED,
-        non_cmd_reply_codes=(),
-        return_others=False,
+        flush=True,
+        final_reply_code=MTMount.ReplyId.CMD_SUCCEEDED,
+        wait_reply_codes=(),
+        other_reply_codes=(),
+        return_all_replies=False,
         timeout=STD_TIMEOUT,
     ):
         """Run one command and check the replies.
@@ -172,17 +198,24 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         use_read_loop : `bool`
             If True then send the command via TCP/IP.
             If False then call self.controller.handle_command directly.
-        final_reply_code : `MTMount.ReplyCode`, optional
+        flush : `bool`, optional
+            If True then flush replies before issuing the command.
+        final_reply_code : `MTMount.ReplyId`, optional
             The expected final CMD_x reply code.
             Defaults to CMD_SUCCEEDED.
-        non_cmd_reply_codes : `list` [`MTMount.ReplyCode`]
-            Codes of non-CMD_x replies to wait for.
-            If a type is listed N times then wait for N such replies.
-            Any such replies found are returned in a list.
-            This list must not contain any of the CMD_x constants.
-        return_others : `bool`
-            If True return all noack replies seen.
-            If False return only those listed in ``non_cmd_reply_codes``.
+        wait_reply_codes : `list` [`MTMount.Reply`], optional
+            non-CMD_x reply codes of messages to wait for, one reply per entry,
+            but not necessarily in order.
+            If a reply code is listed N times then wait for N such replies.
+            Extra replies with these reply codes are ignored,
+            unless the reply code also appears in ``other_reply_codes``.
+        other_reply_codes : `list` [`MTMount.Reply`], optional
+            Non-CMD_x reply codes of other messages to return, if seen,
+            in addition to those in ``wait_reply_codes``.
+            Duplicates are silently ignored.
+        return_all_replies : `bool`, optional
+            Return all replies?
+            If True then other_reply_codes must be empty.
         timeout : `float`
             Timeout waiting for the Done reply (second).
             Ignored for other reads.
@@ -191,16 +224,16 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         -------
         non_cmd_replies : `List` [`MTMount.Reply`]
             All non-CMD_x replies read. This list will definitely contain
-            the types listed in ``non_cmd_reply_codes`` and may contain
+            the types listed in ``wait_reply_codes`` and may contain
             other replies as well.
         """
         cmd_reply_codes = frozenset(
             (
-                MTMount.ReplyCode.CMD_ACKNOWLEDGED,
-                MTMount.ReplyCode.CMD_REJECTED,
-                MTMount.ReplyCode.CMD_SUCCEEDED,
-                MTMount.ReplyCode.CMD_FAILED,
-                MTMount.ReplyCode.CMD_SUPERSEDED,
+                MTMount.ReplyId.CMD_ACKNOWLEDGED,
+                MTMount.ReplyId.CMD_REJECTED,
+                MTMount.ReplyId.CMD_SUCCEEDED,
+                MTMount.ReplyId.CMD_FAILED,
+                MTMount.ReplyId.CMD_SUPERSEDED,
             )
         )
         if final_reply_code not in cmd_reply_codes:
@@ -208,63 +241,77 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 f"final_reply_code={final_reply_code} not a command reply code"
             )
 
-        bad_nonack_codes = set(non_cmd_reply_codes) & cmd_reply_codes
+        bad_nonack_codes = set(wait_reply_codes) & cmd_reply_codes
         if bad_nonack_codes:
             raise ValueError(
-                f"non_cmd_reply_codes={non_cmd_reply_codes} contains "
+                f"wait_reply_codes={wait_reply_codes} contains "
+                f"{bad_nonack_codes}, which are cmd replies"
+            )
+        if return_all_replies and other_reply_codes:
+            raise ValueError("return_all_replies true, other_reply_codes must be empty")
+        other_reply_codes = set(other_reply_codes)
+        bad_nonack_codes = other_reply_codes & cmd_reply_codes
+        if bad_nonack_codes:
+            raise ValueError(
+                f"other_reply_codes={other_reply_codes} contains "
                 f"{bad_nonack_codes}, which are cmd replies"
             )
 
-        nonack_reply_codes_remaining = list(non_cmd_reply_codes)
+        nonack_reply_codes_remaining = list(wait_reply_codes)
 
+        if flush:
+            await self.flush_replies()
         if use_read_loop:
             self.command_writer.write(command.encode())
             await self.command_writer.drain()
         else:
             await self.controller.handle_command(command)
         non_cmd_replies = list()
-        reply = None
-        while reply is None or reply["id"] not in cmd_reply_codes:
-            if reply is None:
-                pass
+        while True:
+            reply = await asyncio.wait_for(self.read_one_reply(), timeout=STD_TIMEOUT)
+            if reply["id"] in cmd_reply_codes:
+                break
             elif reply["id"] in nonack_reply_codes_remaining:
                 nonack_reply_codes_remaining.remove(reply["id"])
                 non_cmd_replies.append(reply)
-            elif return_others:
+            elif return_all_replies or reply["id"] in other_reply_codes:
                 non_cmd_replies.append(reply)
-            reply = await asyncio.wait_for(self.read_one_reply(), timeout=STD_TIMEOUT)
-        if final_reply_code == MTMount.ReplyCode.CMD_REJECTED:
+        if final_reply_code == MTMount.ReplyId.CMD_REJECTED:
             # Should fail before ack
-            self.assertEqual(reply["id"], MTMount.ReplyCode.CMD_REJECTED)
+            self.assertEqual(reply["id"], MTMount.ReplyId.CMD_REJECTED)
             self.assertEqual(reply["parameters"]["sequenceId"], command.sequence_id)
         else:
-            self.assertEqual(reply["id"], MTMount.ReplyCode.CMD_ACKNOWLEDGED)
+            self.assertEqual(reply["id"], MTMount.ReplyId.CMD_ACKNOWLEDGED)
             self.assertEqual(reply["parameters"]["sequenceId"], command.sequence_id)
-            if final_reply_code == MTMount.ReplyCode.CMD_ACKNOWLEDGED:
+            if final_reply_code == MTMount.ReplyId.CMD_ACKNOWLEDGED:
                 # This command is done when acknowledged
                 return non_cmd_replies
 
-            reply = None
-            while reply is None or reply["id"] not in cmd_reply_codes:
-                if reply is None:
-                    pass
+            while True:
+                reply = await asyncio.wait_for(self.read_one_reply(), timeout=timeout)
+                if reply["id"] in cmd_reply_codes:
+                    break
                 elif reply["id"] in nonack_reply_codes_remaining:
                     nonack_reply_codes_remaining.remove(reply["id"])
                     non_cmd_replies.append(reply)
-                elif return_others:
+                elif return_all_replies or reply["id"] in other_reply_codes:
                     non_cmd_replies.append(reply)
-                reply = await asyncio.wait_for(self.read_one_reply(), timeout=timeout)
-            self.assertEqual(reply["id"], final_reply_code)
+            explanation = reply["parameters"].get("explanation", "")
+            self.assertEqual(reply["id"], final_reply_code, explanation)
             self.assertEqual(reply["parameters"]["sequenceId"], command.sequence_id)
         if nonack_reply_codes_remaining:
             non_cmd_replies += await asyncio.wait_for(
-                self.read_replies(nonack_reply_codes_remaining, return_others=True),
+                self.read_replies(
+                    wait_reply_codes=nonack_reply_codes_remaining,
+                    other_reply_codes=other_reply_codes,
+                    return_all_replies=return_all_replies,
+                ),
                 timeout=timeout,
             )
-        if return_others:
-            self.assertGreaterEqual(len(non_cmd_replies), len(non_cmd_reply_codes))
+        if return_all_replies or other_reply_codes:
+            self.assertGreaterEqual(len(non_cmd_replies), len(wait_reply_codes))
         else:
-            self.assertEqual(len(non_cmd_replies), len(non_cmd_reply_codes))
+            self.assertEqual(len(non_cmd_replies), len(wait_reply_codes))
         return non_cmd_replies
 
     async def telemetry_read_loop(self):
@@ -294,13 +341,24 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             )
             for command in sample_commands:
                 await self.run_command(
-                    command,
-                    final_reply_code=MTMount.ReplyCode.CMD_REJECTED,
+                    command=command,
+                    final_reply_code=MTMount.ReplyId.CMD_REJECTED,
                     use_read_loop=True,
                 )
-            await self.run_command(MTMount.commands.AskForCommand(), use_read_loop=True)
+            non_cmd_replies = await self.run_command(
+                command=MTMount.commands.AskForCommand(commander=MTMount.Source.CSC),
+                wait_reply_codes=[MTMount.ReplyId.COMMANDER],
+                use_read_loop=True,
+            )
+            self.assertEqual(len(non_cmd_replies), 1)
+            reply = non_cmd_replies[0]
+            self.assertEqual(reply["id"], MTMount.ReplyId.COMMANDER)
+            self.assertEqual(reply["parameters"]["actualCommander"], MTMount.Source.CSC)
             for command in sample_commands:
-                await self.run_command(command, use_read_loop=True)
+                await self.run_command(
+                    command=command,
+                    use_read_loop=True,
+                )
 
     async def test_ask_for_command_rejected(self):
         async with self.make_controller(commander=MTMount.Source.HHD):
@@ -316,13 +374,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             )
             for command in sample_commands:
                 await self.run_command(
-                    command,
-                    final_reply_code=MTMount.ReplyCode.CMD_REJECTED,
+                    command=command,
+                    final_reply_code=MTMount.ReplyId.CMD_REJECTED,
                     use_read_loop=True,
                 )
             # Asking for command by the HHD should work, though it is a no-op.
             await self.run_command(
-                MTMount.commands.AskForCommand(commander=MTMount.Source.HHD),
+                command=MTMount.commands.AskForCommand(commander=MTMount.Source.HHD),
                 use_read_loop=True,
             )
 
@@ -341,12 +399,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             await self.run_command(
                 command=MTMount.commands.MirrorCoversDeploy(drive=-1),
                 use_read_loop=True,
-                final_reply_code=MTMount.ReplyCode.CMD_FAILED,
+                final_reply_code=MTMount.ReplyId.CMD_FAILED,
             )
 
     async def test_command_superseded(self):
         async with self.make_controller():
             device = self.controller.device_dict[MTMount.DeviceId.MIRROR_COVERS]
+
             await self.run_command(
                 command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
                 use_read_loop=True,
@@ -358,7 +417,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 self.run_command(
                     command=MTMount.commands.MirrorCoversRetract(drive=-1),
                     use_read_loop=True,  # False is also fine
-                    final_reply_code=MTMount.ReplyCode.CMD_SUPERSEDED,
+                    final_reply_code=MTMount.ReplyId.CMD_SUPERSEDED,
                 )
             )
             await asyncio.sleep(0.1)
@@ -370,11 +429,110 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             device.do_stop(stop_command)
             await task
 
+    async def test_handle_command(self):
+        await self.check_command_sequence(use_read_loop=False)
+
     async def test_read_loop(self):
         await self.check_command_sequence(use_read_loop=True)
 
-    async def test_handle_command(self):
-        await self.check_command_sequence(use_read_loop=False)
+    async def test_state_info_command(self):
+        # The STATE_INFO command is accepted regardless of the commander.
+        async with self.make_controller(commander=MTMount.Source.HHD):
+            # Wait for one iteration of telemetry,
+            # to avoid duplicate message.
+            await asyncio.wait_for(
+                self.controller.wait_telemetry(), timeout=STD_TIMEOUT
+            )
+
+            replies = await self.run_command(
+                command=MTMount.commands.StateInfo(),
+                return_all_replies=True,
+                use_read_loop=True,
+            )
+            limits_systems = []
+            motion_state_axes = []
+            for reply in replies:
+                reply_id = reply["id"]
+                params = types.SimpleNamespace(**reply["parameters"])
+                if reply_id == MTMount.ReplyId.AZIMUTH_TOPPLE_BLOCK:
+                    self.assertEqual(params.reverse, False)
+                    self.assertEqual(params.forward, False)
+
+                elif reply_id == MTMount.ReplyId.COMMANDER:
+                    self.assertEqual(params.actualCommander, MTMount.Source.HHD)
+                elif reply_id == MTMount.ReplyId.DEPLOYABLE_PLATFORM_MOTION_STATE:
+                    self.assertEqual(params.state, DeployableMotionState.RETRACTED)
+                    self.assertEqual(
+                        list(params.elementState), [DeployableMotionState.RETRACTED] * 2
+                    )
+                elif reply_id == MTMount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE:
+                    self.assertEqual(
+                        params.state, ElevationLockingPinMotionState.UNLOCKED
+                    )
+                    self.assertEqual(
+                        list(params.elementState),
+                        [ElevationLockingPinMotionState.UNLOCKED] * 2,
+                    )
+                elif reply_id == MTMount.ReplyId.LIMITS:
+                    limits_systems.append(params.system)
+                    self.assertEqual(params.limits, 0)
+                elif reply_id in (
+                    MTMount.ReplyId.MIRROR_COVERS_MOTION_STATE,
+                    MTMount.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE,
+                ):
+                    self.assertEqual(params.state, DeployableMotionState.DEPLOYED)
+                    self.assertEqual(
+                        list(params.elementState), [DeployableMotionState.DEPLOYED] * 4
+                    )
+                elif reply_id == MTMount.ReplyId.AXIS_MOTION_STATE:
+                    motion_state_axes.append(params.axis)
+                    self.assertEqual(params.motionState, AxisMotionState.STOPPED)
+                elif reply_id == MTMount.ReplyId.SAFETY_INTERLOCKS:
+                    params_dict = reply["parameters"]
+                    expected_fields = (
+                        "causes",
+                        "subcausesEmergencyStop",
+                        "subcausesLimitSwitch",
+                        "subcausesDeployablePlatform",
+                        "subcausesDoorHatchLadder",
+                        "subcausesMirrorCover",
+                        "subcausesLockingPin",
+                        "subcausesCapacitorDoor",
+                        "subcausesBrakesFailed",
+                        "effects",
+                    )
+                    self.assertEqual(set(expected_fields), params_dict.keys())
+                    for field in expected_fields:
+                        self.assertEqual(params_dict[field], 0)
+                elif reply_id == MTMount.ReplyId.SOFT_LIMIT_POSITIONS:
+                    device_id = {
+                        MTMount.System.AZIMUTH: MTMount.DeviceId.AZIMUTH_AXIS,
+                        MTMount.System.ELEVATION: MTMount.DeviceId.ELEVATION_AXIS,
+                        MTMount.System.CAMERA_CABLE_WRAP: MTMount.DeviceId.CAMERA_CABLE_WRAP,
+                    }[params.system]
+                    actuator = self.controller.device_dict[device_id].actuator
+                    self.assertAlmostEqual(params.min, actuator.min_position)
+                    self.assertAlmostEqual(params.max, actuator.max_position)
+
+            axes_systems = set(
+                [
+                    MTMount.System.ELEVATION,
+                    MTMount.System.AZIMUTH,
+                    MTMount.System.CAMERA_CABLE_WRAP,
+                ]
+            )
+            self.assertEqual(
+                len(set(limits_systems)),
+                len(limits_systems),
+                f"limits_systems={limits_systems} contains duplicates",
+            )
+            self.assertEqual(
+                len(set(motion_state_axes)),
+                len(motion_state_axes),
+                f"motion_state_axes={motion_state_axes} contains duplicates",
+            )
+            assert set(limits_systems) >= axes_systems
+            assert set(motion_state_axes) >= axes_systems
 
     async def check_command_sequence(self, use_read_loop):
         async with self.make_controller():
@@ -383,19 +541,17 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Issue a synchronous command
             self.assertFalse(device.power_on)
             on_command = MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True)
-            await self.run_command(on_command, use_read_loop=use_read_loop)
+            await self.run_command(command=on_command, use_read_loop=use_read_loop)
             self.assertTrue(device.power_on)
 
             # Issue a background command
-            self.assertAlmostEqual(
-                device.actuator.position(), device.actuator.min_position
-            )
+            self.assertAlmostEqual(device.actuator.position(), device.deployed_position)
             deploy_command = MTMount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, deploy=True
+                drive=-1, deploy=False
             )
-            await self.run_command(deploy_command, use_read_loop=use_read_loop)
+            await self.run_command(command=deploy_command, use_read_loop=use_read_loop)
             self.assertAlmostEqual(
-                device.actuator.position(), device.actuator.max_position
+                device.actuator.position(), device.retracted_position
             )
 
             # Issue a command (AzimuthAxisTrack) that gets no Done reply
@@ -405,12 +561,16 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(device.enabled)
             self.assertFalse(device.tracking_enabled)
             power_on_command = MTMount.commands.AzimuthAxisPower(on=True)
-            await self.run_command(power_on_command, use_read_loop=use_read_loop)
+            await self.run_command(
+                command=power_on_command, use_read_loop=use_read_loop
+            )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
             enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking()
-            await self.run_command(enable_tracking_command, use_read_loop=use_read_loop)
+            await self.run_command(
+                command=enable_tracking_command, use_read_loop=use_read_loop
+            )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertTrue(device.tracking_enabled)
@@ -418,14 +578,16 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 position=45, velocity=0, tai=salobj.current_tai()
             )
             await self.run_command(
-                track_command,
-                final_reply_code=MTMount.ReplyCode.CMD_ACKNOWLEDGED,
+                command=track_command,
+                final_reply_code=MTMount.ReplyId.CMD_ACKNOWLEDGED,
                 use_read_loop=use_read_loop,
             )
             # Issue one more command to be sure we really didn't get
             # a Done reply for the previous command
             stop_tracking_command = MTMount.commands.AzimuthAxisStop()
-            await self.run_command(stop_tracking_command, use_read_loop=use_read_loop)
+            await self.run_command(
+                command=stop_tracking_command, use_read_loop=use_read_loop
+            )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
@@ -433,8 +595,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Try a command that will fail
             # (tracking while tracking not enabled)
             await self.run_command(
-                track_command,
-                final_reply_code=MTMount.ReplyCode.CMD_REJECTED,
+                command=track_command,
+                final_reply_code=MTMount.ReplyId.CMD_REJECTED,
                 use_read_loop=use_read_loop,
             )
 
@@ -451,8 +613,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 "lsst.ts.MTMount.commands.CommandDict", new_command_dict
             ):
                 await self.run_command(
-                    unsupported_command,
-                    final_reply_code=MTMount.ReplyCode.CMD_REJECTED,
+                    command=unsupported_command,
+                    final_reply_code=MTMount.ReplyId.CMD_REJECTED,
                     use_read_loop=use_read_loop,
                 )
 
@@ -490,10 +652,10 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             device = self.controller.device_dict[MTMount.DeviceId.MIRROR_COVER_LOCKS]
             self.assertFalse(device.power_on)
             on_command = MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True)
-            await self.run_command(on_command, use_read_loop=True)
+            await self.run_command(command=on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             off_command = MTMount.commands.MirrorCoverLocksPower(drive=-1, on=False)
-            await self.run_command(off_command, use_read_loop=True)
+            await self.run_command(command=off_command, use_read_loop=True)
             self.assertFalse(device.power_on)
 
             # Check the two commands on the command queue.
@@ -561,8 +723,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         async with self.make_controller():
             replies = await asyncio.wait_for(
                 self.read_replies(
-                    reply_codes=[MTMount.ReplyCode.IN_POSITION] * 2,
-                    return_others=False,
+                    wait_reply_codes=[MTMount.ReplyId.IN_POSITION] * 2,
                 ),
                 timeout=START_TIMEOUT,
             )
@@ -572,12 +733,12 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
             device = self.controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
             power_on_command = MTMount.commands.AzimuthAxisPower(on=True)
-            await self.run_command(power_on_command, use_read_loop=True)
+            await self.run_command(command=power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
             enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking()
-            await self.run_command(enable_tracking_command, use_read_loop=True)
+            await self.run_command(command=enable_tracking_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertTrue(device.tracking_enabled)
@@ -585,7 +746,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             start_position = device.actuator.path.at(salobj.current_tai()).position
             end_position = start_position + 3
             previous_tai = 0
-            # Send tracking updates until an InPosition reply is seen.
+            # Send tracking updates until an IN_POSITION reply is seen.
             while True:
                 tai = salobj.current_tai()
                 # Work around non-monotonic clocks, which are
@@ -598,37 +759,34 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     tai=tai,
                 )
                 non_cmd_replies = await self.run_command(
-                    track_command,
-                    final_reply_code=MTMount.ReplyCode.CMD_ACKNOWLEDGED,
+                    command=track_command,
+                    final_reply_code=MTMount.ReplyId.CMD_ACKNOWLEDGED,
+                    flush=False,
                     use_read_loop=True,
-                    return_others=True,
+                    other_reply_codes=[MTMount.ReplyId.IN_POSITION],
                 )
                 if non_cmd_replies:
-                    self.assertGreaterEqual(len(non_cmd_replies), 1)
-                    num_in_position_replies = 0
-                    for reply in non_cmd_replies:
-                        if reply["id"] == MTMount.ReplyCode.IN_POSITION:
-                            self.assertEqual(reply["parameters"]["axis"], 0)
-                            self.assertTrue(reply["parameters"]["inPosition"])
-                            num_in_position_replies += 1
-                    self.assertEqual(num_in_position_replies, 1)
+                    self.assertEqual(len(non_cmd_replies), 1)
+                    reply = non_cmd_replies[0]
+                    self.assertEqual(reply["id"], MTMount.ReplyId.IN_POSITION)
+                    self.assertEqual(reply["parameters"]["axis"], 0)
+                    self.assertTrue(reply["parameters"]["inPosition"])
                     break
                 previous_tai = tai
                 await asyncio.sleep(0.1)
 
             stop_tracking_command = MTMount.commands.AzimuthAxisStop()
             non_cmd_replies = await self.run_command(
-                stop_tracking_command,
+                command=stop_tracking_command,
                 use_read_loop=True,
-                non_cmd_reply_codes=[MTMount.ReplyCode.IN_POSITION],
-                return_others=False,
+                wait_reply_codes=[MTMount.ReplyId.IN_POSITION],
             )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
             self.assertEqual(len(non_cmd_replies), 1)
             reply = non_cmd_replies[0]
-            self.assertEqual(reply["id"], MTMount.ReplyCode.IN_POSITION)
+            self.assertEqual(reply["id"], MTMount.ReplyId.IN_POSITION)
             self.assertFalse(reply["parameters"]["inPosition"])
             self.assertEqual(reply["parameters"]["axis"], 0)
 
@@ -637,8 +795,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         async with self.make_controller():
             replies = await asyncio.wait_for(
                 self.read_replies(
-                    reply_codes=[MTMount.ReplyCode.IN_POSITION] * 2,
-                    return_others=False,
+                    wait_reply_codes=[MTMount.ReplyId.IN_POSITION] * 2,
                 ),
                 timeout=START_TIMEOUT,
             )
@@ -650,7 +807,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
             device = self.controller.device_dict[MTMount.DeviceId.ELEVATION_AXIS]
             power_on_command = MTMount.commands.ElevationAxisPower(on=True)
-            await self.run_command(power_on_command, use_read_loop=True)
+            await self.run_command(command=power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
@@ -661,11 +818,10 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             estimated_move_time = 2  # seconds
             t0 = time.monotonic()
             non_cmd_replies = await self.run_command(
-                move_command,
+                command=move_command,
                 use_read_loop=True,
                 timeout=estimated_move_time + STD_TIMEOUT,
-                non_cmd_reply_codes=[MTMount.ReplyCode.IN_POSITION],
-                return_others=False,
+                wait_reply_codes=[MTMount.ReplyId.IN_POSITION],
             )
             dt = time.monotonic() - t0
             print(f"Move duration={dt:0.2f} second")
