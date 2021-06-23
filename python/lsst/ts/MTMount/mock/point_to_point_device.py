@@ -62,6 +62,13 @@ class PointToPointDevice(BaseDevice):
         run to completion and then fail (warning: it does not fail
         if the command is superseded).
         This attribute is reset to False after each failure.
+
+    Notes
+    -----
+    We don't need this subclass of DeployableDevice but it makes a reasonable
+    division of labor and will be handy if we ever want a mock locking pin
+    device. (At present the CSC is not allowed to control the locking pins,
+    so we don't need to mock them.)
     """
 
     def __init__(
