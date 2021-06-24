@@ -23,11 +23,17 @@ import asyncio
 import contextlib
 import pathlib
 import logging
+import math
 import time
 import unittest
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
+from lsst.ts.idl.enums.MTMount import (
+    AxisMotionState,
+    DeployableMotionState,
+    ElevationLockingPinMotionState,
+)
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
 # timeout for opening or closing mirror covers (sec)
@@ -37,6 +43,19 @@ MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
 NOTELEMETRY_TIMEOUT = 2
 
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
+
+SAFETY_INTERLOCKS_FIELDS = (
+    "causes",
+    "subcausesEmergencyStop",
+    "subcausesLimitSwitch",
+    "subcausesDeployablePlatform",
+    "subcausesDoorHatchLadder",
+    "subcausesMirrorCover",
+    "subcausesLockingPin",
+    "subcausesCapacitorDoor",
+    "subcausesBrakesFailed",
+    "effects",
+)
 
 logging.basicConfig()
 
@@ -108,6 +127,69 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         ):
             yield
 
+    async def assert_axes_in_position(
+        self,
+        *,
+        elevation=None,
+        azimuth=None,
+        camera_cable_wrap=None,
+        timeout=STD_TIMEOUT,
+    ):
+        r"""Assert the next _axis_\ inPosition event for one or more axes.
+
+        Parameters
+        ----------
+        elevation : bool or None
+            If not None then the required value for the inPosition field
+            of the next elevationInPosition event.
+        azimuth : bool or None
+            If not None then the required value for the inPosition field
+            of the next azimuthInPosition event.
+        camera_cable_wrap : bool or None
+            If not None then the required value for the inPosition field
+            of the next cameraCableWrapInPosition event.
+        timeout : float
+            Time limit. Applied individually to each axis for which
+            the argument is not None.
+        """
+        if azimuth is not None:
+            await self.assert_next_sample(
+                topic=self.remote.evt_azimuthInPosition,
+                inPosition=azimuth,
+                timeout=timeout,
+            )
+        if elevation is not None:
+            await self.assert_next_sample(
+                topic=self.remote.evt_elevationInPosition,
+                inPosition=elevation,
+                timeout=timeout,
+            )
+        if camera_cable_wrap is not None:
+            await self.assert_next_sample(
+                topic=self.remote.evt_cameraCableWrapInPosition,
+                inPosition=camera_cable_wrap,
+                timeout=timeout,
+            )
+
+    async def assert_target_cleared(self, timeout=STD_TIMEOUT):
+        """Assert that the next target event is in cleared/initial state."""
+        data = await self.assert_next_sample(
+            topic=self.remote.evt_target,
+            trackId=0,
+            tracksys="",
+            radesys="",
+            timeout=timeout,
+        )
+        for field_name in (
+            "azimuth",
+            "elevation",
+            "azimuthVelocity",
+            "elevationVelocity",
+            "taiTime",
+        ):
+            value = getattr(data, field_name)
+            self.assertTrue(math.isnan(value))
+
     async def test_bin_script(self):
         await self.check_bin_script(
             name="MTMount",
@@ -139,8 +221,85 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 cscVersion=MTMount.__version__,
                 subsystemVersions="",
             )
+
             await self.assert_next_sample(
-                self.remote.evt_cameraCableWrapFollowing, enabled=False
+                topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=False
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_cameraCableWrapFollowing, enabled=False
+            )
+            await self.assert_target_cleared()
+            # When the CSC first connects it ask for current state,
+            # before it asks to be the commander.
+            await self.assert_next_sample(
+                topic=self.remote.evt_commander, commander=MTMount.Source.NONE
+            )
+
+            for topic in (
+                self.remote.evt_elevationLimits,
+                self.remote.evt_azimuthLimits,
+                self.remote.evt_cameraCableWrapLimits,
+            ):
+                await self.assert_next_sample(topic=topic, limits=0)
+
+            for device_id, topic in (
+                (
+                    MTMount.DeviceId.ELEVATION_AXIS,
+                    self.remote.evt_elevationLimitPositions,
+                ),
+                (
+                    MTMount.DeviceId.AZIMUTH_AXIS,
+                    self.remote.evt_azimuthLimitPositions,
+                ),
+                (
+                    MTMount.DeviceId.CAMERA_CABLE_WRAP,
+                    self.remote.evt_cameraCableWrapLimitPositions,
+                ),
+            ):
+                data = await self.assert_next_sample(topic=topic)
+                actuator = self.mock_controller.device_dict[device_id].actuator
+                self.assertAlmostEqual(data.min, actuator.min_position)
+                self.assertAlmostEqual(data.max, actuator.max_position)
+
+            for topic in (
+                self.remote.evt_elevationMotionState,
+                self.remote.evt_azimuthMotionState,
+                self.remote.evt_cameraCableWrapMotionState,
+            ):
+                await self.assert_next_sample(
+                    topic=topic, state=AxisMotionState.STOPPED
+                )
+
+            await self.assert_next_sample(
+                topic=self.remote.evt_deployablePlatformMotionState,
+                state=DeployableMotionState.RETRACTED,
+                elementState=[DeployableMotionState.RETRACTED] * 2,
+            )
+
+            await self.assert_next_sample(
+                topic=self.remote.evt_elevationLockingPinMotionState,
+                state=ElevationLockingPinMotionState.UNLOCKED,
+                elementState=[ElevationLockingPinMotionState.UNLOCKED] * 2,
+            )
+
+            for topic in (
+                self.remote.evt_mirrorCoverLocksMotionState,
+                self.remote.evt_mirrorCoversMotionState,
+            ):
+                await self.assert_next_sample(
+                    topic=topic,
+                    state=DeployableMotionState.DEPLOYED,
+                    elementState=[DeployableMotionState.DEPLOYED] * 4,
+                )
+
+            expected_safety_data = {field: 0 for field in SAFETY_INTERLOCKS_FIELDS}
+            await self.assert_next_sample(
+                topic=self.remote.evt_safetyInterlocks, **expected_safety_data
+            )
+
+            # After the initial state the CSC asks to be commander.
+            await self.assert_next_sample(
+                topic=self.remote.evt_commander, commander=MTMount.Source.CSC
             )
 
             # Test initial telemetry
@@ -271,7 +430,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         # when I do that).
         async with self.make_csc(initial_state=salobj.State.DISABLED):
             await self.assert_next_sample(
-                self.remote.evt_cameraCableWrapFollowing, enabled=False
+                topic=self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
             ccw_device = self.mock_controller.device_dict[
                 MTMount.DeviceId.CAMERA_CABLE_WRAP
@@ -286,7 +445,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(ccw_device.enabled)
 
                 await self.assert_next_sample(
-                    self.remote.evt_cameraCableWrapFollowing, enabled=True
+                    topic=self.remote.evt_cameraCableWrapFollowing, enabled=True
                 )
                 self.assertTrue(ccw_device.tracking_enabled)
                 self.mock_controller.set_command_queue(maxsize=0)
@@ -409,39 +568,209 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             with salobj.assertRaisesAckError(ack=salobj.SalRetCode.CMD_FAILED):
                 await task
 
+    async def test_unmocked_events(self):
+        """Test low-level events not output by the mock controller
+        (other than output the STATE_INFO command).
+
+        These include:
+
+        * deployablePlatformMotionState
+        * elevationLockingPinMotionState
+        * safetyInterlocks
+        * limits
+        """
+        async with self.make_csc(initial_state=salobj.State.DISABLED):
+            await self.assert_next_sample(
+                topic=self.remote.evt_deployablePlatformMotionState,
+                state=DeployableMotionState.RETRACTED,
+                elementState=[DeployableMotionState.RETRACTED] * 2,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_elevationLockingPinMotionState,
+                state=ElevationLockingPinMotionState.UNLOCKED,
+                elementState=[ElevationLockingPinMotionState.UNLOCKED] * 2,
+            )
+            for topic in (
+                self.remote.evt_elevationLimits,
+                self.remote.evt_azimuthLimits,
+                self.remote.evt_cameraCableWrapLimits,
+            ):
+                await self.assert_next_sample(topic=topic, limits=0)
+
+            initial_safety_data = {field: 0 for field in SAFETY_INTERLOCKS_FIELDS}
+            await self.assert_next_sample(
+                topic=self.remote.evt_safetyInterlocks, **initial_safety_data
+            )
+
+            # Go in reverse order because the first entry is RETRACTED,
+            # which is the current value
+            for state in reversed(DeployableMotionState):
+                await self.mock_controller.write_reply(
+                    MTMount.mock.make_reply_dict(
+                        id=MTMount.ReplyId.DEPLOYABLE_PLATFORM_MOTION_STATE,
+                        state=state,
+                        elementState=[state] * 2,
+                    )
+                )
+                await self.assert_next_sample(
+                    topic=self.remote.evt_deployablePlatformMotionState,
+                    state=state,
+                    elementState=[state] * 2,
+                )
+
+            # Go in reverse order in case the initial position is
+            # the first entry (it will never be the last entry).
+            for state in reversed(ElevationLockingPinMotionState):
+                await self.mock_controller.write_reply(
+                    MTMount.mock.make_reply_dict(
+                        id=MTMount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE,
+                        state=state,
+                        elementState=[state] * 2,
+                    )
+                )
+                await self.assert_next_sample(
+                    topic=self.remote.evt_elevationLockingPinMotionState,
+                    state=state,
+                    elementState=[state] * 2,
+                )
+
+            for system, topic in (
+                (MTMount.System.ELEVATION, self.remote.evt_elevationLimits),
+                (MTMount.System.AZIMUTH, self.remote.evt_azimuthLimits),
+                (
+                    MTMount.System.CAMERA_CABLE_WRAP,
+                    self.remote.evt_cameraCableWrapLimits,
+                ),
+            ):
+                value = system.value + 10  # arbitary positive value
+                await self.mock_controller.write_reply(
+                    MTMount.mock.make_reply_dict(
+                        id=MTMount.ReplyId.LIMITS,
+                        system=system,
+                        limits=value,
+                    )
+                )
+                await self.assert_next_sample(topic=topic, limits=value)
+
+            for i, field in enumerate(SAFETY_INTERLOCKS_FIELDS):
+                value = i + 6  # arbitrary nonzero value
+                safety_data = initial_safety_data.copy()
+                safety_data[field] = value
+                await self.mock_controller.write_reply(
+                    MTMount.mock.make_reply_dict(
+                        id=MTMount.ReplyId.SAFETY_INTERLOCKS,
+                        **safety_data,
+                    )
+                )
+                await self.assert_next_sample(
+                    topic=self.remote.evt_safetyInterlocks, **safety_data
+                )
+
     async def test_mirror_covers(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
             self.mock_controller.set_command_queue(maxsize=0)
-
-            mock_device = self.mock_controller.device_dict[
+            mirror_covers_device = self.mock_controller.device_dict[
                 MTMount.DeviceId.MIRROR_COVERS
             ]
-            actuator = mock_device.actuator
+            mirror_cover_locks_device = self.mock_controller.device_dict[
+                MTMount.DeviceId.MIRROR_COVER_LOCKS
+            ]
 
-            self.assertAlmostEqual(actuator.position(), 0)
-            self.assertFalse(actuator.moving())
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoversMotionState,
+                state=DeployableMotionState.DEPLOYED,
+                elementState=[DeployableMotionState.DEPLOYED] * 4,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoverLocksMotionState,
+                state=DeployableMotionState.DEPLOYED,
+                elementState=[DeployableMotionState.DEPLOYED] * 4,
+            )
+            self.assertEqual(
+                mirror_covers_device.motion_state(), DeployableMotionState.DEPLOYED
+            )
+            self.assertEqual(
+                mirror_cover_locks_device.motion_state(), DeployableMotionState.DEPLOYED
+            )
 
-            # Open the mirror covers.
+            # Open (retract) the mirror covers.
             t0 = time.monotonic()
             await self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
             dt = time.monotonic() - t0
             print(f"opening the mirror covers took {dt:0.2f} sec")
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoversMotionState,
+                state=DeployableMotionState.RETRACTING,
+                elementState=[DeployableMotionState.RETRACTING] * 4,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoverLocksMotionState,
+                state=DeployableMotionState.RETRACTING,
+                elementState=[DeployableMotionState.RETRACTING] * 4,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoversMotionState,
+                state=DeployableMotionState.RETRACTED,
+                elementState=[DeployableMotionState.RETRACTED] * 4,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoverLocksMotionState,
+                state=DeployableMotionState.RETRACTED,
+                elementState=[DeployableMotionState.RETRACTED] * 4,
+            )
+            self.assertEqual(
+                mirror_covers_device.motion_state(), DeployableMotionState.RETRACTED
+            )
+            self.assertEqual(
+                mirror_cover_locks_device.motion_state(),
+                DeployableMotionState.RETRACTED,
+            )
 
             # Open the mirror covers again; this should be quick.
             t0 = time.monotonic()
             await self.remote.cmd_openMirrorCovers.start(timeout=STD_TIMEOUT)
             dt = time.monotonic() - t0
             print(f"opening the mirror covers again took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.position(), 100)
-            self.assertFalse(actuator.moving())
+            self.assertEqual(
+                mirror_covers_device.motion_state(), DeployableMotionState.RETRACTED
+            )
+            self.assertEqual(
+                mirror_cover_locks_device.motion_state(),
+                DeployableMotionState.RETRACTED,
+            )
 
-            # Close the mirror covers.
+            # Close (deploy) the mirror covers.
             t0 = time.monotonic()
             await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
             dt = time.monotonic() - t0
             print(f"closing the mirror covers took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.position(), 0)
-            self.assertFalse(actuator.moving())
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoversMotionState,
+                state=DeployableMotionState.DEPLOYING,
+                elementState=[DeployableMotionState.DEPLOYING] * 4,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoverLocksMotionState,
+                state=DeployableMotionState.DEPLOYING,
+                elementState=[DeployableMotionState.DEPLOYING] * 4,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoversMotionState,
+                state=DeployableMotionState.DEPLOYED,
+                elementState=[DeployableMotionState.DEPLOYED] * 4,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoverLocksMotionState,
+                state=DeployableMotionState.DEPLOYED,
+                elementState=[DeployableMotionState.DEPLOYED] * 4,
+            )
+            self.assertEqual(
+                mirror_covers_device.motion_state(), DeployableMotionState.DEPLOYED
+            )
+            self.assertEqual(
+                mirror_cover_locks_device.motion_state(),
+                DeployableMotionState.DEPLOYED,
+            )
 
             # Close the mirror covers again;
             # the locks are retracted and engaged so it takes some time.
@@ -449,23 +778,37 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
             dt = time.monotonic() - t0
             print(f"closing the mirror covers again took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.position(), 0)
-            self.assertFalse(actuator.moving())
+            self.assertEqual(
+                mirror_covers_device.motion_state(), DeployableMotionState.DEPLOYED
+            )
+            self.assertEqual(
+                mirror_cover_locks_device.motion_state(),
+                DeployableMotionState.DEPLOYED,
+            )
 
     async def test_move_to_target(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
             name="MTRotator"
         ) as rotator:
             self.put_fake_rotation(rotator=rotator)
-
-            await self.assert_next_sample(
-                self.remote.evt_axesInPosition, azimuth=False, elevation=False
-            )
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=True
+            )
+            await self.assert_axes_in_position(elevation=False, azimuth=False)
+            await self.assert_target_cleared()
+            await self.assert_next_sample(
+                topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=False
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_elevationMotionState,
+                state=AxisMotionState.STOPPED,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_azimuthMotionState,
+                state=AxisMotionState.STOPPED,
             )
 
             mock_azimuth = self.mock_controller.device_dict[
@@ -499,27 +842,43 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     timeout=STD_TIMEOUT,
                 )
             )
-
-            # Check that the target event is received well before
-            # the move finishes.
+            # For point to point moves the target event is set twice:
+            # once for elevation and once for azimuth.
+            # The first event will have exactly one of elevation or azimuth
+            # still set to NaN (note: ^ is bitwise xor, but it works as
+            # logical xor for bools)
             data = await self.remote.evt_target.next(flush=False, timeout=STD_TIMEOUT)
+            self.assertTrue(math.isnan(data.elevation) ^ math.isnan(data.azimuth))
+            data = await self.remote.evt_target.next(flush=False, timeout=STD_TIMEOUT)
+            self.assertFalse(math.isnan(data.elevation) or math.isnan(data.azimuth))
             self.assertAlmostEqual(data.elevation, target_elevation)
             self.assertAlmostEqual(data.azimuth, target_azimuth)
             self.assertFalse(task.done())
-            duration = mock_elevation.end_tai - salobj.current_tai()
+
+            await self.assert_next_sample(
+                topic=self.remote.evt_elevationMotionState,
+                state=AxisMotionState.MOVING_POINT_TO_POINT,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_azimuthMotionState,
+                state=AxisMotionState.MOVING_POINT_TO_POINT,
+            )
+
+            # Check that the target event is received well before
+            # the move finishes.
+            duration = mock_azimuth.end_tai - salobj.current_tai()
             print(f"axis move duration={duration:0.2f} sec")
             self.assertGreater(duration, 1)
 
             await self.assert_next_sample(
-                self.remote.evt_axesInPosition,
-                azimuth=True,
-                elevation=False,
+                topic=self.remote.evt_elevationMotionState,
+                state=AxisMotionState.STOPPED,
             )
             await self.assert_next_sample(
-                self.remote.evt_axesInPosition,
-                azimuth=True,
-                elevation=True,
+                topic=self.remote.evt_azimuthMotionState,
+                state=AxisMotionState.STOPPED,
             )
+            await self.assert_axes_in_position(elevation=True, azimuth=True)
             await task
             tai = salobj.current_tai()
             elevation_pvt = mock_elevation.actuator.path.at(tai)
@@ -530,6 +889,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.assertAlmostEqual(azimuth_pvt.velocity, 0)
             self.assertAlmostEqual(elevation_pvt.velocity, 0)
 
+            await self.assert_next_sample(
+                topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=True
+            )
+
             # Check that the CCW is still following the rotator.
             data = self.remote.evt_cameraCableWrapFollowing.get()
             self.assertTrue(data.enabled)
@@ -538,18 +901,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # out of position (possibly one axis at a time)
             await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
             await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
-            try:
-                await self.assert_next_sample(
-                    self.remote.evt_axesInPosition,
-                    azimuth=False,
-                    elevation=False,
-                )
-            except AssertionError:
-                await self.assert_next_sample(
-                    self.remote.evt_axesInPosition,
-                    azimuth=False,
-                    elevation=False,
-                )
+            await self.assert_axes_in_position(elevation=False, azimuth=False)
 
     async def test_telemetry_reconnection(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):
@@ -586,9 +938,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=True
             )
-            await self.assert_next_sample(
-                self.remote.evt_axesInPosition, azimuth=False, elevation=False
-            )
+            await self.assert_axes_in_position(elevation=False, azimuth=False)
+            await self.assert_target_cleared()
 
             mock_azimuth = self.mock_controller.device_dict[
                 MTMount.DeviceId.AZIMUTH_AXIS
@@ -632,25 +983,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     elevation_velocity=0.003,
                 )
             )
-            await self.assert_next_sample(
-                self.remote.evt_axesInPosition,
-                azimuth=False,
+            await self.assert_axes_in_position(
                 elevation=True,
-                timeout=estimated_slew_time + STD_TIMEOUT,
-            )
-            dt_elevation = time.monotonic() - t0
-            await self.assert_next_sample(
-                self.remote.evt_axesInPosition,
                 azimuth=True,
-                elevation=True,
                 timeout=estimated_slew_time + STD_TIMEOUT,
             )
-            dt_azimuth = time.monotonic() - t0
+            dt_slew = time.monotonic() - t0
             tracking_task.cancel()
-            print(
-                f"Time to finish slew for elevation={dt_elevation:0.2f}; "
-                f"azimuth={dt_azimuth:0.2f} seconds"
-            )
+            print(f"Time to finish slew={dt_slew:0.2f} seconds")
 
             # Disable tracking and check axis controllers
             await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
@@ -658,19 +998,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.assertFalse(mock_elevation.tracking_enabled)
 
             # Check that both axes are no longer in position.
-            # We don't yet know the details of Tekniker's InPosition message
-            # so make the test succeed whether it must be sent separately
-            # for each axis (resulting in two axesInPosition events)
-            # or can be sent for both axes at the same time
-            # (resulting in a single axesInPosition event).
-            data = await self.assert_next_sample(self.remote.evt_axesInPosition)
-            self.assertIn(False, (data.azimuth, data.elevation))
-            if True in (data.azimuth, data.elevation):
-                await self.assert_next_sample(
-                    self.remote.evt_axesInPosition,
-                    azimuth=False,
-                    elevation=False,
-                )
+            await self.assert_axes_in_position(elevation=False, azimuth=False)
 
             # Check that the CCW is still following the rotator.
             data = self.remote.evt_cameraCableWrapFollowing.get()
