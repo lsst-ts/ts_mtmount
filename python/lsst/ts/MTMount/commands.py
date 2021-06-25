@@ -72,6 +72,7 @@ __all__ = [
     "OilSupplySystemPowerOil",
     "OilSupplySystemResetAlarm",
     "SafetyReset",
+    "StateInfo",
     "TopEndChillerPower",
     "TopEndChillerResetAlarm",
     "TopEndChillerTrackAmbient",
@@ -656,6 +657,12 @@ class SafetyReset(Command):
     )
 
 
+class StateInfo(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.STATE_INFO,
+    )
+
+
 class TopEndChillerPower(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.TOP_END_CHILLER_POWER,
@@ -726,6 +733,7 @@ Commands = (
     OilSupplySystemPowerOil,
     OilSupplySystemResetAlarm,
     SafetyReset,
+    StateInfo,
     TopEndChillerPower,
     TopEndChillerResetAlarm,
     TopEndChillerTrackAmbient,
