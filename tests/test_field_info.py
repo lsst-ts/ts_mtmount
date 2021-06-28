@@ -202,13 +202,6 @@ class FieldInfoTestCase(unittest.TestCase):
             bad_values=("2020-04-06T22:33:57.335",),
         )
 
-    def test_reply_code_field_info(self):
-        self.check_fixed_field_info(
-            MTMount.field_info.ReplyCodeFieldInfo,
-            dtype=MTMount.ReplyCode,
-            expected_name="reply_code",
-        )
-
     def test_source_field_info(self):
         for what in ("command", "warning"):
             field_info = MTMount.field_info.SourceFieldInfo(what=what)

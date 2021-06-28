@@ -29,7 +29,6 @@ __all__ = [
     "StrFieldInfo",
     "TimestampFieldInfo",
     "CommandCodeFieldInfo",
-    "ReplyCodeFieldInfo",
     "SourceFieldInfo",
 ]
 
@@ -305,20 +304,6 @@ class CommandCodeFieldInfo(FixedEnumFieldInfo):
     def __init__(self, default):
         enums.CommandCode(default)  # Check value.
         super().__init__(name="command_code", default=default)
-
-
-class ReplyCodeFieldInfo(FixedEnumFieldInfo):
-    """Information for the ``command_code`` field of reply.
-
-    Parameters
-    ----------
-    default : `ReplyCode`
-        The reply code for this reply.
-    """
-
-    def __init__(self, default):
-        enums.ReplyCode(default)  # Check value.
-        super().__init__(name="reply_code", default=default)
 
 
 class SourceFieldInfo(EnumFieldInfo):
