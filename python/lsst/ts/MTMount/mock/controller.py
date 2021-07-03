@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["INITIAL_POSITION", "Controller"]
+__all__ = ["INITIAL_POSITION", "Controller", "make_reply_dict"]
 
 import argparse
 import asyncio
@@ -29,6 +29,10 @@ import signal
 
 from lsst.ts import salobj
 from lsst.ts import tcpip
+from lsst.ts.idl.enums.MTMount import (
+    DeployableMotionState,
+    ElevationLockingPinMotionState,
+)
 from ..exceptions import CommandSupersededException
 from .. import commands
 from .. import constants
@@ -42,6 +46,11 @@ from .mirror_cover_locks_device import MirrorCoverLocksDevice
 from .oil_supply_system_device import OilSupplySystemDevice
 from .top_end_chiller_device import TopEndChillerDevice
 
+# Positions of the reverse and forward position azimuth topple block
+# switches (deg). When azimuth exceeds one of these limits the block flips.
+# When the azimuth is between these limits, neither topple switch is engaged.
+AZIMUTH_TOPPLE_BLOCK_POSITIONS = [-2, 2]
+
 # Dict of DeviceId: initial position (deg).
 INITIAL_POSITION = {
     enums.DeviceId.ELEVATION_AXIS: 80,
@@ -53,7 +62,7 @@ INITIAL_POSITION = {
 def make_reply_dict(id, **parameters):
     """Make a reply dict."""
     return dict(
-        id=enums.ReplyCode(id),
+        id=enums.ReplyId(id),
         timestamp=salobj.current_tai(),
         parameters=parameters,
     )
@@ -108,11 +117,17 @@ class Controller:
         # below which an axis is considered in position
         self.max_position_error = 0.01  # degrees
         self.max_velocity_error = 0.01  # degrees/second
+
+        # Saved state initialized by init_saved_state
         # A dict of device_id: in_position
-        self.in_position_dict = {
-            enums.DeviceId.AZIMUTH_AXIS: None,
-            enums.DeviceId.ELEVATION_AXIS: None,
-        }
+        self.in_position_dict = {}
+        # A dict of device_id: motion state
+        self.motion_state_dict = {}
+        self.init_saved_state()
+
+        # Current state of the reverse and forward  azimuth topple block
+        # switches: False if disengaged, True if engaged, None if unknown.
+        self.azimuth_topple_block_state = [None, None]
 
         # Queue of commands, for unit testing
         self.command_queue = None
@@ -122,14 +137,24 @@ class Controller:
         # Dict of DeviceId: mock device
         self.device_dict = {}
         self.add_all_devices()
-        self.command_dict[enums.CommandCode.ASK_FOR_COMMAND] = self.do_ask_for_command
-        self.command_dict[enums.CommandCode.BOTH_AXES_MOVE] = self.do_both_axes_move
-        self.command_dict[enums.CommandCode.BOTH_AXES_STOP] = self.do_both_axes_stop
-        self.command_dict[enums.CommandCode.BOTH_AXES_TRACK] = self.do_both_axes_track
-        self.command_dict[enums.CommandCode.SAFETY_RESET] = self.do_safety_reset
+        extra_commands = {
+            enums.CommandCode.ASK_FOR_COMMAND: self.do_ask_for_command,
+            enums.CommandCode.BOTH_AXES_MOVE: self.do_both_axes_move,
+            enums.CommandCode.BOTH_AXES_STOP: self.do_both_axes_stop,
+            enums.CommandCode.BOTH_AXES_TRACK: self.do_both_axes_track,
+            enums.CommandCode.SAFETY_RESET: self.do_safety_reset,
+            enums.CommandCode.STATE_INFO: self.do_state_info,
+        }
+        self.command_dict.update(extra_commands)
 
         self.read_loop_task = asyncio.Future()
+
+        # Code that wants to wait for a full telemetry iteration
+        # should set self._wait_telemetry_task = asyncio.Future()
+        # and then wait for that task to be done.
+        self._wait_telemetry_task = asyncio.Future()
         self.telemetry_loop_task = asyncio.Future()
+        self.telemetry_loop_task.set_result(None)
         self.telemetry_monitor_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.start())
         self.done_task = asyncio.Future()
@@ -195,33 +220,85 @@ class Controller:
         except Exception as e:
             print(f"Mock TMA controller failed: {e!r}", flush=True)
 
+    def init_saved_state(self):
+        """Initialize saved state used to decide whether to report events
+        in handle_telemetry.
+
+        Call this when constructing the controller and in response to the
+        STATE_INFO command.
+        """
+        # A dict of device_id: in_position
+        self.in_position_dict = {
+            enums.DeviceId.AZIMUTH_AXIS: None,
+            enums.DeviceId.ELEVATION_AXIS: None,
+            enums.DeviceId.CAMERA_CABLE_WRAP: None,
+        }
+        self.motion_state_dict = {
+            enums.DeviceId.AZIMUTH_AXIS: None,
+            enums.DeviceId.ELEVATION_AXIS: None,
+            enums.DeviceId.CAMERA_CABLE_WRAP: None,
+        }
+
     async def put_axis_telemetry(self, device_id, tai):
-        """Warning: this minimal and simplistic."""
+        """Put telemetry for elevation, azimuth, or camera cable wrap.
+
+        Warning: this minimal and simplistic.
+        """
         topic_id = {
             enums.DeviceId.AZIMUTH_AXIS: enums.TelemetryTopicId.AZIMUTH,
             enums.DeviceId.ELEVATION_AXIS: enums.TelemetryTopicId.ELEVATION,
+            enums.DeviceId.CAMERA_CABLE_WRAP: enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
         }[device_id]
         device = self.device_dict[device_id]
         actuator = device.actuator
         target = actuator.target.at(tai)
         actual = actuator.path.at(tai)
 
-        data_dict = {
-            "topicID": topic_id,
-            "angleActual": actual.position,
-            "angleSet": target.position,
-            "velocityActual": actual.velocity,
-            "velocitySet": target.velocity,
-            "accelerationActual": actual.acceleration,
-            # Torque is arbitrary; I have no idea
-            # what realistic values are.
-            "torqueActual": actual.acceleration / 10,
-            "timestamp": tai,
-        }
-        await self.write_telemetry(data_dict)
+        if device_id == enums.DeviceId.CAMERA_CABLE_WRAP:
+            data_dict = dict(
+                topicID=topic_id,
+                angle=actual.position,
+                speed=actual.velocity,
+                acceleration=actual.acceleration,
+                timestamp=tai,
+            )
+        else:
+            data_dict = dict(
+                topicID=topic_id,
+                angleActual=actual.position,
+                angleSet=target.position,
+                velocityActual=actual.velocity,
+                velocitySet=target.velocity,
+                accelerationActual=actual.acceleration,
+                # Torque is arbitrary; I have no idea
+                # what realistic values are.
+                torqueActual=actual.acceleration / 10,
+                timestamp=tai,
+            )
+        if self.telemetry_server.connected:
+            await self.write_telemetry(data_dict)
 
-        # Write the InPosition TCP/IP message, if command/event
-        # server connected.
+        # Write events, if CSC connected.
+        axis = {
+            enums.DeviceId.AZIMUTH_AXIS: enums.System.AZIMUTH,
+            enums.DeviceId.ELEVATION_AXIS: enums.System.ELEVATION,
+            enums.DeviceId.CAMERA_CABLE_WRAP: enums.System.CAMERA_CABLE_WRAP,
+        }[device_id]
+
+        motion_state = device.motion_state(tai)
+        if motion_state != self.motion_state_dict[device_id]:
+            self.motion_state_dict[device_id] = motion_state
+            if not self.command_server.connected:
+                return
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.AXIS_MOTION_STATE,
+                    axis=axis,
+                    motionState=motion_state,
+                    position=device.point_to_point_target,
+                )
+            )
+
         in_position = (
             device.has_target
             and abs(target.position - actual.position) < self.max_position_error
@@ -229,32 +306,61 @@ class Controller:
         )
         if in_position != self.in_position_dict[device_id]:
             self.in_position_dict[device_id] = in_position
-            axis = {enums.DeviceId.AZIMUTH_AXIS: 0, enums.DeviceId.ELEVATION_AXIS: 1}[
-                device_id
-            ]
-            if self.command_server.connected:
-                await self.write_reply(
-                    make_reply_dict(
-                        id=enums.ReplyCode.IN_POSITION,
-                        axis=axis,
-                        inPosition=in_position,
-                    )
+            if not self.command_server.connected:
+                return
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.IN_POSITION,
+                    axis=axis,
+                    inPosition=in_position,
                 )
+            )
 
-    async def put_camera_cable_wrap_telemetry(self, tai):
-        """Warning: this minimal and simplistic."""
-        device = self.device_dict[enums.DeviceId.CAMERA_CABLE_WRAP]
-        actuator = device.actuator
-        actual = actuator.path.at(tai)
+    async def put_azimuth_topple_block_telemetry(self, tai):
+        """Put telemetry for ReplyId.AZIMUTH_TOPPLE_BLOCK."""
+        actuator = self.device_dict[enums.DeviceId.AZIMUTH_AXIS].actuator
+        position = actuator.path.at(tai).position
+        if position <= AZIMUTH_TOPPLE_BLOCK_POSITIONS[0]:
+            azimuth_topple_block_state = [True, False]
+        elif position >= AZIMUTH_TOPPLE_BLOCK_POSITIONS[1]:
+            azimuth_topple_block_state = [False, True]
+        else:
+            azimuth_topple_block_state = [False, False]
+        if self.azimuth_topple_block_state != azimuth_topple_block_state:
+            self.azimuth_topple_block_state = azimuth_topple_block_state
+            if not self.command_server.connected:
+                return
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.AZIMUTH_TOPPLE_BLOCK,
+                    reverse=azimuth_topple_block_state[0],
+                    forward=azimuth_topple_block_state[1],
+                )
+            )
 
-        data_dict = dict(
-            topicID=enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
-            angle=actual.position,
-            speed=actual.velocity,
-            acceleration=actual.acceleration,
-            timestamp=tai,
+    async def put_deployable_telemetry(self, device_id, tai):
+        """Put telemetry for deployable devices."""
+        topic_id, nelts = {
+            enums.DeviceId.MIRROR_COVERS: (
+                enums.ReplyId.MIRROR_COVERS_MOTION_STATE,
+                4,
+            ),
+            enums.DeviceId.MIRROR_COVER_LOCKS: (
+                enums.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE,
+                4,
+            ),
+        }[device_id]
+        device = self.device_dict[device_id]
+        motion_state = device.motion_state(tai)
+        if not self.command_server.connected:
+            return
+        await self.write_reply(
+            make_reply_dict(
+                id=topic_id,
+                state=motion_state,
+                elementState=[motion_state] * nelts,
+            )
         )
-        await self.write_telemetry(data_dict)
 
     async def write_reply(self, reply_dict):
         """Write a reply to the command/reply stream.
@@ -266,6 +372,8 @@ class Controller:
             It will be formatted as json before being written.
         """
         self.log.debug("write_reply(%s)", reply_dict)
+        if not self.command_server.connected:
+            raise RuntimeError("Command client not connected")
         reply_str = json.dumps(reply_dict)
         self.command_server.writer.write(reply_str.encode())
         self.command_server.writer.write(constants.LINE_TERMINATOR)
@@ -273,6 +381,8 @@ class Controller:
 
     async def write_telemetry(self, data_dict):
         data_str = json.dumps(data_dict)
+        if not self.telemetry_server.connected:
+            raise RuntimeError("Telemetry client not connected")
         self.telemetry_server.writer.write(data_str.encode())
         self.telemetry_server.writer.write(constants.LINE_TERMINATOR)
         await self.telemetry_server.writer.drain()
@@ -290,18 +400,38 @@ class Controller:
         else:
             self.log.info("Telemetry server disconnected; stop telemetry loop")
 
+    async def telemetry_iteration(self):
+        """Output telemetry: one iteration of the telemetry loop.
+
+        Warning: the telemetry is minimal and simplistic.
+        """
+        tai = salobj.current_tai()
+        for device_id in (
+            enums.DeviceId.AZIMUTH_AXIS,
+            enums.DeviceId.ELEVATION_AXIS,
+            enums.DeviceId.CAMERA_CABLE_WRAP,
+        ):
+            await self.put_axis_telemetry(device_id=device_id, tai=tai)
+        await self.put_azimuth_topple_block_telemetry(tai)
+
+        for device_id in (
+            enums.DeviceId.MIRROR_COVER_LOCKS,
+            enums.DeviceId.MIRROR_COVERS,
+        ):
+            await self.put_deployable_telemetry(device_id=device_id, tai=tai)
+
     async def telemetry_loop(self):
-        """Warning: this minimal and simplistic."""
+        """Output telemetry at regular intervals."""
         try:
             while self.telemetry_server.connected:
-                tai = salobj.current_tai()
-                await self.put_axis_telemetry(
-                    device_id=enums.DeviceId.AZIMUTH_AXIS, tai=tai
-                )
-                await self.put_axis_telemetry(
-                    device_id=enums.DeviceId.ELEVATION_AXIS, tai=tai
-                )
-                await self.put_camera_cable_wrap_telemetry(tai=tai)
+                # Grab the telemetry done task before writing anything.
+                # That way code waiting for full telemetry to be written
+                # (by setting self._wait_telemetry_task = asyncio.Future()
+                # and waiting for the task) will wait for the next iteration.
+                _wait_telemetry_task = self._wait_telemetry_task
+                await self.telemetry_iteration()
+                if not _wait_telemetry_task.done():
+                    _wait_telemetry_task.set_result(None)
                 await asyncio.sleep(self.telemetry_interval)
         except ConnectionResetError:
             self.log.warning("Disconnected")
@@ -437,9 +567,9 @@ class Controller:
                     self.done_task.set_result(None)
 
     async def handle_command(self, command):
-        if (
-            self.commander != enums.Source.CSC
-            and command.command_code != enums.CommandCode.ASK_FOR_COMMAND
+        if self.commander != enums.Source.CSC and command.command_code not in (
+            enums.CommandCode.ASK_FOR_COMMAND,
+            enums.CommandCode.STATE_INFO,
         ):
             await self.write_cmd_rejected(
                 command=command,
@@ -476,47 +606,6 @@ class Controller:
             # that `Controller.monitor_command` is awaiting.
             asyncio.create_task(self.monitor_command(command=command, task=task))
 
-    async def read_loop(self):
-        self.log.debug("Read loop begins")
-        try:
-            while self.command_server.connected:
-                read_bytes = await self.command_server.reader.readuntil(
-                    constants.LINE_TERMINATOR
-                )
-                try:
-                    command = commands.parse_command(read_bytes.decode())
-                except Exception as e:
-                    self.log.error(f"Ignoring unparsable command {read_bytes}: {e!r}")
-                    continue
-                if self.command_queue and not self.command_queue.full():
-                    self.command_queue.put_nowait(command)
-                asyncio.create_task(self.handle_command(command))
-        except asyncio.CancelledError:
-            pass
-        except (ConnectionResetError, asyncio.IncompleteReadError):
-            self.log.warning("Connection lost")
-            await self.command_server.close_client()
-        except Exception:
-            self.log.exception("Read loop failed")
-            await self.command_server.close_client()
-        self.log.debug("Read loop ends")
-
-    async def reply_to_command(self, command):
-        if not self.command_server.connected:
-            raise RuntimeError(f"reply_to_command({command}) failed: not connected")
-        try:
-            await self.write_cmd_acknowledged(command, timeout=1)
-            if command.command_code not in commands.AckOnlyCommandCodes:
-                await asyncio.sleep(0.1)
-                if not self.command_server.connected:
-                    raise RuntimeError(
-                        f"reply_to_command({command}) failed: disconnected before writing Done"
-                    )
-                await self.write_cmd_succeeded(command)
-        except Exception:
-            self.log.exception(f"reply_to_command({command}) failed")
-            raise
-
     def command_connect_callback(self, server):
         state_str = "connected to" if server.connected else "disconnected from"
         self.log.info(f"Mock controller {state_str} the CSC")
@@ -549,7 +638,11 @@ class Controller:
                 f"HHD has command; cannot give command to {command.commander!r}; "
                 f"from source={command.source}"
             )
-        self.commander = command.commander
+        if self.commander != command.commander:
+            self.commander = command.commander
+            timeout = 1
+            task = asyncio.create_task(self.write_commander())
+            return timeout, task
 
     def do_both_axes_move(self, command):
         azimuth_command = commands.AzimuthAxisMove(
@@ -596,6 +689,36 @@ class Controller:
         """This is presently a no-op."""
         pass
 
+    def do_state_info(self, command):
+        """Print all state...
+
+        For state that is reported in the telemetry loop,
+        reset the saved values so the telemetry loop reports it.
+        """
+        task = asyncio.create_task(self._impl_state_info())
+        timeout = 1
+        return timeout, task
+
+    async def _impl_state_info(self):
+        """Implement the state_info command.
+
+        This has to be async so can't be the method called by the dispatcher.
+        """
+        await self.write_unmocked_events()
+        self.init_saved_state()
+        if not self.telemetry_loop_task.done():
+            await self.wait_telemetry()
+        else:
+            await self.telemetry_iteration()
+
+    async def wait_telemetry(self):
+        """Wait for one full cycle of telemetry."""
+        if self.telemetry_loop_task.done():
+            raise RuntimeError("Telemetry loop is not running")
+        task = asyncio.Future()
+        self._wait_telemetry_task = task
+        await task
+
     async def monitor_command(self, command, task):
         try:
             await task
@@ -609,7 +732,48 @@ class Controller:
                 await self.write_cmd_superseded(command, superseded_by=e.command)
         except Exception as e:
             if self.command_server.connected:
-                await self.write_cmd_failed(command, explanation=str(e))
+                await self.write_cmd_failed(command, explanation=repr(e))
+
+    async def read_loop(self):
+        self.log.debug("Read loop begins")
+        try:
+            while self.command_server.connected:
+                read_bytes = await self.command_server.reader.readuntil(
+                    constants.LINE_TERMINATOR
+                )
+                try:
+                    command = commands.parse_command(read_bytes.decode())
+                except Exception as e:
+                    self.log.error(f"Ignoring unparsable command {read_bytes}: {e!r}")
+                    continue
+                if self.command_queue and not self.command_queue.full():
+                    self.command_queue.put_nowait(command)
+                asyncio.create_task(self.handle_command(command))
+        except asyncio.CancelledError:
+            pass
+        except (ConnectionResetError, asyncio.IncompleteReadError):
+            self.log.warning("Connection lost")
+            await self.command_server.close_client()
+        except Exception:
+            self.log.exception("Read loop failed")
+            await self.command_server.close_client()
+        self.log.debug("Read loop ends")
+
+    async def reply_to_command(self, command):
+        if not self.command_server.connected:
+            raise RuntimeError(f"reply_to_command({command}) failed: not connected")
+        try:
+            await self.write_cmd_acknowledged(command, timeout=1)
+            if command.command_code not in commands.AckOnlyCommandCodes:
+                await asyncio.sleep(0.1)
+                if not self.command_server.connected:
+                    raise RuntimeError(
+                        f"reply_to_command({command}) failed: disconnected before writing Done"
+                    )
+                await self.write_cmd_succeeded(command)
+        except Exception:
+            self.log.exception(f"reply_to_command({command}) failed")
+            raise
 
     def signal_handler(self):
         asyncio.create_task(self.close())
@@ -626,7 +790,7 @@ class Controller:
         """
         await self.write_reply(
             make_reply_dict(
-                id=enums.ReplyCode.CMD_ACKNOWLEDGED,
+                id=enums.ReplyId.CMD_ACKNOWLEDGED,
                 commander=command.source,
                 sequenceId=command.sequence_id,
                 timeout=timeout,
@@ -645,7 +809,7 @@ class Controller:
         """
         await self.write_reply(
             make_reply_dict(
-                id=enums.ReplyCode.CMD_FAILED,
+                id=enums.ReplyId.CMD_FAILED,
                 commander=command.source,
                 sequenceId=command.sequence_id,
                 explanation=explanation,
@@ -664,7 +828,7 @@ class Controller:
         """
         await self.write_reply(
             make_reply_dict(
-                id=enums.ReplyCode.CMD_REJECTED,
+                id=enums.ReplyId.CMD_REJECTED,
                 commander=command.source,
                 sequenceId=command.sequence_id,
                 explanation=explanation,
@@ -681,7 +845,7 @@ class Controller:
         """
         await self.write_reply(
             make_reply_dict(
-                id=enums.ReplyCode.CMD_SUCCEEDED,
+                id=enums.ReplyId.CMD_SUCCEEDED,
                 commander=command.source,
                 sequenceId=command.sequence_id,
             )
@@ -711,9 +875,91 @@ class Controller:
             )
         await self.write_reply(
             make_reply_dict(
-                id=enums.ReplyCode.CMD_SUPERSEDED,
+                id=enums.ReplyId.CMD_SUPERSEDED,
                 commander=command.source,
                 sequenceId=command.sequence_id,
                 **superseding_kwargs,
             )
         )
+
+    async def write_commander(self):
+        if self.command_server.connected:
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.COMMANDER,
+                    actualCommander=self.commander,
+                )
+            )
+
+    async def write_unmocked_events(self):
+        """Write all events that are not output in the normal course of
+        controlling mock controller.
+
+        This includes:
+
+        * Events the mock controller cannot sensibly output, such as limits
+          and safety interlocks.
+        * Devices the CSC is not allowed to control,
+          including the deployable platform and elevation locking pin.
+        """
+        await self.write_commander()
+
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.DEPLOYABLE_PLATFORM_MOTION_STATE,
+                state=DeployableMotionState.RETRACTED,
+                elementState=[DeployableMotionState.RETRACTED] * 2,
+            )
+        )
+
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE,
+                state=ElevationLockingPinMotionState.UNLOCKED,
+                elementState=[ElevationLockingPinMotionState.UNLOCKED] * 2,
+            )
+        )
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.SAFETY_INTERLOCKS,
+                causes=0,
+                subcausesEmergencyStop=0,
+                subcausesLimitSwitch=0,
+                subcausesDeployablePlatform=0,
+                subcausesDoorHatchLadder=0,
+                subcausesMirrorCover=0,
+                subcausesLockingPin=0,
+                subcausesCapacitorDoor=0,
+                subcausesBrakesFailed=0,
+                effects=0,
+            )
+        )
+
+        for system in (
+            enums.System.ELEVATION,
+            enums.System.AZIMUTH,
+            enums.System.CAMERA_CABLE_WRAP,
+        ):
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.LIMITS,
+                    system=system,
+                    limits=0,
+                )
+            )
+
+            device_id = {
+                enums.System.AZIMUTH: enums.DeviceId.AZIMUTH_AXIS,
+                enums.System.ELEVATION: enums.DeviceId.ELEVATION_AXIS,
+                enums.System.CAMERA_CABLE_WRAP: enums.DeviceId.CAMERA_CABLE_WRAP,
+            }[system]
+            actuator = self.device_dict[device_id].actuator
+
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.SOFT_LIMIT_POSITIONS,
+                    system=system,
+                    min=actuator.min_position,
+                    max=actuator.max_position,
+                )
+            )

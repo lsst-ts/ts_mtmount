@@ -358,7 +358,7 @@ ask_for_command 1
 
                 # Handle command ack, if relevant (only commands issued
                 # with do_wait=True are put in the command dict).
-                if reply["id"] == enums.ReplyCode.CMD_ACKNOWLEDGED:
+                if reply["id"] == enums.ReplyId.CMD_ACKNOWLEDGED:
                     # Command acknowledged. Set timeout but leave
                     # cmd_futures in command_futures_dict.
                     cmd_futures = self.command_futures_dict.get(
@@ -366,7 +366,7 @@ ask_for_command 1
                     )
                     if cmd_futures is not None:
                         cmd_futures.setack(reply["parameters"]["timeout"])
-                elif reply["id"] == enums.ReplyCode.CMD_FAILED:
+                elif reply["id"] == enums.ReplyId.CMD_FAILED:
                     # Command failed. Pop the command_futures_dict entry
                     # and report failure.
                     cmd_futures = self.command_futures_dict.pop(
@@ -374,7 +374,7 @@ ask_for_command 1
                     )
                     if cmd_futures is not None:
                         cmd_futures.setnoack(reply["parameters"]["explanation"])
-                elif reply["id"] == enums.ReplyCode.CMD_SUCCEEDED:
+                elif reply["id"] == enums.ReplyId.CMD_SUCCEEDED:
                     cmd_futures = self.command_futures_dict.pop(
                         reply["parameters"]["sequenceId"], None
                     )

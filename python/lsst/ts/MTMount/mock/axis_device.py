@@ -25,6 +25,7 @@ import asyncio
 
 from lsst.ts import salobj
 from lsst.ts import simactuators
+from lsst.ts.idl.enums.MTMount import AxisMotionState
 from .. import enums
 from .. import limits
 from ..exceptions import CommandSupersededException
@@ -81,6 +82,14 @@ class AxisDevice(BaseDevice):
             dtmax_track=0.2,
             start_position=start_position,
         )
+        self.home_position = (
+            self.actuator.min_position + self.actuator.max_position
+        ) / 2
+
+        # The actuator cannot tell the difference between tracking and
+        # moving point to point, so keep track of that with this flag.
+        self.moving_point_to_point = False
+        self.point_to_point_target = 0
         self._monitor_move_task = asyncio.Future()
         self._monitor_move_task.set_result(None)
         self._move_result_task = asyncio.Future()
@@ -182,6 +191,7 @@ class AxisDevice(BaseDevice):
         self.assert_enabled()
         self.supersede_move_command(command)
         self.actuator.stop()
+        self.moving_point_to_point = False
         self.has_target = False
         # Camera cable wrap enable tracking has an "on" parameter:
         # on=1 means enable tracking, on=0 means pause tracking.
@@ -210,8 +220,7 @@ class AxisDevice(BaseDevice):
         move to the mid-point of the position limits.
         """
         self.assert_enabled()
-        position = (self.actuator.min_position + self.actuator.max_position) / 2
-        return self.move_point_to_point(position=position, command=command)
+        return self.move_point_to_point(position=self.home_position, command=command)
 
     def do_move(self, command):
         """Set target position.
@@ -260,6 +269,44 @@ class AxisDevice(BaseDevice):
         )
         self.has_target = True
 
+    def motion_state(self, tai=None):
+        """Get the motion state at the specified time.
+
+        Parameters
+        ----------
+        tai : `float` or `None`, optional
+            TAI time at which to make the determination.
+            The current TAI if None.
+
+        Returns
+        -------
+        motion_state : `ts.idl.enums.MTMount.AxisMotionState`
+            Motion state.
+        """
+        if tai is None:
+            tai = salobj.current_tai()
+        kind = self.actuator.kind(tai)
+        motion_state = {
+            self.actuator.Kind.Stopping: AxisMotionState.STOPPING,
+            self.actuator.Kind.Stopped: AxisMotionState.STOPPED,
+            self.actuator.Kind.Slewing: AxisMotionState.TRACKING,
+            self.actuator.Kind.Tracking: AxisMotionState.TRACKING,
+        }.get(kind)
+        # The actuator cannot tell the difference between tracking
+        # and moving point to point, hence the moving_point_to_point flag
+        if self.moving_point_to_point and motion_state == AxisMotionState.TRACKING:
+            if tai >= self.actuator.path[-1].tai:
+                motion_state = AxisMotionState.STOPPED
+            else:
+                motion_state = AxisMotionState.MOVING_POINT_TO_POINT
+        elif (
+            motion_state == AxisMotionState.STOPPED
+            and self.tracking_enabled
+            and self.tracking_paused
+        ):
+            motion_state = AxisMotionState.TRACKING_PAUSED
+        return motion_state
+
     def move_point_to_point(self, position, command):
         """Move to the specified position.
 
@@ -280,6 +327,8 @@ class AxisDevice(BaseDevice):
         self.assert_enabled()
         self.assert_tracking_enabled(False)
         self.supersede_move_command(command)
+        self.moving_point_to_point = True
+        self.point_to_point_target = position
         tai = salobj.current_tai()
         self.actuator.set_target(tai=tai, position=position, velocity=0)
         self.has_target = True

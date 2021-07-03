@@ -25,6 +25,7 @@ import unittest
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
+from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState
 
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
 # Padding for the time limit returned by device do_methods
@@ -127,17 +128,17 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_mirror_cover_locks(self):
         device = self.device_dict[MTMount.DeviceId.MIRROR_COVER_LOCKS]
 
-        await self.check_point_to_point_device(
+        await self.check_deployable_device(
             device=device,
             power_on_command=MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
-            goto_min_command=MTMount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, deploy=False
-            ),
-            goto_max_command=MTMount.commands.MirrorCoverLocksMoveAll(
+            deploy_command=MTMount.commands.MirrorCoverLocksMoveAll(
                 drive=-1, deploy=True
             ),
+            retract_command=MTMount.commands.MirrorCoverLocksMoveAll(
+                drive=-1, deploy=False
+            ),
             stop_command=MTMount.commands.MirrorCoverLocksStop(drive=-1),
-            start_at_min=True,
+            start_deployed=True,
             move_min_timeout=0.5,
             power_on_min_timeout=None,
         )
@@ -145,13 +146,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_mirror_covers(self):
         device = self.device_dict[MTMount.DeviceId.MIRROR_COVERS]
 
-        await self.check_point_to_point_device(
+        await self.check_deployable_device(
             device=device,
             power_on_command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
-            goto_min_command=MTMount.commands.MirrorCoversDeploy(drive=-1),
-            goto_max_command=MTMount.commands.MirrorCoversRetract(drive=-1),
+            deploy_command=MTMount.commands.MirrorCoversDeploy(drive=-1),
+            retract_command=MTMount.commands.MirrorCoversRetract(drive=-1),
             stop_command=MTMount.commands.MirrorCoversStop(drive=-1),
-            start_at_min=True,
+            start_deployed=True,
             move_min_timeout=0.5,
             power_on_min_timeout=None,
         )
@@ -303,6 +304,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.power_on)
         self.assertFalse(device.enabled)
         self.assertFalse(device.has_target)
+        self.assertFalse(device.moving_point_to_point)
 
         short_command_names = [
             "drive_enable",
@@ -411,6 +413,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.has_target)
 
         # Do a point to point move
+        self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
         start_segment = device.actuator.path.at(salobj.current_tai())
         self.assertEqual(start_segment.velocity, 0)
         start_position = start_segment.position
@@ -419,22 +422,28 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         task = asyncio.create_task(self.run_command(move_command, min_timeout=0.5))
 
         await asyncio.sleep(0.1)  # give command time to start
+        self.assertEqual(device.motion_state(), AxisMotionState.MOVING_POINT_TO_POINT)
         self.assertAlmostEqual(device.actuator.target.position, end_position)
         self.assertEqual(device.actuator.target.velocity, 0)
         segment = device.actuator.path.at(salobj.current_tai())
         self.assertGreater(abs(segment.velocity), 0.01)
         self.assertTrue(device.has_target)
+        self.assertTrue(device.moving_point_to_point)
+        self.assertAlmostEqual(device.point_to_point_target, end_position)
 
         await task
+        self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
         end_segment = device.actuator.path.at(salobj.current_tai())
         self.assertAlmostEqual(end_segment.velocity, 0)
         self.assertAlmostEqual(end_segment.position, end_position)
         self.assertTrue(device.has_target)
+        self.assertAlmostEqual(device.point_to_point_target, end_position)
 
         # Start homing or a big point to point move, then stop the axes
         # (Homing is a point to point move, and it's slow).
         if is_elaz:
             slow_move_command = home_command
+            end_position = device.home_position
         else:
             start_position = start_segment.position
             end_position = start_position + 10
@@ -446,12 +455,22 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
         await asyncio.sleep(0.1)
+        self.assertAlmostEqual(device.point_to_point_target, end_position)
+        self.assertEqual(device.motion_state(), AxisMotionState.MOVING_POINT_TO_POINT)
 
         await self.run_command(stop_command)
         await task
-        stop_duration = device.actuator.path[-1].tai - salobj.current_tai()
+        stop_end_tai = device.actuator.path[-1].tai
+        stop_duration = stop_end_tai - salobj.current_tai()
+        # Check STOPPING state; the specified tai can be any time
+        # earlier than the end time of the stop.
+        self.assertEqual(
+            device.motion_state(stop_end_tai - 0.1), AxisMotionState.STOPPING
+        )
         await asyncio.sleep(stop_duration)
         self.assertFalse(device.has_target)
+        self.assertAlmostEqual(device.point_to_point_target, end_position)
+        self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
 
         # The tracking command should fail when not in tracking mode.
         track_command = track_command_class(
@@ -473,6 +492,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(device.tracking_enabled)
         self.assertFalse(device.tracking_paused)
         self.assertFalse(device.has_target)
+        self.assertFalse(device.moving_point_to_point)
+        self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
 
         non_tracking_mode_commands = [
             home_command,
@@ -507,6 +528,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertAlmostEqual(device.actuator.target.velocity, velocity)
             self.assertAlmostEqual(device.actuator.target.tai, tai, delta=1e-5)
             self.assertTrue(device.has_target)
+            self.assertEqual(device.motion_state(tai), AxisMotionState.TRACKING)
             await asyncio.sleep(0.1)
 
         # Wait for tracking to time out; add some time to deal with
@@ -518,6 +540,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.tracking_paused)
         self.assertFalse(device.has_target)
+        self.assertEqual(device.motion_state(tai), AxisMotionState.STOPPED)
 
         # Re-enable tracking and supply one tracking update
         await self.run_command(reset_alarm_command)
@@ -532,11 +555,12 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         await self.run_command(
             track_command_class(
                 position=device.actuator.path[-1].position,
-                velocity=0,
+                velocity=1,
                 tai=salobj.current_tai(),
             )
         )
         self.assertTrue(device.has_target)
+        self.assertEqual(device.motion_state(tai), AxisMotionState.TRACKING)
 
         # If camera cable wrap, pause tracking and check state
         if not is_elaz:
@@ -547,6 +571,23 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(device.tracking_enabled)
             self.assertTrue(device.tracking_paused)
             self.assertFalse(device.has_target)
+            # Note: there may eventually be an AxisMotionState for paused
+            # tracking but Tekniker does not report it yet.
+            self.assertEqual(
+                device.motion_state(tai=device.actuator.path[-1].tai - 0.01),
+                AxisMotionState.STOPPING,
+            )
+            self.assertEqual(
+                device.motion_state(tai=device.actuator.path[-1].tai + 0.01),
+                AxisMotionState.TRACKING_PAUSED,
+            )
+
+            # Make sure the tracking timer does not fire
+            await asyncio.sleep(MTMount.mock.MAX_TRACKING_DELAY + 0.2)
+            self.assertTrue(device.power_on)
+            self.assertTrue(device.enabled)
+            self.assertTrue(device.tracking_enabled)
+            self.assertTrue(device.tracking_paused)
 
             # Un-pause tracking
             await self.run_command(enable_tracking_on_command)
@@ -555,6 +596,14 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(device.tracking_enabled)
             self.assertFalse(device.tracking_paused)
             self.assertFalse(device.has_target)
+            await self.run_command(
+                track_command_class(
+                    position=device.actuator.path[-1].position,
+                    velocity=1,
+                    tai=salobj.current_tai(),
+                )
+            )
+            self.assertEqual(device.motion_state(tai), AxisMotionState.TRACKING)
 
         # Check that stop disables tracking
         await self.run_command(stop_command)
@@ -563,6 +612,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.tracking_paused)
         self.assertFalse(device.has_target)
+        stop_end_tai = device.actuator.path[-1].tai
+        self.assertEqual(
+            device.motion_state(stop_end_tai - 0.01), AxisMotionState.STOPPING
+        )
+        self.assertEqual(
+            device.motion_state(stop_end_tai + 0.01), AxisMotionState.STOPPED
+        )
 
         # Check that drive_disable disables tracking
         # but does not turn off power.
@@ -665,48 +721,67 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.power_on)
         self.assertFalse(device.alarm_on)
 
-    async def check_point_to_point_device(
+    async def check_deployable_device(
         self,
         device,
         power_on_command,
-        goto_min_command,
-        goto_max_command,
+        deploy_command,
+        retract_command,
         stop_command,
-        start_at_min,
+        start_deployed,
         move_min_timeout,
         power_on_min_timeout,
     ):
-        def assert_at_end(at_min):
-            """Assert the device is its min or max position."""
-            if at_min:
-                self.assertAlmostEqual(
-                    device.actuator.position(), device.actuator.min_position
-                )
-                self.assertAlmostEqual(
-                    device.actuator.end_position, device.actuator.min_position
-                )
-            else:
-                self.assertAlmostEqual(
-                    device.actuator.position(), device.actuator.max_position
-                )
-                self.assertAlmostEqual(
-                    device.actuator.end_position, device.actuator.max_position
-                )
-            self.assertFalse(device.actuator.moving())
+        def assert_motion_state(motion_state, tai=None):
+            if tai is None:
+                tai = salobj.current_tai()
+            position = device.actuator.position(tai)
+            velocity = device.actuator.velocity(tai)
+            actual_motion_state = device.motion_state(tai)
+            self.assertEqual(actual_motion_state, motion_state)
 
-        assert_at_end(at_min=start_at_min)
+            if motion_state == DeployableMotionState.DEPLOYED:
+                self.assertAlmostEqual(position, device.deployed_position)
+                self.assertEqual(velocity, 0)
+            elif motion_state == DeployableMotionState.RETRACTED:
+                self.assertAlmostEqual(position, device.retracted_position)
+                self.assertEqual(velocity, 0)
+            elif motion_state == DeployableMotionState.LOST:
+                self.assertNotAlmostEqual(position, device.deployed_position)
+                self.assertNotAlmostEqual(position, device.retracted_position)
+                self.assertEqual(velocity, 0)
+            elif motion_state == DeployableMotionState.DEPLOYING:
+                self.assertNotEqual(velocity, 0)
+                if device.deployed_position > device.retracted_position:
+                    self.assertGreater(velocity, 0)
+                else:
+                    self.assertLess(velocity, 0)
+            elif motion_state == DeployableMotionState.RETRACTING:
+                self.assertNotEqual(velocity, 0)
+                if device.deployed_position > device.retracted_position:
+                    self.assertLess(velocity, 0)
+                else:
+                    self.assertGreater(velocity, 0)
+            else:
+                self.fail(f"Unrecognized motion_state={motion_state}")
+
+        assert_motion_state(
+            DeployableMotionState.DEPLOYED
+            if start_deployed
+            else DeployableMotionState.RETRACTED
+        )
 
         # Test that moves fail if not powered on.
         # This failure happens before the command starts running,
         # so the should_fail argument is not relevant.
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                command=goto_min_command,
+                command=deploy_command,
                 min_timeout=move_min_timeout,
             )
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                command=goto_max_command,
+                command=retract_command,
                 min_timeout=move_min_timeout,
             )
 
@@ -714,50 +789,40 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             command=power_on_command, min_timeout=power_on_min_timeout
         )
 
-        # Move to min position
-        await self.run_command(
-            command=goto_min_command,
-            min_timeout=0 if start_at_min else move_min_timeout,
-        )
-        assert_at_end(at_min=True)
+        # Deploy the device, if not already deployed.
+        if not start_deployed:
+            await self.run_command(
+                command=deploy_command,
+                min_timeout=move_min_timeout,
+            )
+            assert_motion_state(DeployableMotionState.DEPLOYED)
 
         # Stop should have no effect while halted
         await self.run_command(command=stop_command, min_timeout=None)
-        assert_at_end(at_min=True)
+        assert_motion_state(DeployableMotionState.DEPLOYED)
 
-        # Start a move to max and check that it is as expected
+        # Start retracting and check motion state
         task = asyncio.create_task(
-            self.run_command(command=goto_max_command, min_timeout=move_min_timeout)
+            self.run_command(command=retract_command, min_timeout=move_min_timeout)
         )
         await asyncio.sleep(0.1)  # Let the move begin
-        self.assertGreaterEqual(
-            device.actuator.position(), device.actuator.min_position
-        )
-        self.assertAlmostEqual(
-            device.actuator.end_position, device.actuator.max_position
-        )
-        self.assertTrue(device.actuator.moving())
+        assert_motion_state(DeployableMotionState.RETRACTING)
 
         await task
-        assert_at_end(at_min=False)
+        assert_motion_state(DeployableMotionState.RETRACTED)
 
-        # Move back to min but stop partway
+        # Start deploying and stop partway
         task = asyncio.create_task(
             self.run_command(
-                command=goto_min_command,
+                command=deploy_command,
                 min_timeout=move_min_timeout,
                 should_be_superseded=True,
             )
         )
         await asyncio.sleep(0.1)  # Let the move begin
-        self.assertLess(device.actuator.position(), device.actuator.max_position)
-        self.assertAlmostEqual(
-            device.actuator.end_position, device.actuator.min_position
-        )
-        self.assertTrue(device.actuator.moving())
+        assert_motion_state(DeployableMotionState.DEPLOYING)
         await self.run_command(command=stop_command, min_timeout=None)
-        self.assertLess(device.actuator.position(), device.actuator.max_position)
-        self.assertFalse(device.actuator.moving())
+        assert_motion_state(DeployableMotionState.LOST)
 
         await task
 

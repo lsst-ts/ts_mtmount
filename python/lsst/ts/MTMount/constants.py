@@ -24,10 +24,7 @@ __all__ = [
     "TELEMETRY_PORT",
     "MIRROR_COVER_DRIVES",
     "LINE_TERMINATOR",
-    "AxisStateDict",
-    "DriveStateDict",
 ]
-from lsst.ts.idl.enums.MTMount import AxisState, DriveState
 
 CSC_COMMAND_PORT = 30005
 
@@ -38,25 +35,3 @@ MIRROR_COVER_DRIVES = (0, 1, 2, 3)
 
 # TCP/IP line terminator (bytes)
 LINE_TERMINATOR = b"\r\n"
-
-# Axis state from the low-level controller: AxisState enum value.
-AxisStateDict = {
-    "Unknown": AxisState.UNKNOWN,
-    "Idle": AxisState.OFF,
-    "On Enable": AxisState.ENABLED,
-    "On DiscreteMove": AxisState.DISCRETE_MOVE,
-    "On JogMove": AxisState.JOG_MOVE,
-    "On Tracking": AxisState.TRACKING,
-    "On Stopping": AxisState.STOPPING,
-    "Fault": AxisState.FAULT,
-}
-
-# Drive state from the low-level controller: DriveState enum value.
-DriveStateDict = {
-    "Unknown": DriveState.UNKNOWN,
-    "Off": DriveState.OFF,
-    "Standstill": DriveState.STOPPED,
-    "Discrete Motion": DriveState.MOVING,
-    "Stopping": DriveState.STOPPING,
-    "Fault": DriveState.FAULT,
-}

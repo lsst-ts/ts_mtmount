@@ -22,16 +22,11 @@
 __all__ = ["MirrorCoverLocksDevice"]
 
 from .. import enums
-from .point_to_point_device import PointToPointDevice
+from .deployable_device import DeployableDevice
 
 
-class MirrorCoverLocksDevice(PointToPointDevice):
+class MirrorCoverLocksDevice(DeployableDevice):
     """Mirror cover locks.
-
-    Supports all commands except MOVE and MOVE_VELOCITY.
-
-    Unlike the real system, the drive argument must always be -1
-    (meaning all drives). That suffices for the CSC.
 
     Parameters
     ----------
@@ -43,24 +38,5 @@ class MirrorCoverLocksDevice(PointToPointDevice):
         super().__init__(
             controller=controller,
             device_id=enums.DeviceId.MIRROR_COVER_LOCKS,
-            min_position=0,
-            max_position=100,
-            start_position=0,
-            speed=100,
-            multi_drive=True,
+            start_deployed=True,
         )
-
-    def do_move(self, command):
-        raise NotImplementedError("Not implemented")
-
-    def do_move_velocity(self, command):
-        raise NotImplementedError("Not implemented")
-
-    def do_move_all(self, command):
-        position = 100 if command.deploy else 0
-        return self.move(position=position, command=command)
-
-    def do_stop(self, command):
-        """Stop the actuator."""
-        self.supersede_move_command(command)
-        self.actuator.stop()

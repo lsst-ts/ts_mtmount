@@ -24,8 +24,9 @@ __all__ = [
     "CscErrorCode",
     "DeviceId",
     "EnabledState",
-    "ReplyCode",
+    "ReplyId",
     "Source",
+    "System",
     "TelemetryTopicId",
 ]
 
@@ -194,9 +195,6 @@ class DeviceId(enum.Enum):
 
     These are for mock devices. The values do not match
     anything in Tekniker's code.
-
-    We could use SubsystemId from ts_idl, instead, but that enum class
-    includes entries that have no POWER or RESET_ALARM commands.
     """
 
     ELEVATION_AXIS = enum.auto()
@@ -225,7 +223,7 @@ class EnabledState(enum.IntEnum):
     ENABLE_FAILED = enum.auto()
 
 
-class ReplyCode(enum.IntEnum):
+class ReplyId(enum.IntEnum):
     """Reply codes for messages read from the low-level controller.
 
     The values and names are from email from Julen 2021-02-19.
@@ -253,30 +251,27 @@ class ReplyCode(enum.IntEnum):
     """Command superseded after being acknowledged."""
 
     WARNING = 10
-    ERROR = 11
+    ERROR = 11  # Called alarm in the TMA docs
     COMMANDER = 20
     SAFETY_INTERLOCKS = 30
     DETAILED_SETTINGS_APPLIED = 40
     AVAILABLE_SETTINGS = 41
-    STATE_INFO = 50  # Current state of the operation_manager
-    VERSION_INFO = 51  # Current version of the operation_manager
-    RECEIVED_COMMAND_FROM_CSC = 52  # Only sent to the EUI for log purposes
+
     POWER_STATE = 100
-    MOTION_STATE = 101
+    AXIS_MOTION_STATE = 101
     OIL_SUPPLY_SYSTEM_STATE = 102
     CHILLER_STATE = 103
     MOTION_CONTROLLER_STATE = 104
     IN_POSITION = 200
-    ELEVATION_LOCKING_PIN_POSITION = 201
-    MIRROR_COVER_POSITION = 202
-    MIRROR_COVER_LOCK_POSITION = 203
-    DEPLOYABLE_PLATFORM_POSITION = 204
-    SOFT_LIMIT_POSITION = 300
-    SOFT_LIMIT = 301
-    LIMIT_SWITCH = 302
-    KILL_SWITCH = 303
-    AZIMUTH_TOPPLE_BLOCK = 304
-    AZIMUTH_CABLE_WRAP_SWITCH = 305
+    ELEVATION_LOCKING_PIN_MOTION_STATE = 201
+    MIRROR_COVERS_MOTION_STATE = 202
+    MIRROR_COVER_LOCKS_MOTION_STATE = 203
+    DEPLOYABLE_PLATFORM_MOTION_STATE = 204
+    LIMITS = 300
+    SPECIAL_LIMITS = 301
+    SOFT_LIMIT_POSITIONS = 302
+    AZIMUTH_TOPPLE_BLOCK = 303
+    AZIMUTH_CABLE_WRAP_SWITCHES = 305
 
 
 class Source(enum.IntEnum):
@@ -291,6 +286,33 @@ class Source(enum.IntEnum):
     EUI = 2
     HHD = 3
     PXI = 100
+
+
+class System(enum.IntEnum):
+    """Values for the system field of several replies, including:
+
+    * ReplyId.LIMITS
+    * ReplyId.MOTION_CONTROLLER_STATE
+    * ReplyId.POWER_STATE
+    """
+
+    AZIMUTH = 0
+    ELEVATION = 1
+    CAMERA_CABLE_WRAP = 2
+    BALANCE = 3
+    MIRROR_COVERS = 4
+    MIRROR_COVER_LOCKS = 5
+    AZIMUTH_CABLE_WRAP = 6
+    LOCKING_PINS = 7
+    DEPLOYABLE_PLATFORM = 8
+    OIL_SUPPLY_SYSTEM = 9
+    AZIMUTH_DRIVES_THERMAL = 10
+    ELEVATION_DRIVES_THERMAL = 11
+    AZ0101_CABINET_THERMAL = 12
+    MODBUS_TEMPERATURE_CONTROLLERS = 13
+    MAIN_CABINET = 14
+    MAIN_AXES_POWER_SUPPLY = 15
+    TOP_END_CHILLER = 16
 
 
 class TelemetryTopicId(enum.IntEnum):

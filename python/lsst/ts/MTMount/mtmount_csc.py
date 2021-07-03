@@ -22,14 +22,16 @@
 __all__ = ["MTMountCsc"]
 
 import asyncio
+import functools
 import json
 import math
 import re
 import signal
 import subprocess
+import types
 
 from lsst.ts import salobj
-from lsst.ts.idl.enums.MTMount import DriveState
+from lsst.ts.idl.enums.MTMount import AxisMotionState, System
 from .config_schema import CONFIG_SCHEMA
 from . import constants
 from . import command_futures
@@ -172,10 +174,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.command_lock = asyncio.Lock()
 
-        self.on_drive_states = set(
-            (DriveState.MOVING, DriveState.STOPPING, DriveState.STOPPED)
-        )
-
         # Does the CSC have control of the mount?
         # Once the low-level controller reports this in an event,
         # add a SAL event and get the value from that.
@@ -217,6 +215,39 @@ class MTMountCsc(salobj.ConfigurableCsc):
             initial_state=initial_state,
             simulation_mode=simulation_mode,
         )
+
+        # Dict of ReplyId: function to call.
+        # The function receives one argument: the reply.
+        # Set this after calling super().__init__ so the events are available.
+        self.reply_dispatch = {
+            enums.ReplyId.AZIMUTH_TOPPLE_BLOCK: self.handle_azimuth_topple_block,
+            enums.ReplyId.CMD_ACKNOWLEDGED: self.handle_command_reply,
+            enums.ReplyId.CMD_REJECTED: self.handle_command_reply,
+            enums.ReplyId.CMD_SUCCEEDED: self.handle_command_reply,
+            enums.ReplyId.CMD_FAILED: self.handle_command_reply,
+            enums.ReplyId.CMD_SUPERSEDED: self.handle_command_reply,
+            enums.ReplyId.COMMANDER: self.handle_commander,
+            enums.ReplyId.DEPLOYABLE_PLATFORM_MOTION_STATE: functools.partial(
+                self.handle_deployable_motion_state,
+                topic=self.evt_deployablePlatformMotionState,
+            ),
+            enums.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE: self.handle_elevation_locking_pin_motion_state,
+            enums.ReplyId.ERROR: self.handle_error,
+            enums.ReplyId.IN_POSITION: self.handle_in_position,
+            enums.ReplyId.LIMITS: self.handle_limits,
+            enums.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE: functools.partial(
+                self.handle_deployable_motion_state,
+                topic=self.evt_mirrorCoverLocksMotionState,
+            ),
+            enums.ReplyId.MIRROR_COVERS_MOTION_STATE: functools.partial(
+                self.handle_deployable_motion_state,
+                topic=self.evt_mirrorCoversMotionState,
+            ),
+            enums.ReplyId.AXIS_MOTION_STATE: self.handle_motion_state,
+            enums.ReplyId.SAFETY_INTERLOCKS: self.handle_safety_interlocks,
+            enums.ReplyId.SOFT_LIMIT_POSITIONS: self.handle_soft_limit_positions,
+            enums.ReplyId.WARNING: self.handle_warning,
+        }
 
         self.rotator = salobj.Remote(
             domain=self.domain, name="MTRotator", include=["rotation"]
@@ -404,6 +435,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             self.should_be_connected = True
             self.read_loop_task = asyncio.create_task(self.read_loop())
+            self.log.debug("Connection made; requesting current state")
+            await self.send_command(commands.StateInfo(), do_lock=True)
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
             err_msg = "Could not connect to the low-level controller: "
@@ -473,9 +506,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def disconnect(self):
         """Disconnect from the low-level controller.
 
-        Close the connection to the mock controller, if connected.
+        Close the connection to the low-level controller, if connected.
+        Clear the target event.
         Stop the telemetry process, if running.
-        Do not stop the mock controller (if the CSC started it),
+        Do not stop the mock controller (even if the CSC started it),
         because that should remain running until the CSC quits.
         """
         self.should_be_connected = False
@@ -494,6 +528,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.warning(
                     "Timed out waiting for the writer to close; continuing"
                 )
+
+        self.clear_target()
 
         # Kill the telemetry process
         if (
@@ -562,12 +598,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
-        self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
+        self.evt_elevationInPosition.set_put(inPosition=False)
+        self.evt_azimuthInPosition.set_put(inPosition=False)
 
         try:
             self.log.info("Give up command of the mount.")
             await self.send_command(
-                commands.AskForCommand(commander=enums.Source.NONE), do_lock=True
+                commands.AskForCommand(commander=enums.Source.NONE),
+                do_lock=True,
+                wait_done=True,
             )
             self.has_control = False
         except Exception as e:
@@ -584,17 +623,19 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             await self.disconnect()
 
-    async def send_command(self, command, do_lock=False, wait_done=True):
+    async def send_command(self, command, do_lock, wait_done=True):
         """Send a command to the operation manager and wait for it to finish.
 
         Parameters
         ----------
         command : `Command`
             Command to send.
-        do_lock : `bool`, optional
+        do_lock : `bool`
             Lock the port while this method runs?
-            Specify False for most cases, to avoid interfering with
-            commands to keep the camera cable wrap following the rotator.
+            The low-level controller has ill-defined limits on which commands
+            commands can run simultaneously, so specify True when practical.
+            Specify False for stop commands and the camera cable wrap
+            tracking command (so rotator following is not blocked).
         wait_done : `bool`, optional
             Wait for the command to finish?
             If False then only wait for the command to be acknowledged;
@@ -664,30 +705,37 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
         return futures
 
-    async def send_commands(self, *commands, do_lock=False):
+    async def send_commands(self, *commands, do_lock):
         """Run a set of operation manager commands.
 
         Wait for each command to finish before issuing the next.
+        Wait for all commands to finish before returning.
 
         Parameters
         ----------
         commands : `List` [``Command``]
             Commands to send. The sequence_id attribute is set.
-        do_lock : `bool`, optional
+        do_lock : `bool`
             Lock the port while this method runs?
-            Specify False for most cases, to avoid interfering with
-            commands to keep the camera cable wrap following the rotator.
+            The low-level controller has ill-defined limits on which commands
+            commands can run simultaneously, so specify True when practical.
+            Specify False for stop commands and the camera cable wrap
+            tracking command (so rotator following is not blocked).
         """
         future = None
         try:
             if do_lock:
                 async with self.command_lock:
                     for command in commands:
-                        future = await self.send_command(command, do_lock=False)
+                        future = await self.send_command(
+                            command, do_lock=False, wait_done=True
+                        )
                         await future.done
             else:
                 for command in commands:
-                    future = await self.send_command(command, do_lock=False)
+                    future = await self.send_command(
+                        command, do_lock=False, wait_done=True
+                    )
                     await future.done
         except ConnectionResetError:
             if future is not None:
@@ -738,7 +786,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         self.camera_cable_wrap_follow_loop_task.cancel()
         try:
-            await self.send_command(commands.CameraCableWrapEnableTracking(on=True))
+            await self.send_command(
+                commands.CameraCableWrapEnableTracking(on=True), do_lock=False
+            )
             self.camera_cable_wrap_follow_loop_task = asyncio.create_task(
                 self._camera_cable_wrap_follow_loop()
             )
@@ -747,7 +797,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Camera cable wrap following canceled before it starts")
             self.evt_cameraCableWrapFollowing.set_put(enabled=False)
             # Try to stop the camera cable wrap on a best-effort basis.
-            await self.send_command(commands.CameraCableWrapStop())
+            await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
             raise
         except Exception as e:
             err_msg = "Camera cable wrap following could not be started"
@@ -759,7 +809,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # Try to stop the camera cable wrap on a best-effort basis.
             # This should succeed if things are working, but they
             # may not be in this exception branch.
-            await self.send_command(commands.CameraCableWrapStop())
+            await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
             raise
 
     async def _camera_cable_wrap_follow_loop(self):
@@ -782,7 +832,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             "Rotator data not available; stopping the camera "
                             "cable wrap until rotator data is available"
                         )
-                        await self.send_command(commands.CameraCableWrapStop())
+                        await self.send_command(
+                            commands.CameraCableWrapStop(), do_lock=False
+                        )
                     continue
                 if paused:
                     paused = False
@@ -791,7 +843,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         "the camera cable wrap follow the rotator"
                     )
                     await self.send_command(
-                        commands.CameraCableWrapEnableTracking(on=True)
+                        commands.CameraCableWrapEnableTracking(on=True), do_lock=False
                     )
 
                 position, velocity, tai = position_velocity_tai
@@ -800,7 +852,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     velocity=velocity,
                     tai=tai,
                 )
-                await self.send_command(command)
+                await self.send_command(command, do_lock=False)
                 self.evt_cameraCableWrapTarget.set_put(
                     position=position, velocity=velocity, taiTime=tai
                 )
@@ -820,8 +872,301 @@ class MTMountCsc(salobj.ConfigurableCsc):
     def camera_cable_wrap_following_enabled(self):
         return self.evt_cameraCableWrapFollowing.data.enabled
 
+    def clear_target(self):
+        """Clear the target event."""
+        self.evt_target.set_put(
+            elevation=math.nan,
+            azimuth=math.nan,
+            elevationVelocity=math.nan,
+            azimuthVelocity=math.nan,
+            taiTime=math.nan,
+            trackId=0,
+            tracksys="",
+            radesys="",
+        )
+
     async def configure(self, config):
         self.config = config
+
+    async def do_clearError(self, data):
+        self.assert_enabled()
+        raise salobj.ExpectedError("Not yet implemented")
+
+    async def do_closeMirrorCovers(self, data):
+        self.assert_enabled()
+        self.cmd_openMirrorCovers.ack_in_progress(
+            data=data, timeout=MIRROR_COVER_TIMEOUT
+        )
+        # Deploy the mirror cover locks/guides.
+        await self.send_commands(
+            commands.MirrorCoverLocksPower(on=True),
+            commands.MirrorCoverLocksMoveAll(deploy=True),
+            commands.MirrorCoverLocksPower(on=False),
+            do_lock=True,
+        )
+        # Deploy the mirror covers.
+        await self.send_commands(
+            commands.MirrorCoversPower(on=True),
+            commands.MirrorCoversDeploy(),
+            commands.MirrorCoversPower(on=False),
+            do_lock=True,
+        )
+
+    async def do_disableCameraCableWrapFollowing(self, data):
+        self.assert_enabled()
+        await self.stop_camera_cable_wrap_following()
+
+    async def do_enableCameraCableWrapFollowing(self, data):
+        self.assert_enabled()
+        if self.camera_cable_wrap_follow_loop_task.done():
+            self.camera_cable_wrap_follow_start_task = asyncio.create_task(
+                self.start_camera_cable_wrap_following()
+            )
+            await self.camera_cable_wrap_follow_start_task
+
+    async def do_openMirrorCovers(self, data):
+        self.assert_enabled()
+        self.cmd_openMirrorCovers.ack_in_progress(
+            data=data, timeout=MIRROR_COVER_TIMEOUT
+        )
+        # Retract the mirror covers.
+        await self.send_commands(
+            commands.MirrorCoversPower(on=True),
+            commands.MirrorCoversRetract(),
+            commands.MirrorCoversPower(on=False),
+            do_lock=True,
+        )
+        # Retract the mirror cover locks/guides.
+        await self.send_commands(
+            commands.MirrorCoverLocksPower(on=True),
+            commands.MirrorCoverLocksMoveAll(deploy=False),
+            commands.MirrorCoverLocksPower(on=False),
+            do_lock=True,
+        )
+
+    async def do_moveToTarget(self, data):
+        self.assert_enabled()
+        cmd_futures = await self.send_command(
+            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
+            do_lock=True,
+        )
+        timeout = cmd_futures.timeout + TIMEOUT_BUFFER
+        self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
+        await cmd_futures.done
+
+    async def do_trackTarget(self, data):
+        self.assert_enabled()
+        # Use do_lock=False to prevent a slow command
+        # from interrrupting tracking
+        await self.send_command(
+            commands.BothAxesTrack(
+                azimuth=data.azimuth,
+                azimuth_velocity=data.azimuthVelocity,
+                elevation=data.elevation,
+                elevation_velocity=data.elevationVelocity,
+                tai=data.taiTime,
+            ),
+            do_lock=False,
+        )
+        self.evt_target.set_put(
+            azimuth=data.azimuth,
+            elevation=data.elevation,
+            azimuthVelocity=data.azimuthVelocity,
+            elevationVelocity=data.elevationVelocity,
+            taiTime=data.taiTime,
+            trackId=data.trackId,
+            tracksys=data.tracksys,
+            radesys=data.radesys,
+            force_output=True,
+        )
+
+    async def do_startTracking(self, data):
+        self.assert_enabled()
+        await self.send_commands(
+            commands.ElevationAxisEnableTracking(),
+            commands.AzimuthAxisEnableTracking(),
+            do_lock=True,
+        )
+
+    async def do_stop(self, data):
+        self.assert_enabled()
+        await self.send_commands(
+            commands.BothAxesStop(),
+            commands.CameraCableWrapStop(),
+            commands.MirrorCoverLocksStop(),
+            commands.MirrorCoversStop(),
+            do_lock=False,
+        )
+
+    async def do_stopTracking(self, data):
+        self.assert_enabled()
+        await self.send_command(commands.BothAxesStop(), do_lock=False)
+
+    def handle_azimuth_topple_block(self, reply):
+        """Handle a ReplyId.AZIMUTH_TOPPLE_BLOCK reply."""
+        self.evt_azimuthToppleBlock.set_put(
+            forward=reply.forward,
+            reverse=reply.reverse,
+        )
+
+    def handle_command_reply(self, reply):
+        """Handle a ReplyId.CMD_x reply."""
+        reply_id = reply.id
+        sequence_id = reply.sequenceId
+        if reply_id == enums.ReplyId.CMD_ACKNOWLEDGED:
+            futures = self.command_dict.get(sequence_id, None)
+        else:
+            futures = self.command_dict.pop(sequence_id, None)
+        if futures is None:
+            self.log.warning(
+                f"Got reply with code {enums.ReplyId(reply_id)!r} "
+                f"for non-existent command {sequence_id}"
+            )
+            return
+        if reply_id == enums.ReplyId.CMD_ACKNOWLEDGED:
+            # Command acknowledged. Set timeout but leave
+            # futures in command_dict.
+            futures.setack(reply.timeout)
+        elif reply_id in (enums.ReplyId.CMD_REJECTED, enums.ReplyId.CMD_FAILED):
+            # Command failed (before or after being acknowledged).
+            # Pop the command_dict entry and report failure.
+            futures.setnoack(reply.explanation)
+        elif reply_id == enums.ReplyId.CMD_SUCCEEDED:
+            futures.setdone()
+        elif reply_id == enums.ReplyId.CMD_SUPERSEDED:
+            futures.setnoack("Superseded")
+        else:
+            raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
+
+    def handle_commander(self, reply):
+        """Handle a `ReplyId.COMMANDER` reply."""
+        self.evt_commander.set_put(commander=reply.actualCommander)
+
+    def handle_deployable_motion_state(self, reply, topic):
+        """Handle a generic position event.
+
+        Examples include:
+        * evt_deployablePlatformMotionState
+        * evt_mirrorCoverLocksMotionState
+        * evt_mirrorCoversMotionState
+        """
+        topic.set_put(state=reply.state, elementState=reply.elementState)
+
+    def handle_elevation_locking_pin_motion_state(self, reply):
+        """Handle a `ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE` reply."""
+        self.evt_elevationLockingPinMotionState.set_put(
+            state=reply.state, elementState=reply.elementState
+        )
+
+    def handle_error(self, reply):
+        """Handle a `ReplyId.ERROR` reply."""
+        self.evt_error.set_put(
+            code=reply.code,
+            latched=reply.on,
+            active=reply.active,
+            text="\n".join(reply.description),
+            force_output=True,
+        )
+
+    def handle_in_position(self, reply):
+        """Handle a `ReplyId.IN_POSITION` reply."""
+        topic = {
+            System.ELEVATION: self.evt_elevationInPosition,
+            System.AZIMUTH: self.evt_azimuthInPosition,
+            System.CAMERA_CABLE_WRAP: self.evt_cameraCableWrapInPosition,
+        }.get(reply.axis, None)
+        if topic is None:
+            self.log.warning(f"Unrecognized axis={reply.system} in handle_in_position")
+        else:
+            topic.set_put(inPosition=reply.inPosition)
+
+    def handle_limits(self, reply):
+        """Handle a `ReplyId.LIMITS` reply."""
+        topic = {
+            System.ELEVATION: self.evt_elevationLimits,
+            System.AZIMUTH: self.evt_azimuthLimits,
+            System.CAMERA_CABLE_WRAP: self.evt_cameraCableWrapLimits,
+        }.get(reply.system, None)
+        if topic is None:
+            self.log.warning(f"Unrecognized system={reply.system} in handle_limits")
+        else:
+            topic.set_put(limits=reply.limits)
+
+    def handle_motion_state(self, reply):
+        """Handle a `ReplyId.AXIS_MOTION_STATE` reply."""
+        axis = reply.axis
+        state = reply.motionState
+        was_tracking = self.is_tracking()
+        if axis == System.ELEVATION:
+            self.evt_elevationMotionState.set_put(state=state)
+            if state == AxisMotionState.MOVING_POINT_TO_POINT:
+                self.evt_target.set_put(
+                    elevation=reply.position,
+                    elevationVelocity=0,
+                    taiTime=salobj.current_tai(),
+                    trackId=0,
+                    tracksys="LOCAL",
+                    radesys="",
+                )
+        elif axis == System.AZIMUTH:
+            self.evt_azimuthMotionState.set_put(state=state)
+            if state == AxisMotionState.MOVING_POINT_TO_POINT:
+                self.evt_target.set_put(
+                    azimuth=reply.position,
+                    azimuthVelocity=0,
+                    taiTime=salobj.current_tai(),
+                    trackId=0,
+                    tracksys="LOCAL",
+                    radesys="",
+                )
+        elif axis == System.CAMERA_CABLE_WRAP:
+            self.evt_cameraCableWrapMotionState.set_put(state=state)
+        else:
+            self.log.warning(f"Unrecognized axis={axis} in handle_motion_state")
+        if was_tracking and not self.is_tracking():
+            self.clear_target()
+
+    def handle_safety_interlocks(self, reply):
+        """Handle a `ReplyId.SAFETY_INTERLOCKS` reply."""
+        data_dict = vars(reply)
+        del data_dict["id"]
+        del data_dict["timestamp"]
+        self.evt_safetyInterlocks.set_put(**data_dict)
+
+    def handle_soft_limit_positions(self, reply):
+        """Handle a `ReplyId.SOFT_LIMIT_POSITION` reply."""
+        topic = {
+            System.ELEVATION: self.evt_elevationLimitPositions,
+            System.AZIMUTH: self.evt_azimuthLimitPositions,
+            System.CAMERA_CABLE_WRAP: self.evt_cameraCableWrapLimitPositions,
+        }.get(reply.system, None)
+        if topic is None:
+            self.log.warning(
+                f"Unrecognized system={reply.system} in handle_soft_limit_positions"
+            )
+        else:
+            topic.set_put(min=reply.min, max=reply.max)
+
+    def handle_warning(self, reply):
+        """Handle a `ReplyId.WARNING` reply."""
+        self.evt_warning.set_put(
+            code=reply.code,
+            active=reply.active,
+            text="\n".join(reply.description),
+            force_output=True,
+        )
+
+    def is_tracking(self):
+        """Return True if tracking according to the elevation and azimuth
+        motion state events.
+        """
+
+        return all(
+            [
+                evt.data is not None and evt.data.state == AxisMotionState.TRACKING
+                for evt in (self.evt_elevationMotionState, self.evt_azimuthMotionState)
+            ]
+        )
 
     async def monitor_telemetry_client(self):
         await self.telemetry_client_process.wait()
@@ -830,82 +1175,23 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def read_loop(self):
         """Read and process replies from the low-level controller."""
         self.log.debug("Read loop begins")
-        cmd_reply_codes = frozenset(
-            (
-                enums.ReplyCode.CMD_ACKNOWLEDGED,
-                enums.ReplyCode.CMD_REJECTED,
-                enums.ReplyCode.CMD_SUCCEEDED,
-                enums.ReplyCode.CMD_FAILED,
-                enums.ReplyCode.CMD_SUPERSEDED,
-            )
-        )
-        failed_reply_codes = frozenset(
-            (enums.ReplyCode.CMD_REJECTED, enums.ReplyCode.CMD_FAILED)
-        )
         while self.should_be_connected and self.connected:
             try:
                 read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
                 try:
-                    reply = json.loads(read_bytes)
-                    self.log.debug("Read %s", reply)
+                    reply_dict = json.loads(read_bytes)
+                    self.log.debug("Read %s", reply_dict)
+                    reply = types.SimpleNamespace(
+                        id=enums.ReplyId(reply_dict["id"]),
+                        timestamp=reply_dict["timestamp"],
+                        **reply_dict["parameters"],
+                    )
                 except Exception as e:
                     self.log.warning(f"Ignoring unparsable reply: {read_bytes}: {e!r}")
 
-                reply_id = reply["id"]
-                if reply_id in cmd_reply_codes:
-                    sequence_id = reply["parameters"]["sequenceId"]
-                    if reply_id == enums.ReplyCode.CMD_ACKNOWLEDGED:
-                        futures = self.command_dict.get(sequence_id, None)
-                    else:
-                        futures = self.command_dict.pop(sequence_id, None)
-                    if futures is None:
-                        self.log.warning(
-                            f"Got reply with code {enums.ReplyCode(reply_id)!r} "
-                            f"for non-existent command {sequence_id}"
-                        )
-                        continue
-                    if reply_id == enums.ReplyCode.CMD_ACKNOWLEDGED:
-                        # Command acknowledged. Set timeout but leave
-                        # futures in command_dict.
-                        futures.setack(reply["parameters"]["timeout"])
-                    elif reply_id in failed_reply_codes:
-                        # Command failed (before or after being acknowledged).
-                        # Pop the command_dict entry and report failure.
-                        futures.setnoack(reply["parameters"]["explanation"])
-                    elif reply_id == enums.ReplyCode.CMD_SUCCEEDED:
-                        futures.setdone()
-                    elif reply_id == enums.ReplyCode.CMD_SUPERSEDED:
-                        futures.setnoack("Superseded")
-                    else:
-                        raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
-                elif reply_id == enums.ReplyCode.WARNING:
-                    self.evt_warning.set_put(
-                        code=reply["parameters"]["code"],
-                        active=reply["parameters"]["active"],
-                        text="\n".join(reply["parameters"]["description"]),
-                        force_output=True,
-                    )
-                elif reply_id == enums.ReplyCode.ERROR:
-                    self.evt_error.set_put(
-                        code=reply["parameters"]["code"],
-                        latched=reply["parameters"]["on"],
-                        active=reply["parameters"]["active"],
-                        text="\n".join(reply["parameters"]["description"]),
-                        force_output=True,
-                    )
-                elif reply_id == enums.ReplyCode.IN_POSITION:
-                    axis = reply["parameters"]["axis"]
-                    in_position = reply["parameters"]["inPosition"]
-                    if axis == 0:
-                        self.evt_axesInPosition.set_put(azimuth=in_position)
-                    elif axis == 1:
-                        self.evt_axesInPosition.set_put(elevation=in_position)
-                    else:
-                        self.log.warning(
-                            f"Unrecognized axis={axis} in IN_POSITION reply"
-                        )
-                elif reply_id == enums.ReplyCode.STATE_INFO:
-                    pass
+                handler = self.reply_dispatch.get(reply.id, None)
+                if handler:
+                    handler(reply)
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
@@ -931,11 +1217,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         asyncio.create_task(self.close())
 
     async def start(self):
-        print(
-            f"start: self.simulation_mode={self.simulation_mode!r}; "
-            f"self.run_mock_controller={self.run_mock_controller}"
-        )
-
         if self.simulation_mode == 1 and self.run_mock_controller:
             # Run the mock controller using random ports;
             # read the ports to set command_port and telemetry_port.
@@ -973,47 +1254,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+        self.clear_target()
         await super().start()
-
-    async def do_clearError(self, data):
-        self.assert_enabled()
-        raise salobj.ExpectedError("Not yet implemented")
-
-    async def do_closeMirrorCovers(self, data):
-        self.assert_enabled()
-        self.cmd_openMirrorCovers.ack_in_progress(
-            data=data, timeout=MIRROR_COVER_TIMEOUT
-        )
-        # Deploy the mirror cover locks/guides.
-        await self.send_commands(
-            commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoverLocksMoveAll(deploy=True),
-            commands.MirrorCoverLocksPower(on=False),
-        )
-        # Deploy the mirror covers.
-        await self.send_commands(
-            commands.MirrorCoversPower(on=True),
-            commands.MirrorCoversDeploy(),
-            commands.MirrorCoversPower(on=False),
-        )
-
-    async def do_openMirrorCovers(self, data):
-        self.assert_enabled()
-        self.cmd_openMirrorCovers.ack_in_progress(
-            data=data, timeout=MIRROR_COVER_TIMEOUT
-        )
-        # Retract the mirror covers.
-        await self.send_commands(
-            commands.MirrorCoversPower(on=True),
-            commands.MirrorCoversRetract(),
-            commands.MirrorCoversPower(on=False),
-        )
-        # Retract the mirror cover locks/guides.
-        await self.send_commands(
-            commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoverLocksMoveAll(deploy=False),
-            commands.MirrorCoverLocksPower(on=False),
-        )
 
     async def stop_camera_cable_wrap_following(self):
         self.evt_cameraCableWrapFollowing.set_put(enabled=False)
@@ -1028,80 +1270,4 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except asyncio.TimeoutError:
             self.camera_cable_wrap_follow_loop_task.cancel()
         finally:
-            await self.send_command(commands.CameraCableWrapStop())
-
-    async def do_disableCameraCableWrapFollowing(self, data):
-        self.assert_enabled()
-        await self.stop_camera_cable_wrap_following()
-
-    async def do_enableCameraCableWrapFollowing(self, data):
-        self.assert_enabled()
-        if self.camera_cable_wrap_follow_loop_task.done():
-            self.camera_cable_wrap_follow_start_task = asyncio.create_task(
-                self.start_camera_cable_wrap_following()
-            )
-            await self.camera_cable_wrap_follow_start_task
-
-    async def do_moveToTarget(self, data):
-        self.assert_enabled()
-        cmd_futures = await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
-            wait_done=False,
-        )
-        timeout = cmd_futures.timeout + TIMEOUT_BUFFER
-        self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
-        self.evt_target.set_put(
-            azimuth=data.azimuth,
-            elevation=data.elevation,
-            azimuthVelocity=0,
-            elevationVelocity=0,
-            taiTime=salobj.current_tai(),
-            trackId=0,
-            tracksys="LOCAL",
-            radesys="",
-            force_output=True,
-        )
-        await cmd_futures.done
-
-    async def do_trackTarget(self, data):
-        self.assert_enabled()
-        await self.send_command(
-            commands.BothAxesTrack(
-                azimuth=data.azimuth,
-                azimuth_velocity=data.azimuthVelocity,
-                elevation=data.elevation,
-                elevation_velocity=data.elevationVelocity,
-                tai=data.taiTime,
-            ),
-        )
-        self.evt_target.set_put(
-            azimuth=data.azimuth,
-            elevation=data.elevation,
-            azimuthVelocity=data.azimuthVelocity,
-            elevationVelocity=data.elevationVelocity,
-            taiTime=data.taiTime,
-            trackId=data.trackId,
-            tracksys=data.tracksys,
-            radesys=data.radesys,
-            force_output=True,
-        )
-
-    async def do_startTracking(self, data):
-        self.assert_enabled()
-        await self.send_commands(
-            commands.ElevationAxisEnableTracking(),
-            commands.AzimuthAxisEnableTracking(),
-        )
-
-    async def do_stop(self, data):
-        self.assert_enabled()
-        await self.send_commands(
-            commands.BothAxesStop(),
-            commands.CameraCableWrapStop(),
-            commands.MirrorCoverLocksStop(),
-            commands.MirrorCoversStop(),
-        )
-
-    async def do_stopTracking(self, data):
-        self.assert_enabled()
-        await self.send_command(commands.BothAxesStop())
+            await self.send_command(commands.CameraCableWrapStop(), do_lock=False)

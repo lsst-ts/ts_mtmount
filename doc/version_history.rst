@@ -6,7 +6,25 @@
 Version History
 ###############
 
-v0.18.1
+v0.19.0
+-------
+
+Changes:
+
+* Added support for many new TMA events.
+  This version requires ts_xml 9.1.
+* Lock the low-level TCP/IP stream for a few more commands,
+  to reduce the chance of sending a command that will be rejected.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 9.2
+
+0.18.1
 -------
 
 Changes:

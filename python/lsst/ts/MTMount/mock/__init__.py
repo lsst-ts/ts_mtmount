@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from .axis_device import *
+from .deployable_device import *
 from .main_power_supply_device import *
 from .mirror_cover_locks_device import *
 from .mirror_covers_device import *
