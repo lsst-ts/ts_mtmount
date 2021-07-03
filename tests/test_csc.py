@@ -237,6 +237,31 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.mock_controller.command_queue.get(), timeout=timeout
         )
 
+    def put_fake_rotation(self, rotator, position=0, velocity=0, tai=None):
+        """Publish one MTRotator rotation telemetry message.
+
+        Parameters
+        ----------
+        rotator : `Remote`
+            MTRotator remote
+        position : `float`, optional
+            Position (deg)
+        velocity : `float`
+            Velocity (deg/sec)
+        tai : `float` or `None`
+            Date as TAI unix seconds; current time if None
+        """
+        if tai is None:
+            tai = salobj.current_tai()
+        rotator.tel_rotation.set_put(
+            demandPosition=0,
+            demandVelocity=0,
+            demandAcceleration=0,
+            actualPosition=0,
+            actualVelocity=0,
+            timestamp=tai,
+        )
+
     async def test_camera_cable_wrap_tracking(self):
         # Start the CSC in DISABLED state
         # so we can get the rotator remote running
@@ -282,13 +307,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         tai = previous_tai + 0.001
                     dt = tai - tai0
                     position = position0 + velocity * dt
-                    rotator.tel_rotation.set_put(
-                        demandPosition=position,
-                        demandVelocity=velocity,
-                        demandAcceleration=0,
-                        actualPosition=position,
-                        actualVelocity=velocity,
-                        timestamp=tai,
+                    self.put_fake_rotation(
+                        rotator=rotator, position=position, velocity=velocity, tai=tai
                     )
                     command = await self.next_lowlevel_command()
                     delay = salobj.current_tai() - tai
@@ -433,9 +453,19 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.assertFalse(actuator.moving())
 
     async def test_move_to_target(self):
-        async with self.make_csc(initial_state=salobj.State.ENABLED):
+        async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
+            name="MTRotator"
+        ) as rotator:
+            self.put_fake_rotation(rotator=rotator)
+
             await self.assert_next_sample(
                 self.remote.evt_axesInPosition, azimuth=False, elevation=False
+            )
+            await self.assert_next_sample(
+                self.remote.evt_cameraCableWrapFollowing, enabled=False
+            )
+            await self.assert_next_sample(
+                self.remote.evt_cameraCableWrapFollowing, enabled=True
             )
 
             mock_azimuth = self.mock_controller.device_dict[
@@ -452,13 +482,12 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.assertAlmostEqual(azimuth_pvt.velocity, 0)
 
             # Move the axes to a specified position.
-            # Use a short move to speed up the test,
-            # but make the azimuth move significantly shorter
-            # so it finishes first.
-            # Check that the command outputs the target event
-            # before it finishes.
-            target_azimuth = azimuth_pvt.position + 1
-            target_elevation = elevation_pvt.position + 2
+            # Use a move long enough that CCW following will time out
+            # if tracking commands are blocked (DM-30990)
+            # Make the elevation move a bit longer than azimuth,
+            # to simplify computing the move duration.
+            target_azimuth = azimuth_pvt.position + 4
+            target_elevation = elevation_pvt.position + 5
             print(
                 f"start test_moveToTarget(azimuth={target_azimuth:0.2f}, "
                 f"elevation={target_elevation:0.2f})"
@@ -470,14 +499,17 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     timeout=STD_TIMEOUT,
                 )
             )
+
+            # Check that the target event is received well before
+            # the move finishes.
             data = await self.remote.evt_target.next(flush=False, timeout=STD_TIMEOUT)
             self.assertAlmostEqual(data.elevation, target_elevation)
             self.assertAlmostEqual(data.azimuth, target_azimuth)
             self.assertFalse(task.done())
-
-            # Print move duration; the elevation move will take longer
             duration = mock_elevation.end_tai - salobj.current_tai()
             print(f"axis move duration={duration:0.2f} sec")
+            self.assertGreater(duration, 1)
+
             await self.assert_next_sample(
                 self.remote.evt_axesInPosition,
                 azimuth=True,
@@ -497,6 +529,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.assertAlmostEqual(elevation_pvt.position, target_elevation)
             self.assertAlmostEqual(azimuth_pvt.velocity, 0)
             self.assertAlmostEqual(elevation_pvt.velocity, 0)
+
+            # Check that the CCW is still following the rotator.
+            data = self.remote.evt_cameraCableWrapFollowing.get()
+            self.assertTrue(data.enabled)
 
             # Check that putting the CSC into STANDBY state sends the axes
             # out of position (possibly one axis at a time)
@@ -539,7 +575,17 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.remote.tel_cameraCableWrap.next(flush=True, timeout=STD_TIMEOUT)
 
     async def test_tracking(self):
-        async with self.make_csc(initial_state=salobj.State.ENABLED):
+        async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
+            name="MTRotator"
+        ) as rotator:
+            self.put_fake_rotation(rotator=rotator)
+
+            await self.assert_next_sample(
+                self.remote.evt_cameraCableWrapFollowing, enabled=False
+            )
+            await self.assert_next_sample(
+                self.remote.evt_cameraCableWrapFollowing, enabled=True
+            )
             await self.assert_next_sample(
                 self.remote.evt_axesInPosition, azimuth=False, elevation=False
             )
@@ -625,6 +671,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     azimuth=False,
                     elevation=False,
                 )
+
+            # Check that the CCW is still following the rotator.
+            data = self.remote.evt_cameraCableWrapFollowing.get()
+            self.assertTrue(data.enabled)
 
     async def track_target_loop(
         self, azimuth, elevation, azimuth_velocity, elevation_velocity

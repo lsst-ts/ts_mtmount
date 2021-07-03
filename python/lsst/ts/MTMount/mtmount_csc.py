@@ -248,7 +248,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             try:
                 self.log.info("Ask for permission to command the mount.")
                 await self.send_command(
-                    commands.AskForCommand(commander=enums.Source.CSC)
+                    commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
                 )
                 self.has_control = True
             except Exception as e:
@@ -519,7 +519,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.CameraCableWrapResetAlarm(),
             ]:
                 try:
-                    await self.send_command(reset_command, do_lock=False)
+                    await self.send_command(reset_command, do_lock=True)
                 except Exception as e:
                     self.log.warning(
                         f"Command {reset_command} failed; continuing: {e!r}"
@@ -534,7 +534,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.ElevationAxisPower(on=True),
                 commands.CameraCableWrapPower(on=True),
             ]
-            await self.send_commands(*power_on_commands)
+            await self.send_commands(*power_on_commands, do_lock=True)
         except Exception as e:
             self.log.error(f"Failed to power on one or more devices: {e!r}")
             raise
@@ -558,7 +558,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands.CameraCableWrapPower(on=False),
         ]:
             try:
-                await self.send_command(command, do_lock=False)
+                await self.send_command(command, do_lock=True)
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
@@ -566,7 +566,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         try:
             self.log.info("Give up command of the mount.")
-            await self.send_command(commands.AskForCommand(commander=enums.Source.NONE))
+            await self.send_command(
+                commands.AskForCommand(commander=enums.Source.NONE), do_lock=True
+            )
             self.has_control = False
         except Exception as e:
             self.log.warning(
@@ -582,7 +584,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             await self.disconnect()
 
-    async def send_command(self, command, do_lock=True, wait_done=True):
+    async def send_command(self, command, do_lock=False, wait_done=True):
         """Send a command to the operation manager and wait for it to finish.
 
         Parameters
@@ -591,8 +593,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Command to send.
         do_lock : `bool`, optional
             Lock the port while this method runs?
-            Specify False for emergency commands
-            or if being called by send_commands.
+            Specify False for most cases, to avoid interfering with
+            commands to keep the camera cable wrap following the rotator.
         wait_done : `bool`, optional
             Wait for the command to finish?
             If False then only wait for the command to be acknowledged;
@@ -662,7 +664,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
         return futures
 
-    async def send_commands(self, *commands, do_lock=True):
+    async def send_commands(self, *commands, do_lock=False):
         """Run a set of operation manager commands.
 
         Wait for each command to finish before issuing the next.
@@ -672,8 +674,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         commands : `List` [``Command``]
             Commands to send. The sequence_id attribute is set.
         do_lock : `bool`, optional
-            Lock the port while using it?
-            Specify False for emergency commands.
+            Lock the port while this method runs?
+            Specify False for most cases, to avoid interfering with
+            commands to keep the camera cable wrap following the rotator.
         """
         future = None
         try:
@@ -1043,6 +1046,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.assert_enabled()
         cmd_futures = await self.send_command(
             commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
+            wait_done=False,
         )
         timeout = cmd_futures.timeout + TIMEOUT_BUFFER
         self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
@@ -1096,7 +1100,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands.CameraCableWrapStop(),
             commands.MirrorCoverLocksStop(),
             commands.MirrorCoversStop(),
-            do_lock=False,
         )
 
     async def do_stopTracking(self, data):
