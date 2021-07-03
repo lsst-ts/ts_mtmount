@@ -6,6 +6,23 @@
 Version History
 ###############
 
+v0.18.1
+-------
+
+Changes:
+
+* Make camera cable wrap (CCW) following more robust by not locking the low-level TCP/IP stream while commands run
+  (except in limited cases, such as initializing subsystems and shutting them back down).
+  This fixes DM-30990: moveToTarget causes CCW following to fail.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 7.2
+
 v0.18.0
 -------
 
