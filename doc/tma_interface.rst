@@ -94,7 +94,7 @@ All replies are in json format and have the following fields:
 * parameters (dict): additional parameters which vary depending on the id.
 
 The vendor's documentation for replies ("events") is
-https://gitlab.tekniker.es/aut/projects/3151-LSST/LabVIEWCode/documentation/pxicontroller_documentation/-/blob/develop/02%20CommandsAndEventsManagement/03%20Events.md
+https://gitlab.tekniker.es/publico/3151-lsst/pxicontroller_documentation/-/blob/develop/02%20CommandsAndEventsManagement/03%20Events.md
 
 Some supplemental information:
 
@@ -116,7 +116,7 @@ CMD_x replies have the following parameters:
 * sequenceId (int): the incrementing value specified by the client, used to identify replies for a given command.
 * CMD_ACKNOWLEDGED: ``timeout`` (double), expected command duration (seconds).
   Add 2 seconds to this value if you wish to use this for a timeout timer.
-  -1 means "no known timeout (wait forever).
+  -1 means "no known timeout" (wait forever).
 * CMD_REJECTED and CMD_FAILED: ``explanation`` (str): text explaining why the command was rejected.
 * CMD_SUPERSEDED: ``supersedingSequenceId`` (int), ``supersedingCommander`` (int), ``supersedingCommandCode`` (int):
   information about the superseding command, where ``supersedingCommander`` is a `SourceId` (e.g. HHD).
