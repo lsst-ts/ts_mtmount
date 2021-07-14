@@ -245,7 +245,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             ),
             enums.ReplyId.AXIS_MOTION_STATE: self.handle_motion_state,
             enums.ReplyId.SAFETY_INTERLOCKS: self.handle_safety_interlocks,
-            enums.ReplyId.SOFT_LIMIT_POSITIONS: self.handle_soft_limit_positions,
             enums.ReplyId.WARNING: self.handle_warning,
         }
 
@@ -1133,20 +1132,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         del data_dict["timestamp"]
         self.evt_safetyInterlocks.set_put(**data_dict)
 
-    def handle_soft_limit_positions(self, reply):
-        """Handle a `ReplyId.SOFT_LIMIT_POSITION` reply."""
-        topic = {
-            System.ELEVATION: self.evt_elevationLimitPositions,
-            System.AZIMUTH: self.evt_azimuthLimitPositions,
-            System.CAMERA_CABLE_WRAP: self.evt_cameraCableWrapLimitPositions,
-        }.get(reply.system, None)
-        if topic is None:
-            self.log.warning(
-                f"Unrecognized system={reply.system} in handle_soft_limit_positions"
-            )
-        else:
-            topic.set_put(min=reply.min, max=reply.max)
-
     def handle_warning(self, reply):
         """Handle a `ReplyId.WARNING` reply."""
         self.evt_warning.set_put(
@@ -1191,7 +1176,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
                 handler = self.reply_dispatch.get(reply.id, None)
                 if handler:
-                    handler(reply)
+                    try:
+                        handler(reply)
+                    except Exception as e:
+                        self.log.error(f"Failed to handle reply: {reply}: {e!r}")
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:

@@ -242,25 +242,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             ):
                 await self.assert_next_sample(topic=topic, limits=0)
 
-            for device_id, topic in (
-                (
-                    MTMount.DeviceId.ELEVATION_AXIS,
-                    self.remote.evt_elevationLimitPositions,
-                ),
-                (
-                    MTMount.DeviceId.AZIMUTH_AXIS,
-                    self.remote.evt_azimuthLimitPositions,
-                ),
-                (
-                    MTMount.DeviceId.CAMERA_CABLE_WRAP,
-                    self.remote.evt_cameraCableWrapLimitPositions,
-                ),
-            ):
-                data = await self.assert_next_sample(topic=topic)
-                actuator = self.mock_controller.device_dict[device_id].actuator
-                self.assertAlmostEqual(data.min, actuator.min_position)
-                self.assertAlmostEqual(data.max, actuator.max_position)
-
             for topic in (
                 self.remote.evt_elevationMotionState,
                 self.remote.evt_azimuthMotionState,

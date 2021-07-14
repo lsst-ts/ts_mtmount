@@ -947,19 +947,3 @@ class Controller:
                     limits=0,
                 )
             )
-
-            device_id = {
-                enums.System.AZIMUTH: enums.DeviceId.AZIMUTH_AXIS,
-                enums.System.ELEVATION: enums.DeviceId.ELEVATION_AXIS,
-                enums.System.CAMERA_CABLE_WRAP: enums.DeviceId.CAMERA_CABLE_WRAP,
-            }[system]
-            actuator = self.device_dict[device_id].actuator
-
-            await self.write_reply(
-                make_reply_dict(
-                    id=enums.ReplyId.SOFT_LIMIT_POSITIONS,
-                    system=system,
-                    min=actuator.min_position,
-                    max=actuator.max_position,
-                )
-            )

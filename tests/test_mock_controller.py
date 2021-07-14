@@ -504,15 +504,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(set(expected_fields), params_dict.keys())
                     for field in expected_fields:
                         self.assertEqual(params_dict[field], 0)
-                elif reply_id == MTMount.ReplyId.SOFT_LIMIT_POSITIONS:
-                    device_id = {
-                        MTMount.System.AZIMUTH: MTMount.DeviceId.AZIMUTH_AXIS,
-                        MTMount.System.ELEVATION: MTMount.DeviceId.ELEVATION_AXIS,
-                        MTMount.System.CAMERA_CABLE_WRAP: MTMount.DeviceId.CAMERA_CABLE_WRAP,
-                    }[params.system]
-                    actuator = self.controller.device_dict[device_id].actuator
-                    self.assertAlmostEqual(params.min, actuator.min_position)
-                    self.assertAlmostEqual(params.max, actuator.max_position)
 
             axes_systems = set(
                 [
