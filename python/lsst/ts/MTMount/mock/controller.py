@@ -23,15 +23,19 @@ __all__ = ["INITIAL_POSITION", "Controller", "make_reply_dict"]
 
 import argparse
 import asyncio
+import copy
 import json
 import logging
 import signal
+
+import astropy.time
 
 from lsst.ts import salobj
 from lsst.ts import tcpip
 from lsst.ts.idl.enums.MTMount import (
     DeployableMotionState,
     ElevationLockingPinMotionState,
+    PowerState,
     System,
 )
 from ..exceptions import CommandSupersededException
@@ -70,6 +74,29 @@ def make_reply_dict(id, **parameters):
         timestamp=salobj.current_tai(),
         parameters=parameters,
     )
+
+
+def as_scalar_or_list(value, nelts):
+    """Return a value as a list or scalar, depending on nelts.
+
+    Parameters
+    ----------
+    value : typing.Any
+        Value to return
+    nelts : int
+        Number of items. If 1 then return ``value`` as a scalar.
+        If > 1 then return a list of nelts copies of ``value``.
+
+    Raises
+    ------
+    ValueError:
+        If nelts < 1
+    """
+    if nelts < 1:
+        raise ValueError(f"nelts={nelts} must be >= 1")
+    if nelts == 1:
+        return value
+    return [value] * nelts
 
 
 async def wait_tasks(*tasks):
@@ -111,6 +138,78 @@ class Controller:
         standard ports? Random ports are intended for unit tests.
     """
 
+    # List of available settings
+    available_settings = [
+        dict(
+            name="AT_CCWAux",
+            description="CCWAux automatic testing",
+            createdDate=astropy.time.Time("2019-11-07 08:20:18"),
+            modifiedDate=astropy.time.Time("2019-11-07 16:30:35"),
+        ),
+        dict(
+            name="MT_CCWAux",
+            description="CCWAux manual testing",
+            createdDate=astropy.time.Time("2019-11-07 16:31:03"),
+            modifiedDate=astropy.time.Time("2019-11-07 16:31:03"),
+        ),
+        dict(
+            name="Default",
+            description="Default settings",
+            createdDate=astropy.time.Time("2020-05-26 10:31:51"),
+            modifiedDate=astropy.time.Time("2020-05-27 14:03:01"),
+        ),
+    ]
+
+    # Dict of system: number of elements for CHILLER_STATE events
+    chiller_state_nelts = {
+        System.OIL_SUPPLY_SYSTEM: 1,
+        System.AZIMUTH_DRIVES_THERMAL: 4,
+        System.ELEVATION_DRIVES_THERMAL: 2,
+        System.AZ0101_CABINET_THERMAL: 1,
+        System.MODBUS_TEMPERATURE_CONTROLLERS: 5,
+        System.TOP_END_CHILLER: 1,
+    }
+
+    # Dict of system: number of elements for MOTION_CONTROLLER_STATE events.
+    motion_controller_state_nelts = {
+        # Commandable by the CSC
+        System.AZIMUTH: 16,
+        System.ELEVATION: 12,
+        System.CAMERA_CABLE_WRAP: 2,
+        System.MIRROR_COVERS: 4,
+        System.MIRROR_COVER_LOCKS: 4,
+        # Always matches azimuth
+        System.AZIMUTH_CABLE_WRAP: 2,
+        # Not commandable by the CSC
+        System.BALANCE: 4,
+        System.LOCKING_PINS: 2,
+        System.DEPLOYABLE_PLATFORMS: 4,
+    }
+
+    # Dict of system: number of elements for the POWER_STATE events
+    power_state_nelts = {
+        # Commandable by the CSC
+        System.AZIMUTH: 1,
+        System.ELEVATION: 1,
+        System.CAMERA_CABLE_WRAP: 1,
+        System.MIRROR_COVERS: 4,
+        System.MIRROR_COVER_LOCKS: 4,
+        System.OIL_SUPPLY_SYSTEM: 1,
+        System.TOP_END_CHILLER: 1,
+        # Always matches azimuth
+        System.AZIMUTH_CABLE_WRAP: 1,
+        # Not commandable by the CSC
+        System.BALANCE: 4,
+        System.LOCKING_PINS: 2,
+        System.DEPLOYABLE_PLATFORMS: 2,
+        System.AZIMUTH_DRIVES_THERMAL: 4,
+        System.ELEVATION_DRIVES_THERMAL: 2,
+        System.AZ0101_CABINET_THERMAL: 1,
+        System.MODBUS_TEMPERATURE_CONTROLLERS: 5,
+        System.MAIN_CABINET: 1,
+        System.MAIN_AXES_POWER_SUPPLY: 1,
+    }
+
     def __init__(self, log, commander=enums.Source.NONE, random_ports=False):
         self.log = log.getChild("MockController")
         self.commander = enums.Source(commander)
@@ -123,11 +222,19 @@ class Controller:
         self.max_position_error = 0.01  # degrees
         self.max_velocity_error = 0.01  # degrees/second
 
+        #
         # Saved state initialized by init_saved_state
-        # A dict of system_id: in_position
+        #
+        # Dict of system_id: axis motion state
+        self.axis_motion_state_dict = {}
+        # Dict of system_id: motion state for deployable devices
+        self.deployable_motion_state_dict = {}
+        # Dict of system_id: in_position
         self.in_position_dict = {}
-        # A dict of system_id: motion state
-        self.motion_state_dict = {}
+        # Dict of system_id: motion controller state
+        self.motion_controller_state_dict = {}
+        # Dict of system_id: power state
+        self.power_state_dict = {}
         self.init_saved_state()
 
         # Current state of the reverse and forward  azimuth topple block
@@ -232,20 +339,48 @@ class Controller:
         Call this when constructing the controller and in response to the
         STATE_INFO command.
         """
-        # A dict of system_id: in_position
-        self.in_position_dict = {
-            System.AZIMUTH: None,
-            System.ELEVATION: None,
-            System.CAMERA_CABLE_WRAP: None,
-        }
-        self.motion_state_dict = {
+        self.axis_motion_state_dict = {
             System.AZIMUTH: None,
             System.ELEVATION: None,
             System.CAMERA_CABLE_WRAP: None,
         }
 
+        self.deployable_motion_state_dict = {
+            System.MIRROR_COVER_LOCKS: None,
+            System.MIRROR_COVERS: None,
+        }
+
+        self.in_position_dict = {
+            System.AZIMUTH: None,
+            System.ELEVATION: None,
+            System.CAMERA_CABLE_WRAP: None,
+        }
+
+        self.motion_controller_state_dict = {
+            System.AZIMUTH: None,
+            System.ELEVATION: None,
+            System.CAMERA_CABLE_WRAP: None,
+            System.MIRROR_COVER_LOCKS: None,
+            System.MIRROR_COVERS: None,
+        }
+
+        self.power_state_dict = {
+            System.AZIMUTH: None,
+            System.ELEVATION: None,
+            System.CAMERA_CABLE_WRAP: None,
+            System.OIL_SUPPLY_SYSTEM: None,
+            System.TOP_END_CHILLER: None,
+            System.MIRROR_COVERS: None,
+            System.MIRROR_COVER_LOCKS: None,
+        }
+
     async def put_axis_telemetry(self, system_id, tai):
-        """Put telemetry for elevation, azimuth, or camera cable wrap.
+        """Put telemetry & events for elevation, azimuth, or camera cable wrap.
+
+        In addition to telemetry, put the following events (if changed):
+
+        * AXIS_MOTION_STATE
+        * IN_POSITION, if changed
 
         Warning: this minimal and simplistic.
         """
@@ -291,8 +426,8 @@ class Controller:
         }[system_id]
 
         motion_state = device.motion_state(tai)
-        if motion_state != self.motion_state_dict[system_id]:
-            self.motion_state_dict[system_id] = motion_state
+        if motion_state != self.axis_motion_state_dict[system_id]:
+            self.axis_motion_state_dict[system_id] = motion_state
             if not self.command_server.connected:
                 return
             await self.write_reply(
@@ -311,6 +446,7 @@ class Controller:
         )
         if in_position != self.in_position_dict[system_id]:
             self.in_position_dict[system_id] = in_position
+
             if not self.command_server.connected:
                 return
             await self.write_reply(
@@ -331,20 +467,22 @@ class Controller:
             azimuth_topple_block_state = [False, True]
         else:
             azimuth_topple_block_state = [False, False]
-        if self.azimuth_topple_block_state != azimuth_topple_block_state:
-            self.azimuth_topple_block_state = azimuth_topple_block_state
-            if not self.command_server.connected:
-                return
-            await self.write_reply(
-                make_reply_dict(
-                    id=enums.ReplyId.AZIMUTH_TOPPLE_BLOCK,
-                    reverse=azimuth_topple_block_state[0],
-                    forward=azimuth_topple_block_state[1],
-                )
-            )
+        if self.azimuth_topple_block_state == azimuth_topple_block_state:
+            return
+        self.azimuth_topple_block_state = azimuth_topple_block_state
 
-    async def put_deployable_telemetry(self, system_id, tai):
-        """Put telemetry for deployable devices."""
+        if not self.command_server.connected:
+            return
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.AZIMUTH_TOPPLE_BLOCK,
+                reverse=azimuth_topple_block_state[0],
+                forward=azimuth_topple_block_state[1],
+            )
+        )
+
+    async def put_deployable_motion_state(self, system_id, tai):
+        """Put motion state for deployable devices, if changed."""
         topic_id, nelts = {
             System.MIRROR_COVERS: (
                 enums.ReplyId.MIRROR_COVERS_MOTION_STATE,
@@ -357,6 +495,10 @@ class Controller:
         }[system_id]
         device = self.device_dict[system_id]
         motion_state = device.motion_state(tai)
+        if self.deployable_motion_state_dict[system_id] == motion_state:
+            return
+        self.deployable_motion_state_dict[system_id] = motion_state
+
         if not self.command_server.connected:
             return
         await self.write_reply(
@@ -366,6 +508,93 @@ class Controller:
                 elementState=[motion_state] * nelts,
             )
         )
+
+    async def put_motion_controller_state(self, system_id, tai):
+        """Output MOTION_CONTROLLER_STATE, if changed.
+
+        Note: if system_id is AZIMUTH then also puts AZIMUTH_CABLE_WRAP,
+        with the same state. So do not specify system_id = AZIMUTH_CABLE_WRAP.
+        """
+        nelts = self.motion_controller_state_nelts[system_id]
+
+        device = self.device_dict[system_id]
+        if device.alarm_on:
+            state = PowerState.FAULT
+        elif device.power_on:
+            state = PowerState.ON
+        else:
+            state = PowerState.OFF
+
+        if self.motion_controller_state_dict[system_id] == state:
+            return
+        self.motion_controller_state_dict[system_id] = state
+
+        if not self.command_server.connected:
+            return
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.MOTION_CONTROLLER_STATE,
+                system=system_id,
+                motionControllerState=[state] * nelts,
+            )
+        )
+        if system_id == System.AZIMUTH:
+            # Azimuth cable wrap (with 2 elts) tracks azimuth
+            if not self.command_server.connected:
+                return
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.MOTION_CONTROLLER_STATE,
+                    system=System.AZIMUTH_CABLE_WRAP,
+                    motionControllerState=[state] * 2,
+                )
+            )
+
+    async def put_power_state(self, system_id, tai):
+        """Output POWER_STATE, if changed.
+
+        Note: if system_id is AZIMUTH then also puts AZIMUTH_CABLE_WRAP,
+        with the same state. So do not specify system_id = AZIMUTH_CABLE_WRAP.
+        """
+        nelts = self.power_state_nelts[system_id]
+
+        device = self.device_dict[system_id]
+        if device.alarm_on:
+            power_state = PowerState.FAULT
+        elif device.power_on:
+            power_state = PowerState.ON
+        else:
+            power_state = PowerState.OFF
+
+        if self.power_state_dict[system_id] == power_state:
+            return
+        self.power_state_dict[system_id] = power_state
+
+        if not self.command_server.connected:
+            return
+        if nelts > 1:
+            kwargs = dict(elementsPowerState=[power_state] * nelts)
+        else:
+            kwargs = dict()
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.POWER_STATE,
+                system=system_id,
+                powerState=power_state,
+                **kwargs,
+            )
+        )
+        if system_id == System.AZIMUTH:
+            # Azimuth cable wrap (with 1 elt) tracks azimuth
+            if not self.command_server.connected:
+                return
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.POWER_STATE,
+                    system=System.AZIMUTH_CABLE_WRAP,
+                    powerState=power_state,
+                )
+            )
 
     async def write_reply(self, reply_dict):
         """Write a reply to the command/reply stream.
@@ -420,10 +649,20 @@ class Controller:
         await self.put_azimuth_topple_block_telemetry(tai)
 
         for system_id in (
-            System.MIRROR_COVER_LOCKS,
-            System.MIRROR_COVERS,
+            System.AZIMUTH,
+            System.ELEVATION,
+            System.CAMERA_CABLE_WRAP,
         ):
-            await self.put_deployable_telemetry(system_id=system_id, tai=tai)
+            pass
+
+        for system_id in self.deployable_motion_state_dict:
+            await self.put_deployable_motion_state(system_id=system_id, tai=tai)
+
+        for system_id in self.motion_controller_state_dict:
+            await self.put_motion_controller_state(system_id=system_id, tai=tai)
+
+        for system_id in self.power_state_dict:
+            await self.put_power_state(system_id=system_id, tai=tai)
 
     async def telemetry_loop(self):
         """Output telemetry at regular intervals."""
@@ -909,9 +1148,64 @@ class Controller:
         """
         await self.write_commander()
 
+        available_settings_formatted = copy.deepcopy(self.available_settings)
+        for data in available_settings_formatted:
+            for name in ("createdDate", "modifiedDate"):
+                data[name] = data[name].iso
         await self.write_reply(
             make_reply_dict(
-                id=enums.ReplyId.DEPLOYABLE_PLATFORM_MOTION_STATE,
+                id=enums.ReplyId.AVAILABLE_SETTINGS,
+                sets=available_settings_formatted,
+            )
+        )
+
+        # MOTION_CONTROLLER_STATE for systems the CSC does not control
+        # (these are always off).
+        for system_id in (
+            System.BALANCE,
+            System.DEPLOYABLE_PLATFORMS,
+            System.LOCKING_PINS,
+        ):
+            nelts = self.motion_controller_state_nelts[system_id]
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.MOTION_CONTROLLER_STATE,
+                    system=system_id,
+                    motionControllerState=as_scalar_or_list(PowerState.OFF, nelts),
+                )
+            )
+
+        # POWER_STATE for systems the CSC does not control.
+        for system_id, power_state in (
+            (System.BALANCE, PowerState.OFF),
+            (System.LOCKING_PINS, PowerState.OFF),
+            (System.DEPLOYABLE_PLATFORMS, PowerState.OFF),
+            (System.AZIMUTH_DRIVES_THERMAL, PowerState.ON),
+            (System.ELEVATION_DRIVES_THERMAL, PowerState.ON),
+            (System.AZ0101_CABINET_THERMAL, PowerState.ON),
+            (System.MODBUS_TEMPERATURE_CONTROLLERS, PowerState.ON),
+            (System.MAIN_CABINET, PowerState.ON),
+            (System.MAIN_AXES_POWER_SUPPLY, PowerState.ON),
+        ):
+            nelts = self.power_state_nelts[system_id]
+            if not self.command_server.connected:
+                return
+            if nelts > 1:
+                kwargs = dict(elementsPowerState=[power_state] * nelts)
+            else:
+                kwargs = dict()
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.POWER_STATE,
+                    system=system_id,
+                    powerState=power_state,
+                    **kwargs,
+                )
+            )
+
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE,
                 state=DeployableMotionState.RETRACTED,
                 elementState=[DeployableMotionState.RETRACTED] * 2,
             )
@@ -950,5 +1244,16 @@ class Controller:
                     id=enums.ReplyId.LIMITS,
                     system=system,
                     limits=0,
+                )
+            )
+
+        # CHILLER_STATE, since we do not yet mock that.
+        for system, nelts in self.chiller_state_nelts.items():
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.CHILLER_STATE,
+                    system=system,
+                    trackAmbient=as_scalar_or_list(True, nelts),
+                    temperature=as_scalar_or_list(self.ambient_temperature, nelts),
                 )
             )
