@@ -34,6 +34,7 @@ from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
     ElevationLockingPinMotionState,
+    System,
 )
 
 START_TIMEOUT = 20  # Time for startup (sec)
@@ -336,8 +337,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # try a sampling of commands.
             sample_commands = (
                 MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
-                MTMount.commands.AzimuthAxisPower(on=True),
-                MTMount.commands.ElevationAxisPower(on=True),
+                MTMount.commands.AzimuthPower(on=True),
+                MTMount.commands.ElevationPower(on=True),
             )
             for command in sample_commands:
                 await self.run_command(
@@ -369,8 +370,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 MTMount.commands.AskForCommand(commander=MTMount.Source.EUI),
                 MTMount.commands.AskForCommand(),  # defaults to CSC
                 MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
-                MTMount.commands.AzimuthAxisPower(on=True),
-                MTMount.commands.ElevationAxisPower(on=True),
+                MTMount.commands.AzimuthPower(on=True),
+                MTMount.commands.ElevationPower(on=True),
             )
             for command in sample_commands:
                 await self.run_command(
@@ -386,7 +387,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_command_failed(self):
         async with self.make_controller():
-            device = self.controller.device_dict[MTMount.DeviceId.MIRROR_COVERS]
+            device = self.controller.device_dict[System.MIRROR_COVERS]
             await self.run_command(
                 command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
                 use_read_loop=True,
@@ -404,7 +405,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_command_superseded(self):
         async with self.make_controller():
-            device = self.controller.device_dict[MTMount.DeviceId.MIRROR_COVERS]
+            device = self.controller.device_dict[System.MIRROR_COVERS]
 
             await self.run_command(
                 command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
@@ -507,9 +508,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
             axes_systems = set(
                 [
-                    MTMount.System.ELEVATION,
-                    MTMount.System.AZIMUTH,
-                    MTMount.System.CAMERA_CABLE_WRAP,
+                    System.ELEVATION,
+                    System.AZIMUTH,
+                    System.CAMERA_CABLE_WRAP,
                 ]
             )
             self.assertEqual(
@@ -527,7 +528,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def check_command_sequence(self, use_read_loop):
         async with self.make_controller():
-            device = self.controller.device_dict[MTMount.DeviceId.MIRROR_COVER_LOCKS]
+            device = self.controller.device_dict[System.MIRROR_COVER_LOCKS]
 
             # Issue a synchronous command
             self.assertFalse(device.power_on)
@@ -545,27 +546,27 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 device.actuator.position(), device.retracted_position
             )
 
-            # Issue a command (AzimuthAxisTrack) that gets no Done reply
+            # Issue a command (AzimuthTrack) that gets no Done reply
             # but first enable the device and tracking
-            device = self.controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
+            device = self.controller.device_dict[System.AZIMUTH]
             self.assertFalse(device.power_on)
             self.assertFalse(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            power_on_command = MTMount.commands.AzimuthAxisPower(on=True)
+            power_on_command = MTMount.commands.AzimuthPower(on=True)
             await self.run_command(
                 command=power_on_command, use_read_loop=use_read_loop
             )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking()
+            enable_tracking_command = MTMount.commands.AzimuthEnableTracking()
             await self.run_command(
                 command=enable_tracking_command, use_read_loop=use_read_loop
             )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertTrue(device.tracking_enabled)
-            track_command = MTMount.commands.AzimuthAxisTrack(
+            track_command = MTMount.commands.AzimuthTrack(
                 position=45, velocity=0, tai=salobj.current_tai()
             )
             await self.run_command(
@@ -575,7 +576,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             )
             # Issue one more command to be sure we really didn't get
             # a Done reply for the previous command
-            stop_tracking_command = MTMount.commands.AzimuthAxisStop()
+            stop_tracking_command = MTMount.commands.AzimuthStop()
             await self.run_command(
                 command=stop_tracking_command, use_read_loop=use_read_loop
             )
@@ -640,7 +641,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.controller.command_queue.maxsize, 0)
 
             # Run two commands.
-            device = self.controller.device_dict[MTMount.DeviceId.MIRROR_COVER_LOCKS]
+            device = self.controller.device_dict[System.MIRROR_COVER_LOCKS]
             self.assertFalse(device.power_on)
             on_command = MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True)
             await self.run_command(command=on_command, use_read_loop=True)
@@ -673,11 +674,11 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             ):
                 # Elevation does not start at position 0,
                 # so read the position.
-                device_id = {
-                    MTMount.TelemetryTopicId.AZIMUTH: MTMount.DeviceId.AZIMUTH_AXIS,
-                    MTMount.TelemetryTopicId.ELEVATION: MTMount.DeviceId.ELEVATION_AXIS,
+                system_id = {
+                    MTMount.TelemetryTopicId.AZIMUTH: System.AZIMUTH,
+                    MTMount.TelemetryTopicId.ELEVATION: System.ELEVATION,
                 }[topic_id]
-                device = self.controller.device_dict[device_id]
+                device = self.controller.device_dict[system_id]
                 # Work around Docker time issues on macOS with an offset
                 tai0 = salobj.current_tai() - 0.1
                 axis_telem = await self.next_telemetry(topic_id)
@@ -722,13 +723,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(reply["parameters"]["inPosition"])
                 self.assertIn(reply["parameters"]["axis"], (0, 1))
 
-            device = self.controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
-            power_on_command = MTMount.commands.AzimuthAxisPower(on=True)
+            device = self.controller.device_dict[System.AZIMUTH]
+            power_on_command = MTMount.commands.AzimuthPower(on=True)
             await self.run_command(command=power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthAxisEnableTracking()
+            enable_tracking_command = MTMount.commands.AzimuthEnableTracking()
             await self.run_command(command=enable_tracking_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
@@ -744,7 +745,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 # sometimes seen when running Docker on macOS.
                 if tai <= previous_tai:
                     tai = previous_tai + 0.001
-                track_command = MTMount.commands.AzimuthAxisTrack(
+                track_command = MTMount.commands.AzimuthTrack(
                     position=end_position,
                     velocity=0,
                     tai=tai,
@@ -766,7 +767,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 previous_tai = tai
                 await asyncio.sleep(0.1)
 
-            stop_tracking_command = MTMount.commands.AzimuthAxisStop()
+            stop_tracking_command = MTMount.commands.AzimuthStop()
             non_cmd_replies = await self.run_command(
                 command=stop_tracking_command,
                 use_read_loop=True,
@@ -796,8 +797,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(reply["parameters"]["inPosition"])
                 self.assertIn(reply["parameters"]["axis"], (0, 1))
 
-            device = self.controller.device_dict[MTMount.DeviceId.ELEVATION_AXIS]
-            power_on_command = MTMount.commands.ElevationAxisPower(on=True)
+            device = self.controller.device_dict[System.ELEVATION]
+            power_on_command = MTMount.commands.ElevationPower(on=True)
             await self.run_command(command=power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
@@ -805,7 +806,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
             start_position = device.actuator.path.at(salobj.current_tai()).position
             end_position = start_position + 1
-            move_command = MTMount.commands.ElevationAxisMove(position=end_position)
+            move_command = MTMount.commands.ElevationMove(position=end_position)
             estimated_move_time = 2  # seconds
             t0 = time.monotonic()
             non_cmd_replies = await self.run_command(

@@ -24,15 +24,15 @@ __all__ = [
     "AckOnlyCommandCodes",
     "Command",
     "AskForCommand",
-    "AzimuthAxisDriveEnable",
-    "AzimuthAxisDriveReset",
-    "AzimuthAxisEnableTracking",
-    "AzimuthAxisHome",
-    "AzimuthAxisMove",
-    "AzimuthAxisPower",
-    "AzimuthAxisResetAlarm",
-    "AzimuthAxisStop",
-    "AzimuthAxisTrack",
+    "AzimuthDriveEnable",
+    "AzimuthDriveReset",
+    "AzimuthEnableTracking",
+    "AzimuthHome",
+    "AzimuthMove",
+    "AzimuthPower",
+    "AzimuthResetAlarm",
+    "AzimuthStop",
+    "AzimuthTrack",
     "BothAxesMove",
     "BothAxesStop",
     "BothAxesTrack",
@@ -46,17 +46,17 @@ __all__ = [
     "CameraCableWrapTrack",
     "Disable",
     "Enable",
-    "ElevationAxisDriveEnable",
-    "ElevationAxisDriveReset",
-    "ElevationAxisEnableTracking",
-    "ElevationAxisHome",
-    "ElevationAxisMove",
-    "ElevationAxisPower",
-    "ElevationAxisResetAlarm",
-    "ElevationAxisStop",
-    "ElevationAxisTrack",
-    "MainPowerSupplyPower",
-    "MainPowerSupplyResetAlarm",
+    "ElevationDriveEnable",
+    "ElevationDriveReset",
+    "ElevationEnableTracking",
+    "ElevationHome",
+    "ElevationMove",
+    "ElevationPower",
+    "ElevationResetAlarm",
+    "ElevationStop",
+    "ElevationTrack",
+    "MainAxesPowerSupplyPower",
+    "MainAxesPowerSupplyResetAlarm",
     "MirrorCoverLocksMoveAll",
     "MirrorCoverLocksPower",
     "MirrorCoverLocksResetAlarm",
@@ -97,8 +97,8 @@ NUM_HEADER_FIELDS = 4
 AckOnlyCommandCodes = set(
     (
         enums.CommandCode.BOTH_AXES_TRACK,
-        enums.CommandCode.AZIMUTH_AXIS_TRACK,
-        enums.CommandCode.ELEVATION_AXIS_TRACK,
+        enums.CommandCode.AZIMUTH_TRACK,
+        enums.CommandCode.ELEVATION_TRACK,
         enums.CommandCode.AZIMUTH_CABLE_WRAP_TRACK,
         enums.CommandCode.CAMERA_CABLE_WRAP_TRACK,
     )
@@ -227,9 +227,9 @@ class AskForCommand(Command):
     )
 
 
-class AzimuthAxisDriveEnable(Command):
+class AzimuthDriveEnable(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_DRIVE_ENABLE,
+        enums.CommandCode.AZIMUTH_DRIVE_ENABLE,
         (
             (
                 field_info.IntFieldInfo(
@@ -241,9 +241,9 @@ class AzimuthAxisDriveEnable(Command):
     )
 
 
-class AzimuthAxisDriveReset(Command):
+class AzimuthDriveReset(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_DRIVE_RESET,
+        enums.CommandCode.AZIMUTH_DRIVE_RESET,
         (
             field_info.IntFieldInfo(
                 name="drive", doc="Drive index: one of -1 (all), ?", default=-1
@@ -252,39 +252,37 @@ class AzimuthAxisDriveReset(Command):
     )
 
 
-class AzimuthAxisEnableTracking(Command):
+class AzimuthEnableTracking(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_ENABLE_TRACKING)
+
+
+class AzimuthHome(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_HOME)
+
+
+class AzimuthMove(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_ENABLE_TRACKING
+        enums.CommandCode.AZIMUTH_MOVE, _MoveParameters
     )
 
 
-class AzimuthAxisHome(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_HOME)
-
-
-class AzimuthAxisMove(Command):
+class AzimuthPower(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_MOVE, _MoveParameters
+        enums.CommandCode.AZIMUTH_POWER, _OnOffParameters
     )
 
 
-class AzimuthAxisPower(Command):
+class AzimuthResetAlarm(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_RESET_ALARM)
+
+
+class AzimuthStop(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_STOP)
+
+
+class AzimuthTrack(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_POWER, _OnOffParameters
-    )
-
-
-class AzimuthAxisResetAlarm(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_RESET_ALARM)
-
-
-class AzimuthAxisStop(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_AXIS_STOP)
-
-
-class AzimuthAxisTrack(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_AXIS_TRACK, _TrackingParameters
+        enums.CommandCode.AZIMUTH_TRACK, _TrackingParameters
     )
 
 
@@ -416,9 +414,9 @@ class Enable(Command):
     field_infos = make_command_field_infos(enums.CommandCode.ENABLE)
 
 
-class ElevationAxisDriveEnable(Command):
+class ElevationDriveEnable(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_DRIVE_ENABLE,
+        enums.CommandCode.ELEVATION_DRIVE_ENABLE,
         (
             (
                 field_info.IntFieldInfo(
@@ -430,9 +428,9 @@ class ElevationAxisDriveEnable(Command):
     )
 
 
-class ElevationAxisDriveReset(Command):
+class ElevationDriveReset(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_DRIVE_RESET,
+        enums.CommandCode.ELEVATION_DRIVE_RESET,
         (
             field_info.IntFieldInfo(
                 name="drive", doc="Drive index: one of -1 (all), ?", default=-1
@@ -441,53 +439,51 @@ class ElevationAxisDriveReset(Command):
     )
 
 
-class ElevationAxisEnableTracking(Command):
+class ElevationEnableTracking(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_ENABLE_TRACKING)
+
+
+class ElevationHome(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_HOME)
+
+
+class ElevationMove(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_ENABLE_TRACKING
+        enums.CommandCode.ELEVATION_MOVE, _MoveParameters
     )
 
 
-class ElevationAxisHome(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_HOME)
-
-
-class ElevationAxisMove(Command):
+class ElevationPower(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_MOVE, _MoveParameters
+        enums.CommandCode.ELEVATION_POWER, _OnOffParameters
     )
 
 
-class ElevationAxisPower(Command):
+class ElevationResetAlarm(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_POWER, _OnOffParameters
+        enums.CommandCode.ELEVATION_RESET_ALARM,
     )
 
 
-class ElevationAxisResetAlarm(Command):
+class ElevationStop(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_STOP)
+
+
+class ElevationTrack(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_RESET_ALARM,
+        enums.CommandCode.ELEVATION_TRACK, _TrackingParameters
     )
 
 
-class ElevationAxisStop(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_AXIS_STOP)
-
-
-class ElevationAxisTrack(Command):
+class MainAxesPowerSupplyPower(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_AXIS_TRACK, _TrackingParameters
+        enums.CommandCode.MAIN_AXES_POWER_SUPPLY_POWER, _OnOffParameters
     )
 
 
-class MainPowerSupplyPower(Command):
+class MainAxesPowerSupplyResetAlarm(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MAIN_POWER_SUPPLY_POWER, _OnOffParameters
-    )
-
-
-class MainPowerSupplyResetAlarm(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.MAIN_POWER_SUPPLY_RESET_ALARM
+        enums.CommandCode.MAIN_AXES_POWER_SUPPLY_RESET_ALARM
     )
 
 
@@ -685,15 +681,15 @@ class TopEndChillerTrackAmbient(Command):
 
 Commands = (
     AskForCommand,
-    AzimuthAxisDriveEnable,
-    AzimuthAxisDriveReset,
-    AzimuthAxisEnableTracking,
-    AzimuthAxisHome,
-    AzimuthAxisMove,
-    AzimuthAxisPower,
-    AzimuthAxisResetAlarm,
-    AzimuthAxisStop,
-    AzimuthAxisTrack,
+    AzimuthDriveEnable,
+    AzimuthDriveReset,
+    AzimuthEnableTracking,
+    AzimuthHome,
+    AzimuthMove,
+    AzimuthPower,
+    AzimuthResetAlarm,
+    AzimuthStop,
+    AzimuthTrack,
     BothAxesMove,
     BothAxesStop,
     BothAxesTrack,
@@ -707,17 +703,17 @@ Commands = (
     CameraCableWrapTrack,
     Disable,
     Enable,
-    ElevationAxisDriveEnable,
-    ElevationAxisDriveReset,
-    ElevationAxisEnableTracking,
-    ElevationAxisHome,
-    ElevationAxisMove,
-    ElevationAxisPower,
-    ElevationAxisResetAlarm,
-    ElevationAxisStop,
-    ElevationAxisTrack,
-    MainPowerSupplyPower,
-    MainPowerSupplyResetAlarm,
+    ElevationDriveEnable,
+    ElevationDriveReset,
+    ElevationEnableTracking,
+    ElevationHome,
+    ElevationMove,
+    ElevationPower,
+    ElevationResetAlarm,
+    ElevationStop,
+    ElevationTrack,
+    MainAxesPowerSupplyPower,
+    MainAxesPowerSupplyResetAlarm,
     MirrorCoverLocksMoveAll,
     MirrorCoverLocksPower,
     MirrorCoverLocksResetAlarm,

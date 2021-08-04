@@ -21,6 +21,7 @@
 
 __all__ = ["BaseDevice"]
 
+from lsst.ts.idl.enums.MTMount import System
 from .. import enums
 from .. import commands
 
@@ -32,8 +33,8 @@ class BaseDevice:
     ----------
     controller : `MockController`
         Mock controller.
-    device_id : `DeviceId`
-        Device ID.
+    system_id : `lsst.ts.idl.enums.MTMount.System`
+        System ID.
 
     Notes
     -----
@@ -42,9 +43,9 @@ class BaseDevice:
 
     The "command" part of the do_command method name must match a
     `CommandCode` name, but lowercase and with the device prefix omitted.
-    For example, for a mock device with device_id = `DeviceId.ELEVATION_AXIS`,
+    For example, for a mock device with system_id = `System.ELEVATION`,
     the method ``do_reset_error`` implements the
-    `CommandCode.ELEVATION_AXIS_RESET_ERROR` command.
+    `CommandCode.ELEVATION_RESET_ERROR` command.
 
     The do_command method must accept one argument: a `Command`.
     This may be assumed to be the correct command.
@@ -64,10 +65,10 @@ class BaseDevice:
 
     all_command_names = {code.name for code in enums.CommandCode}
 
-    def __init__(self, controller, device_id):
+    def __init__(self, controller, system_id):
         self.controller = controller
-        self.device_id = enums.DeviceId(device_id)
-        self._device_prefix = self.device_id.name
+        self.system_id = System(system_id)
+        self._device_prefix = self.system_id.name
         self.log = controller.log.getChild(self._device_prefix)
 
         self._power_on = False
@@ -93,9 +94,9 @@ class BaseDevice:
     def assert_on(self):
         """Raise `RuntimeError` if device off or in an alarm state."""
         if not self.power_on:
-            raise RuntimeError(f"{self.device_id!r} off")
+            raise RuntimeError(f"{self.system_id!r} off")
         if self.alarm_on:
-            raise RuntimeError(f"{self.device_id!r} in alarm state")
+            raise RuntimeError(f"{self.system_id!r} in alarm state")
 
     def add_methods(self):
         """Add do_methods to the command dict"""

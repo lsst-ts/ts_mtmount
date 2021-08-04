@@ -25,7 +25,7 @@ import unittest
 
 from lsst.ts import salobj
 from lsst.ts import MTMount
-from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState
+from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState, System
 
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
 # Padding for the time limit returned by device do_methods
@@ -44,19 +44,19 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         axis_devices = [
             MTMount.mock.AxisDevice(
                 controller=self.controller,
-                device_id=device_id,
-                start_position=MTMount.mock.INITIAL_POSITION[device_id],
+                system_id=system_id,
+                start_position=MTMount.mock.INITIAL_POSITION[system_id],
             )
-            for device_id in MTMount.LimitsDict
+            for system_id in MTMount.LimitsDict
         ]
         devices = axis_devices + [
-            MTMount.mock.MainPowerSupplyDevice(controller=self.controller),
+            MTMount.mock.MainAxesPowerSupplyDevice(controller=self.controller),
             MTMount.mock.MirrorCoverLocksDevice(controller=self.controller),
             MTMount.mock.MirrorCoversDevice(controller=self.controller),
             MTMount.mock.OilSupplySystemDevice(controller=self.controller),
             MTMount.mock.TopEndChillerDevice(controller=self.controller),
         ]
-        self.device_dict = {device.device_id: device for device in devices}
+        self.device_dict = {device.system_id: device for device in devices}
 
     def get_command_class(self, command_code_name):
         command_code = getattr(MTMount.CommandCode, command_code_name.upper())
@@ -114,11 +114,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 self.fail(f"Command {command} failed, but should_fail false: {e!r}")
 
     async def test_base_commands(self):
-        for device_id, device in self.device_dict.items():
-            with self.subTest(device_id=device.device_id.name):
-                if device_id in (
-                    MTMount.DeviceId.MIRROR_COVERS,
-                    MTMount.DeviceId.MIRROR_COVER_LOCKS,
+        for system_id, device in self.device_dict.items():
+            with self.subTest(system_id=device.system_id.name):
+                if system_id in (
+                    System.MIRROR_COVERS,
+                    System.MIRROR_COVER_LOCKS,
                 ):
                     drive = -1
                 else:
@@ -126,7 +126,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 await self.check_base_commands(device=device, drive=drive)
 
     async def test_mirror_cover_locks(self):
-        device = self.device_dict[MTMount.DeviceId.MIRROR_COVER_LOCKS]
+        device = self.device_dict[System.MIRROR_COVER_LOCKS]
 
         await self.check_deployable_device(
             device=device,
@@ -144,7 +144,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_mirror_covers(self):
-        device = self.device_dict[MTMount.DeviceId.MIRROR_COVERS]
+        device = self.device_dict[System.MIRROR_COVERS]
 
         await self.check_deployable_device(
             device=device,
@@ -158,7 +158,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_oil_supply_system(self):
-        device = self.device_dict[MTMount.DeviceId.OIL_SUPPLY_SYSTEM]
+        device = self.device_dict[System.OIL_SUPPLY_SYSTEM]
 
         # Test the OilSupplySystemPower command
         self.assertFalse(device.power_on)
@@ -225,7 +225,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(values, expected_values)
 
     async def test_top_end_chiller(self):
-        device = self.device_dict[MTMount.DeviceId.TOP_END_CHILLER]
+        device = self.device_dict[System.TOP_END_CHILLER]
         initial_track_ambient = device.track_ambient
         initial_temperature = device.temperature
         temperature1 = 5.1  # An arbitrary value
@@ -275,17 +275,17 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(device.temperature, temperature2)
 
     async def test_axis_devices(self):
-        for device_id in (
-            MTMount.DeviceId.AZIMUTH_AXIS,
-            MTMount.DeviceId.ELEVATION_AXIS,
-            MTMount.DeviceId.CAMERA_CABLE_WRAP,
+        for system_id in (
+            System.AZIMUTH,
+            System.ELEVATION,
+            System.CAMERA_CABLE_WRAP,
         ):
-            with self.subTest(device_id=device_id.name):
-                device = self.device_dict[device_id]
+            with self.subTest(system_id=system_id.name):
+                device = self.device_dict[system_id]
                 await self.check_axis_device(device)
 
     async def test_command_failure(self):
-        device = self.device_dict[MTMount.DeviceId.MIRROR_COVERS]
+        device = self.device_dict[System.MIRROR_COVERS]
         await self.run_command(MTMount.commands.MirrorCoversPower(drive=-1, on=True))
         self.assertTrue(device.power_on)
         device.fail_next_command = True
@@ -296,9 +296,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def check_axis_device(self, device):
-        is_elaz = device.device_id in (
-            MTMount.DeviceId.AZIMUTH_AXIS,
-            MTMount.DeviceId.ELEVATION_AXIS,
+        is_elaz = device.system_id in (
+            System.AZIMUTH,
+            System.ELEVATION,
         )
 
         self.assertFalse(device.power_on)
@@ -318,7 +318,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         ]
         if is_elaz:
             short_command_names.append("home")
-        dev_prefix = f"{device.device_id.name}_"
+        dev_prefix = f"{device.system_id.name}_"
         command_codes = {
             name: getattr(MTMount.CommandCode, dev_prefix + name.upper())
             for name in short_command_names
@@ -686,7 +686,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.power_on)
         self.assertFalse(device.alarm_on)
 
-        device_prefix = device.device_id.name
+        device_prefix = device.system_id.name
         power_command_class = self.get_command_class(f"{device_prefix}_POWER")
         reset_alarm_command_class = self.get_command_class(
             f"{device_prefix}_RESET_ALARM"
@@ -700,13 +700,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         reset_alarm_command = reset_alarm_command_class()
 
         min_on_timeout = {
-            MTMount.DeviceId.MAIN_POWER_SUPPLY: 5,
-            MTMount.DeviceId.OIL_SUPPLY_SYSTEM: 900,
-        }.get(device.device_id, None)
+            System.MAIN_AXES_POWER_SUPPLY: 5,
+            System.OIL_SUPPLY_SYSTEM: 900,
+        }.get(device.system_id, None)
         min_off_timeout = {
-            MTMount.DeviceId.MAIN_POWER_SUPPLY: 0,
-            MTMount.DeviceId.OIL_SUPPLY_SYSTEM: 0,
-        }.get(device.device_id, None)
+            System.MAIN_AXES_POWER_SUPPLY: 0,
+            System.OIL_SUPPLY_SYSTEM: 0,
+        }.get(device.system_id, None)
 
         await self.run_command(power_command_on, min_timeout=min_on_timeout)
         self.assertTrue(device.power_on)

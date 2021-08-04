@@ -32,6 +32,7 @@ from lsst.ts import tcpip
 from lsst.ts.idl.enums.MTMount import (
     DeployableMotionState,
     ElevationLockingPinMotionState,
+    System,
 )
 from ..exceptions import CommandSupersededException
 from .. import commands
@@ -40,22 +41,25 @@ from .. import enums
 
 # from . import device
 from .axis_device import AxisDevice
-from .main_power_supply_device import MainPowerSupplyDevice
+from .main_power_supply_device import MainAxesPowerSupplyDevice
 from .mirror_covers_device import MirrorCoversDevice
 from .mirror_cover_locks_device import MirrorCoverLocksDevice
 from .oil_supply_system_device import OilSupplySystemDevice
 from .top_end_chiller_device import TopEndChillerDevice
+
+# Initial ambient temperature, deg C
+AMBIENT_TEMPERATURE = 4
 
 # Positions of the reverse and forward position azimuth topple block
 # switches (deg). When azimuth exceeds one of these limits the block flips.
 # When the azimuth is between these limits, neither topple switch is engaged.
 AZIMUTH_TOPPLE_BLOCK_POSITIONS = [-2, 2]
 
-# Dict of DeviceId: initial position (deg).
+# Dict of System: initial position (deg).
 INITIAL_POSITION = {
-    enums.DeviceId.ELEVATION_AXIS: 80,
-    enums.DeviceId.AZIMUTH_AXIS: 0,
-    enums.DeviceId.CAMERA_CABLE_WRAP: 0,
+    System.ELEVATION: 80,
+    System.AZIMUTH: 0,
+    System.CAMERA_CABLE_WRAP: 0,
 }
 
 
@@ -112,6 +116,7 @@ class Controller:
         self.commander = enums.Source(commander)
         self.closing = False
         self.telemetry_interval = 0.2  # Seconds
+        self.ambient_temperature = AMBIENT_TEMPERATURE
 
         # Maximum position and velocity error,
         # below which an axis is considered in position
@@ -119,9 +124,9 @@ class Controller:
         self.max_velocity_error = 0.01  # degrees/second
 
         # Saved state initialized by init_saved_state
-        # A dict of device_id: in_position
+        # A dict of system_id: in_position
         self.in_position_dict = {}
-        # A dict of device_id: motion state
+        # A dict of system_id: motion state
         self.motion_state_dict = {}
         self.init_saved_state()
 
@@ -134,7 +139,7 @@ class Controller:
 
         # Dict of command_code: mock method to call
         self.command_dict = {}
-        # Dict of DeviceId: mock device
+        # Dict of System: mock device
         self.device_dict = {}
         self.add_all_devices()
         extra_commands = {
@@ -227,34 +232,34 @@ class Controller:
         Call this when constructing the controller and in response to the
         STATE_INFO command.
         """
-        # A dict of device_id: in_position
+        # A dict of system_id: in_position
         self.in_position_dict = {
-            enums.DeviceId.AZIMUTH_AXIS: None,
-            enums.DeviceId.ELEVATION_AXIS: None,
-            enums.DeviceId.CAMERA_CABLE_WRAP: None,
+            System.AZIMUTH: None,
+            System.ELEVATION: None,
+            System.CAMERA_CABLE_WRAP: None,
         }
         self.motion_state_dict = {
-            enums.DeviceId.AZIMUTH_AXIS: None,
-            enums.DeviceId.ELEVATION_AXIS: None,
-            enums.DeviceId.CAMERA_CABLE_WRAP: None,
+            System.AZIMUTH: None,
+            System.ELEVATION: None,
+            System.CAMERA_CABLE_WRAP: None,
         }
 
-    async def put_axis_telemetry(self, device_id, tai):
+    async def put_axis_telemetry(self, system_id, tai):
         """Put telemetry for elevation, azimuth, or camera cable wrap.
 
         Warning: this minimal and simplistic.
         """
         topic_id = {
-            enums.DeviceId.AZIMUTH_AXIS: enums.TelemetryTopicId.AZIMUTH,
-            enums.DeviceId.ELEVATION_AXIS: enums.TelemetryTopicId.ELEVATION,
-            enums.DeviceId.CAMERA_CABLE_WRAP: enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
-        }[device_id]
-        device = self.device_dict[device_id]
+            System.AZIMUTH: enums.TelemetryTopicId.AZIMUTH,
+            System.ELEVATION: enums.TelemetryTopicId.ELEVATION,
+            System.CAMERA_CABLE_WRAP: enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
+        }[system_id]
+        device = self.device_dict[system_id]
         actuator = device.actuator
         target = actuator.target.at(tai)
         actual = actuator.path.at(tai)
 
-        if device_id == enums.DeviceId.CAMERA_CABLE_WRAP:
+        if system_id == System.CAMERA_CABLE_WRAP:
             data_dict = dict(
                 topicID=topic_id,
                 angle=actual.position,
@@ -280,14 +285,14 @@ class Controller:
 
         # Write events, if CSC connected.
         axis = {
-            enums.DeviceId.AZIMUTH_AXIS: enums.System.AZIMUTH,
-            enums.DeviceId.ELEVATION_AXIS: enums.System.ELEVATION,
-            enums.DeviceId.CAMERA_CABLE_WRAP: enums.System.CAMERA_CABLE_WRAP,
-        }[device_id]
+            System.AZIMUTH: System.AZIMUTH,
+            System.ELEVATION: System.ELEVATION,
+            System.CAMERA_CABLE_WRAP: System.CAMERA_CABLE_WRAP,
+        }[system_id]
 
         motion_state = device.motion_state(tai)
-        if motion_state != self.motion_state_dict[device_id]:
-            self.motion_state_dict[device_id] = motion_state
+        if motion_state != self.motion_state_dict[system_id]:
+            self.motion_state_dict[system_id] = motion_state
             if not self.command_server.connected:
                 return
             await self.write_reply(
@@ -304,8 +309,8 @@ class Controller:
             and abs(target.position - actual.position) < self.max_position_error
             and abs(target.velocity - actual.velocity) < self.max_velocity_error
         )
-        if in_position != self.in_position_dict[device_id]:
-            self.in_position_dict[device_id] = in_position
+        if in_position != self.in_position_dict[system_id]:
+            self.in_position_dict[system_id] = in_position
             if not self.command_server.connected:
                 return
             await self.write_reply(
@@ -318,7 +323,7 @@ class Controller:
 
     async def put_azimuth_topple_block_telemetry(self, tai):
         """Put telemetry for ReplyId.AZIMUTH_TOPPLE_BLOCK."""
-        actuator = self.device_dict[enums.DeviceId.AZIMUTH_AXIS].actuator
+        actuator = self.device_dict[System.AZIMUTH].actuator
         position = actuator.path.at(tai).position
         if position <= AZIMUTH_TOPPLE_BLOCK_POSITIONS[0]:
             azimuth_topple_block_state = [True, False]
@@ -338,19 +343,19 @@ class Controller:
                 )
             )
 
-    async def put_deployable_telemetry(self, device_id, tai):
+    async def put_deployable_telemetry(self, system_id, tai):
         """Put telemetry for deployable devices."""
         topic_id, nelts = {
-            enums.DeviceId.MIRROR_COVERS: (
+            System.MIRROR_COVERS: (
                 enums.ReplyId.MIRROR_COVERS_MOTION_STATE,
                 4,
             ),
-            enums.DeviceId.MIRROR_COVER_LOCKS: (
+            System.MIRROR_COVER_LOCKS: (
                 enums.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE,
                 4,
             ),
-        }[device_id]
-        device = self.device_dict[device_id]
+        }[system_id]
+        device = self.device_dict[system_id]
         motion_state = device.motion_state(tai)
         if not self.command_server.connected:
             return
@@ -406,19 +411,19 @@ class Controller:
         Warning: the telemetry is minimal and simplistic.
         """
         tai = salobj.current_tai()
-        for device_id in (
-            enums.DeviceId.AZIMUTH_AXIS,
-            enums.DeviceId.ELEVATION_AXIS,
-            enums.DeviceId.CAMERA_CABLE_WRAP,
+        for system_id in (
+            System.AZIMUTH,
+            System.ELEVATION,
+            System.CAMERA_CABLE_WRAP,
         ):
-            await self.put_axis_telemetry(device_id=device_id, tai=tai)
+            await self.put_axis_telemetry(system_id=system_id, tai=tai)
         await self.put_azimuth_topple_block_telemetry(tai)
 
-        for device_id in (
-            enums.DeviceId.MIRROR_COVER_LOCKS,
-            enums.DeviceId.MIRROR_COVERS,
+        for system_id in (
+            System.MIRROR_COVER_LOCKS,
+            System.MIRROR_COVERS,
         ):
-            await self.put_deployable_telemetry(device_id=device_id, tai=tai)
+            await self.put_deployable_telemetry(system_id=system_id, tai=tai)
 
     async def telemetry_loop(self):
         """Output telemetry at regular intervals."""
@@ -473,20 +478,20 @@ class Controller:
 
         Parameters
         ----------
-        device_id : `DeviceId`
-            Device identifier.
+        system_id : `lsst.ts.idl.enums.MTMount.System`
+            System ID.
         """
-        for device_id in (
-            enums.DeviceId.ELEVATION_AXIS,
-            enums.DeviceId.AZIMUTH_AXIS,
-            enums.DeviceId.CAMERA_CABLE_WRAP,
+        for system_id in (
+            System.ELEVATION,
+            System.AZIMUTH,
+            System.CAMERA_CABLE_WRAP,
         ):
             self.add_device(
                 AxisDevice,
-                device_id=device_id,
-                start_position=INITIAL_POSITION[device_id],
+                system_id=system_id,
+                start_position=INITIAL_POSITION[system_id],
             )
-        self.add_device(MainPowerSupplyDevice)
+        self.add_device(MainAxesPowerSupplyDevice)
         self.add_device(MirrorCoverLocksDevice)
         self.add_device(MirrorCoversDevice)
         self.add_device(OilSupplySystemDevice)
@@ -505,7 +510,7 @@ class Controller:
             Additional arguments for ``device_class``.
         """
         device = device_class(controller=self, **kwargs)
-        self.device_dict[device.device_id] = device
+        self.device_dict[device.system_id] = device
 
     def set_command_queue(self, maxsize=0):
         """Create or replace the command queue.
@@ -645,45 +650,45 @@ class Controller:
             return timeout, task
 
     def do_both_axes_move(self, command):
-        azimuth_command = commands.AzimuthAxisMove(
+        azimuth_command = commands.AzimuthMove(
             sequence_id=command.sequence_id,
             position=command.azimuth,
         )
-        elevation_command = commands.ElevationAxisMove(
+        elevation_command = commands.ElevationMove(
             sequence_id=command.sequence_id,
             position=command.elevation,
         )
-        azimuth_time, azimuth_task = self.device_dict[
-            enums.DeviceId.AZIMUTH_AXIS
-        ].do_move(azimuth_command)
-        elevation_time, elevation_task = self.device_dict[
-            enums.DeviceId.ELEVATION_AXIS
-        ].do_move(elevation_command)
+        azimuth_time, azimuth_task = self.device_dict[System.AZIMUTH].do_move(
+            azimuth_command
+        )
+        elevation_time, elevation_task = self.device_dict[System.ELEVATION].do_move(
+            elevation_command
+        )
         timeout = max(azimuth_time, elevation_time)
         task = asyncio.create_task(wait_tasks(azimuth_task, elevation_task))
         return timeout, task
 
     def do_both_axes_stop(self, command):
-        azimuth_command = commands.AzimuthAxisStop(sequence_id=command.sequence_id)
-        elevation_command = commands.ElevationAxisStop(sequence_id=command.sequence_id)
-        self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_stop(azimuth_command)
-        self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_stop(elevation_command)
+        azimuth_command = commands.AzimuthStop(sequence_id=command.sequence_id)
+        elevation_command = commands.ElevationStop(sequence_id=command.sequence_id)
+        self.device_dict[System.AZIMUTH].do_stop(azimuth_command)
+        self.device_dict[System.ELEVATION].do_stop(elevation_command)
 
     def do_both_axes_track(self, command):
-        azimuth_command = commands.AzimuthAxisTrack(
+        azimuth_command = commands.AzimuthTrack(
             sequence_id=command.sequence_id,
             position=command.azimuth,
             velocity=command.azimuth_velocity,
             tai=command.tai,
         )
-        elevation_command = commands.ElevationAxisTrack(
+        elevation_command = commands.ElevationTrack(
             sequence_id=command.sequence_id,
             position=command.elevation,
             velocity=command.elevation_velocity,
             tai=command.tai,
         )
-        self.device_dict[enums.DeviceId.AZIMUTH_AXIS].do_track(azimuth_command)
-        self.device_dict[enums.DeviceId.ELEVATION_AXIS].do_track(elevation_command)
+        self.device_dict[System.AZIMUTH].do_track(azimuth_command)
+        self.device_dict[System.ELEVATION].do_track(elevation_command)
 
     def do_safety_reset(self, command):
         """This is presently a no-op."""
@@ -936,9 +941,9 @@ class Controller:
         )
 
         for system in (
-            enums.System.ELEVATION,
-            enums.System.AZIMUTH,
-            enums.System.CAMERA_CABLE_WRAP,
+            System.ELEVATION,
+            System.AZIMUTH,
+            System.CAMERA_CABLE_WRAP,
         ):
             await self.write_reply(
                 make_reply_dict(

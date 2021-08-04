@@ -21,7 +21,7 @@
 
 __all__ = ["TopEndChillerDevice"]
 
-from .. import enums
+from lsst.ts.idl.enums.MTMount import System
 from .base_device import BaseDevice
 
 
@@ -39,9 +39,7 @@ class TopEndChillerDevice(BaseDevice):
         # when turned on, but I don't know.
         self.track_ambient = True
         self.temperature = 0
-        super().__init__(
-            controller=controller, device_id=enums.DeviceId.TOP_END_CHILLER
-        )
+        super().__init__(controller=controller, system_id=System.TOP_END_CHILLER)
 
     def do_track_ambient(self, command):
         if not self.power_on:

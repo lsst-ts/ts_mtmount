@@ -25,8 +25,7 @@ import asyncio
 
 from lsst.ts import salobj
 from lsst.ts import simactuators
-from lsst.ts.idl.enums.MTMount import AxisMotionState
-from .. import enums
+from lsst.ts.idl.enums.MTMount import AxisMotionState, System
 from .. import limits
 from ..exceptions import CommandSupersededException
 from .base_device import BaseDevice
@@ -47,12 +46,12 @@ class AxisDevice(BaseDevice):
     ----------
     controller : `MockController`
         Mock controller.
-    device_id : `DeviceId`
-        Device ID. Must be one of:
+    system_id : `lsst.ts.idl.enums.MTMount.System`
+        System ID. Must be one of:
 
-        * enums.DeviceId.AZIMUTH_AXIS
-        * enums.DeviceId.ELEVATION_AXIS
-        * enums.DeviceId.CAMERA_CABLE_WRAP
+        * System.AZIMUTH
+        * System.ELEVATION
+        * System.CAMERA_CABLE_WRAP
     start_position : `float`, optional
         Initial position (deg)
 
@@ -65,9 +64,9 @@ class AxisDevice(BaseDevice):
     Turning on the device also enables it.
     """
 
-    def __init__(self, controller, device_id, start_position=0):
-        device_id = enums.DeviceId(device_id)
-        device_limits = limits.LimitsDict[device_id].scaled()
+    def __init__(self, controller, system_id, start_position=0):
+        system_id = System(system_id)
+        device_limits = limits.LimitsDict[system_id].scaled()
         self.enabled = False
         self.tracking_enabled = False
         self.tracking_paused = False
@@ -96,7 +95,7 @@ class AxisDevice(BaseDevice):
         self._move_result_task.set_result(None)
         self._tracking_timeout_task = asyncio.Future()
         self._tracking_timeout_task.set_result(None)
-        super().__init__(controller=controller, device_id=device_id)
+        super().__init__(controller=controller, system_id=system_id)
 
     @property
     def end_tai(self):

@@ -36,8 +36,8 @@ class DeployableDevice(PointToPointDevice):
     ----------
     controller : `MockController`
         Mock controller.
-    device_id : `DeviceId`
-        Device ID.
+    system_id : `lsst.ts.idl.enums.MTMount.System`
+        System ID.
     start_deployed : `bool`
         Start deployed (True) or retracted (False)?
     deployed_position : `float`, optional
@@ -66,7 +66,7 @@ class DeployableDevice(PointToPointDevice):
     def __init__(
         self,
         controller,
-        device_id,
+        system_id,
         start_deployed,
         deployed_position=100,
         retracted_position=0,
@@ -84,7 +84,7 @@ class DeployableDevice(PointToPointDevice):
         start_position = deployed_position if start_deployed else retracted_position
         super().__init__(
             controller=controller,
-            device_id=device_id,
+            system_id=system_id,
             min_position=min(retracted_position, deployed_position),
             max_position=max(retracted_position, deployed_position),
             start_position=start_position,

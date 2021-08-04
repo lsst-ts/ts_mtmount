@@ -41,8 +41,8 @@ class PointToPointDevice(BaseDevice):
     ----------
     controller : `MockController`
         Mock controller.
-    device_id : `DeviceId`
-        Device ID
+    system_id : `lsst.ts.idl.enums.MTMount.System`
+        System ID
     min_position : `float`
         Minimum position.
     max_position : `float`
@@ -74,7 +74,7 @@ class PointToPointDevice(BaseDevice):
     def __init__(
         self,
         controller,
-        device_id,
+        system_id,
         min_position,
         max_position,
         start_position,
@@ -93,7 +93,7 @@ class PointToPointDevice(BaseDevice):
         self._monitor_move_task = asyncio.Future()
         self._monitor_move_task.set_result(None)
         self.fail_next_command = False
-        super().__init__(controller=controller, device_id=device_id)
+        super().__init__(controller=controller, system_id=system_id)
 
     def assert_drive_all(self, command):
         """Assert that the drive argument is -1 (all drives)."""

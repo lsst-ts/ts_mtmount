@@ -21,7 +21,7 @@
 
 __all__ = ["MirrorCoverLocksDevice"]
 
-from .. import enums
+from lsst.ts.idl.enums.MTMount import System
 from .deployable_device import DeployableDevice
 
 
@@ -37,6 +37,6 @@ class MirrorCoverLocksDevice(DeployableDevice):
     def __init__(self, controller):
         super().__init__(
             controller=controller,
-            device_id=enums.DeviceId.MIRROR_COVER_LOCKS,
+            system_id=System.MIRROR_COVER_LOCKS,
             start_deployed=True,
         )

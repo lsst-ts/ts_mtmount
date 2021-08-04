@@ -385,7 +385,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             desired_position = rot_data.demandPosition
             desired_velocity = rot_data.demandVelocity
 
-        max_velocity = limits.LimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP].max_velocity
+        max_velocity = limits.LimitsDict[System.CAMERA_CABLE_WRAP].max_velocity
 
         if abs(desired_velocity) > max_velocity:
             excessive_desired_velocity = desired_velocity
@@ -546,11 +546,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         try:
             for reset_command in [
                 commands.TopEndChillerResetAlarm(),
-                commands.MainPowerSupplyResetAlarm(),
+                commands.MainAxesPowerSupplyResetAlarm(),
                 commands.MirrorCoverLocksResetAlarm(),
                 commands.MirrorCoversResetAlarm(),
-                commands.AzimuthAxisResetAlarm(),
-                commands.ElevationAxisResetAlarm(),
+                commands.AzimuthResetAlarm(),
+                commands.ElevationResetAlarm(),
                 commands.CameraCableWrapResetAlarm(),
             ]:
                 try:
@@ -563,10 +563,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             power_on_commands = [
                 commands.TopEndChillerPower(on=True),
                 commands.TopEndChillerTrackAmbient(on=True, temperature=0),
-                commands.MainPowerSupplyPower(on=True),
+                commands.MainAxesPowerSupplyPower(on=True),
                 commands.OilSupplySystemPower(on=True),
-                commands.AzimuthAxisPower(on=True),
-                commands.ElevationAxisPower(on=True),
+                commands.AzimuthPower(on=True),
+                commands.ElevationPower(on=True),
                 commands.CameraCableWrapPower(on=True),
             ]
             await self.send_commands(*power_on_commands, do_lock=True)
@@ -588,8 +588,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         for command in [
             commands.BothAxesStop(),
             commands.CameraCableWrapStop(),
-            commands.AzimuthAxisPower(on=False),
-            commands.ElevationAxisPower(on=False),
+            commands.AzimuthPower(on=False),
+            commands.ElevationPower(on=False),
             commands.CameraCableWrapPower(on=False),
         ]:
             try:
@@ -982,8 +982,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         self.assert_enabled()
         await self.send_commands(
-            commands.ElevationAxisEnableTracking(),
-            commands.AzimuthAxisEnableTracking(),
+            commands.ElevationEnableTracking(),
+            commands.AzimuthEnableTracking(),
             do_lock=True,
         )
 

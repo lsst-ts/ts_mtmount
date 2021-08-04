@@ -21,7 +21,7 @@
 
 __all__ = ["Limits", "LimitsDict"]
 
-from . import enums
+from lsst.ts.idl.enums.MTMount import System
 
 
 class Limits:
@@ -62,15 +62,15 @@ class Limits:
 
 LimitsDict = {
     # From LTS-103.
-    enums.DeviceId.ELEVATION_AXIS: Limits(
+    System.ELEVATION: Limits(
         min_position=20, max_position=86.5, max_velocity=3.5, max_acceleration=3.5
     ),
     # From LTS-103.
-    enums.DeviceId.AZIMUTH_AXIS: Limits(
+    System.AZIMUTH: Limits(
         min_position=-270, max_position=270, max_velocity=7.0, max_acceleration=7.0
     ),
     # From LTS-218.
-    enums.DeviceId.CAMERA_CABLE_WRAP: Limits(
+    System.CAMERA_CABLE_WRAP: Limits(
         min_position=-90, max_position=90, max_velocity=4.0, max_acceleration=1.5
     ),
 }
