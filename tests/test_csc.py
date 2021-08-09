@@ -27,12 +27,15 @@ import math
 import time
 import unittest
 
+import numpy.testing
+
 from lsst.ts import salobj
 from lsst.ts import MTMount
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
     ElevationLockingPinMotionState,
+    PowerState,
     System,
 )
 
@@ -223,6 +226,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 subsystemVersions="",
             )
 
+            settings = self.mock_controller.available_settings
+            await self.assert_next_sample(
+                topic=self.remote.evt_availableSettings,
+                names=", ".join(item["name"] for item in settings),
+                createdDates=", ".join(item["createdDate"].iso for item in settings),
+                modifiedDates=", ".join(item["modifiedDate"].iso for item in settings),
+            )
             await self.assert_next_sample(
                 topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=False
             )
@@ -253,7 +263,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 )
 
             await self.assert_next_sample(
-                topic=self.remote.evt_deployablePlatformMotionState,
+                topic=self.remote.evt_deployablePlatformsMotionState,
                 state=DeployableMotionState.RETRACTED,
                 elementState=[DeployableMotionState.RETRACTED] * 2,
             )
@@ -263,6 +273,61 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 state=ElevationLockingPinMotionState.UNLOCKED,
                 elementState=[ElevationLockingPinMotionState.UNLOCKED] * 2,
             )
+
+            # Test xSystemState events
+            # Set of topic name prefixes for systems that are initially on
+            expected_on_topic_name = {
+                f"{prefix}SystemState"
+                for prefix in (
+                    "azimuthDrivesThermal",
+                    "elevationDrivesThermal",
+                    "az0101CabinetThermal",
+                    "modbusTemperatureControllers",
+                    "mainCabinet",
+                    "mainAxesPowerSupply",
+                )
+            }
+            for topic_info in self.csc.system_state_dict.values():
+                # The topic in topic_info is a ControllerEvent;
+                # we want the associated event in the remote
+                system_state_kwargs = dict()
+                topic = getattr(self.remote, topic_info.topic.attr_name)
+                if topic.name in expected_on_topic_name:
+                    expected_power_state = PowerState.ON
+                else:
+                    expected_power_state = PowerState.OFF
+                nskip = 0
+                system_state_kwargs["powerState"] = expected_power_state
+                if topic_info.num_elements_power_state > 1:
+                    system_state_kwargs["elementsPowerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_elements_power_state
+                if topic_info.num_motion_controller_state > 1:
+                    nskip += 1
+                    system_state_kwargs["motionControllerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_motion_controller_state
+                if topic_info.num_thermal > 0:
+                    nskip += 1
+                    if topic_info.num_thermal == 1:
+                        system_state_kwargs["trackAmbient"] = True
+                    else:
+                        system_state_kwargs["trackAmbient"] = [
+                            True
+                        ] * topic_info.num_thermal
+                for i in range(nskip):
+                    await topic.next(flush=False, timeout=STD_TIMEOUT)
+                data = await self.assert_next_sample(topic, **system_state_kwargs)
+                if topic_info.num_thermal == 1:
+                    self.assertAlmostEqual(
+                        data.setTemperature, self.mock_controller.ambient_temperature
+                    )
+                elif topic_info.num_thermal > 1:
+                    numpy.testing.assert_allclose(
+                        data.setTemperature,
+                        [self.mock_controller.ambient_temperature]
+                        * topic_info.num_thermal,
+                    )
 
             for topic in (
                 self.remote.evt_mirrorCoverLocksMotionState,
@@ -283,6 +348,41 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_sample(
                 topic=self.remote.evt_commander, commander=MTMount.Source.CSC
             )
+
+            # Test xSystemState events after the CSC has enabled systems
+            enabled_system_topic_names = {
+                f"{prefix}SystemState"
+                for prefix in (
+                    "azimuth",
+                    "elevation",
+                    "cameraCableWrap",
+                    "azimuthCableWrap",
+                    "oilSupplySystem",
+                    "topEndChiller",
+                )
+            }
+            for topic_info in self.csc.system_state_dict.values():
+                if topic_info.topic.name not in enabled_system_topic_names:
+                    continue
+                # The topic in topic_info is a ControllerEvent;
+                # we want the associated event in the remote
+                system_state_kwargs = dict()
+                topic = getattr(self.remote, topic_info.topic.attr_name)
+                expected_power_state = PowerState.ON
+                system_state_kwargs["powerState"] = expected_power_state
+                nskip = 0
+                if topic_info.num_elements_power_state > 1:
+                    system_state_kwargs["elementsPowerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_elements_power_state
+                if topic_info.num_motion_controller_state > 1:
+                    nskip += 1
+                    system_state_kwargs["motionControllerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_motion_controller_state
+                for i in range(nskip):
+                    await topic.next(flush=False, timeout=STD_TIMEOUT)
+                await self.assert_next_sample(topic, **system_state_kwargs)
 
             # Test initial telemetry
             data = await self.assert_next_sample(
@@ -330,6 +430,42 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 data.actualPosition,
                 MTMount.mock.INITIAL_POSITION[System.CAMERA_CABLE_WRAP],
             )
+
+            # Disable the CSC and check xSystemState
+            # for devices the CSC should power down
+            await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
+
+            disabled_system_topic_names = {
+                f"{prefix}SystemState"
+                for prefix in (
+                    "azimuth",
+                    "elevation",
+                    "cameraCableWrap",
+                    "azimuthCableWrap",
+                )
+            }
+            for topic_info in self.csc.system_state_dict.values():
+                if topic_info.topic.name not in disabled_system_topic_names:
+                    continue
+                # The topic in topic_info is a ControllerEvent;
+                # we want the associated event in the remote
+                system_state_kwargs = dict()
+                topic = getattr(self.remote, topic_info.topic.attr_name)
+                expected_power_state = PowerState.OFF
+                system_state_kwargs["powerState"] = expected_power_state
+                nskip = 0
+                if topic_info.num_elements_power_state > 1:
+                    system_state_kwargs["elementsPowerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_elements_power_state
+                if topic_info.num_motion_controller_state > 1:
+                    nskip += 1
+                    system_state_kwargs["motionControllerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_motion_controller_state
+                for i in range(nskip):
+                    await topic.next(flush=False, timeout=STD_TIMEOUT)
+                await self.assert_next_sample(topic, **system_state_kwargs)
 
     async def test_standard_state_transitions(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):
@@ -550,14 +686,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
         These include:
 
-        * deployablePlatformMotionState
+        * deployablePlatformsMotionState
         * elevationLockingPinMotionState
         * safetyInterlocks
         * limits
         """
         async with self.make_csc(initial_state=salobj.State.DISABLED):
             await self.assert_next_sample(
-                topic=self.remote.evt_deployablePlatformMotionState,
+                topic=self.remote.evt_deployablePlatformsMotionState,
                 state=DeployableMotionState.RETRACTED,
                 elementState=[DeployableMotionState.RETRACTED] * 2,
             )
@@ -583,13 +719,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             for state in reversed(DeployableMotionState):
                 await self.mock_controller.write_reply(
                     MTMount.mock.make_reply_dict(
-                        id=MTMount.ReplyId.DEPLOYABLE_PLATFORM_MOTION_STATE,
+                        id=MTMount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE,
                         state=state,
                         elementState=[state] * 2,
                     )
                 )
                 await self.assert_next_sample(
-                    topic=self.remote.evt_deployablePlatformMotionState,
+                    topic=self.remote.evt_deployablePlatformsMotionState,
                     state=state,
                     elementState=[state] * 2,
                 )
