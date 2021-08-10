@@ -11,8 +11,8 @@ v0.20.0
 
 Changes:
 
-* Added support for CHILLER_STATE, MOTION_CONTROLLER_STATE, and POWER_STATE low-level controller events;
-  the CSC now supports all controller events except AVAILABLE_SETTINGS and DETAILED_SETTINGS_APPLIED.
+* Added support for AVAILABLE_SETTINGS, CHILLER_STATE, MOTION_CONTROLLER_STATE, and POWER_STATE low-level controller events;
+  the CSC now supports all controller events except DETAILED_SETTINGS_APPLIED (for which we need more information).
   This version requires ts_xml 9.2.
 
 Requires:
