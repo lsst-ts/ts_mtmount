@@ -328,6 +328,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         return non_cmd_replies
 
     async def telemetry_read_loop(self):
+        """Read telemetry and add it to ``self.telemetry_dict``."""
         while True:
             try:
                 data = await self.telemetry_reader.readuntil(MTMount.LINE_TERMINATOR)

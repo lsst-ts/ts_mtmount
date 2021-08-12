@@ -186,6 +186,7 @@ class TelemetryClient:
         self.log.info("running")
 
     def signal_handler(self):
+        """Handle signals such as SIGTERM."""
         self.log.info("signal_handler")
         self.start_task.cancel()
         self.read_task.cancel()

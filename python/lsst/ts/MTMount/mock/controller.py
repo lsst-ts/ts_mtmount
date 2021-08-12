@@ -383,6 +383,14 @@ class Controller:
         * IN_POSITION, if changed
 
         Warning: this minimal and simplistic.
+
+        Parameters
+        ----------
+        system_id : `System`
+            Axis system ID
+        tai : `float`
+            TAI date (unix seconds) at which to compute the axis information.
+            This should be nearly the current time.
         """
         topic_id = {
             System.AZIMUTH: enums.TelemetryTopicId.AZIMUTH,
@@ -458,7 +466,14 @@ class Controller:
             )
 
     async def put_azimuth_topple_block_telemetry(self, tai):
-        """Put telemetry for ReplyId.AZIMUTH_TOPPLE_BLOCK."""
+        """Put telemetry for ReplyId.AZIMUTH_TOPPLE_BLOCK.
+
+        Parameters
+        ----------
+        tai : `float`
+            TAI date (unix seconds) at which to determine the information.
+            This should be nearly the current time.
+        """
         actuator = self.device_dict[System.AZIMUTH].actuator
         position = actuator.path.at(tai).position
         if position <= AZIMUTH_TOPPLE_BLOCK_POSITIONS[0]:
@@ -482,7 +497,16 @@ class Controller:
         )
 
     async def put_deployable_motion_state(self, system_id, tai):
-        """Put motion state for deployable devices, if changed."""
+        """Put motion state for deployable devices, if changed.
+
+        Parameters
+        ----------
+        system_id : `System`
+            Axis system ID
+        tai : `float`
+            TAI date (unix seconds) at which to determine the information.
+            This should be nearly the current time.
+        """
         topic_id, nelts = {
             System.MIRROR_COVERS: (
                 enums.ReplyId.MIRROR_COVERS_MOTION_STATE,
@@ -514,6 +538,14 @@ class Controller:
 
         Note: if system_id is AZIMUTH then also puts AZIMUTH_CABLE_WRAP,
         with the same state. So do not specify system_id = AZIMUTH_CABLE_WRAP.
+
+        Parameters
+        ----------
+        system_id : `System`
+            Axis system ID
+        tai : `float`
+            TAI date (unix seconds) at which to determine the information.
+            This should be nearly the current time.
         """
         nelts = self.motion_controller_state_nelts[system_id]
 
@@ -555,6 +587,14 @@ class Controller:
 
         Note: if system_id is AZIMUTH then also puts AZIMUTH_CABLE_WRAP,
         with the same state. So do not specify system_id = AZIMUTH_CABLE_WRAP.
+
+        Parameters
+        ----------
+        system_id : `System`
+            Axis system ID
+        tai : `float`
+            TAI date (unix seconds) at which to determine the information.
+            This should be nearly the current time.
         """
         nelts = self.power_state_nelts[system_id]
 
@@ -623,7 +663,12 @@ class Controller:
 
     def telemetry_connect_callback(self, server):
         """Called when a client connects to or disconnects from
-        the telemetry port.
+        the telemetry server.
+
+        Parameters
+        ----------
+        server : `lsst.ts.tcpip.OneClientServer`
+            Telemetry server.
         """
         self.telemetry_loop_task.cancel()
         self.telemetry_monitor_task.cancel()
@@ -811,6 +856,13 @@ class Controller:
                     self.done_task.set_result(None)
 
     async def handle_command(self, command):
+        """Handle (process) a command.
+
+        Parameters
+        ----------
+        command : `Command`
+            Command to process.
+        """
         if self.commander != enums.Source.CSC and command.command_code not in (
             enums.CommandCode.ASK_FOR_COMMAND,
             enums.CommandCode.STATE_INFO,
@@ -851,6 +903,14 @@ class Controller:
             asyncio.create_task(self.monitor_command(command=command, task=task))
 
     def command_connect_callback(self, server):
+        """Called when a client connects to or disconnects from
+        the command server.
+
+        Parameters
+        ----------
+        server : `lsst.ts.tcpip.OneClientServer`
+            Command server.
+        """
         state_str = "connected to" if server.connected else "disconnected from"
         self.log.info(f"Mock controller {state_str} the CSC")
         self.read_loop_task.cancel()
@@ -864,7 +924,7 @@ class Controller:
         self.read_loop_task = asyncio.create_task(self.read_loop())
 
     def do_ask_for_command(self, command):
-        """Handle ASK_FOR_COMMAND.
+        """Handle the ASK_FOR_COMMAND command.
 
         For this mock controller to accept other commands,
         the commander must be `enums.Source.CSC`.
@@ -872,6 +932,11 @@ class Controller:
         If the HHD has command then no other commander can change it.
         This reflects reality and offers a nice way to test what happens
         if ASK_FOR_COMMAND fails.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
         """
         if (
             self.commander == enums.Source.HHD
@@ -889,6 +954,13 @@ class Controller:
             return timeout, task
 
     def do_both_axes_move(self, command):
+        """Handle the BOTH_AXES_MOVE command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
         azimuth_command = commands.AzimuthMove(
             sequence_id=command.sequence_id,
             position=command.azimuth,
@@ -908,12 +980,26 @@ class Controller:
         return timeout, task
 
     def do_both_axes_stop(self, command):
+        """Handle the BOTH_AXES_STOP command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
         azimuth_command = commands.AzimuthStop(sequence_id=command.sequence_id)
         elevation_command = commands.ElevationStop(sequence_id=command.sequence_id)
         self.device_dict[System.AZIMUTH].do_stop(azimuth_command)
         self.device_dict[System.ELEVATION].do_stop(elevation_command)
 
     def do_both_axes_track(self, command):
+        """Handle the BOTH_AXES_TRACK command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
         azimuth_command = commands.AzimuthTrack(
             sequence_id=command.sequence_id,
             position=command.azimuth,
@@ -930,14 +1016,27 @@ class Controller:
         self.device_dict[System.ELEVATION].do_track(elevation_command)
 
     def do_safety_reset(self, command):
-        """This is presently a no-op."""
+        """Handle the SAFETY_RESET command.
+
+        This is presently a no-op.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
         pass
 
     def do_state_info(self, command):
-        """Print all state...
+        """Handle the STATE_INFO command.
 
-        For state that is reported in the telemetry loop,
+        Print all state. For state that is reported in the telemetry loop,
         reset the saved values so the telemetry loop reports it.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
         """
         task = asyncio.create_task(self._impl_state_info())
         timeout = 1
@@ -964,6 +1063,15 @@ class Controller:
         await task
 
     async def monitor_command(self, command, task):
+        """Wait for a command to finish and report success or failure.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command to monitor.
+        task : `asyncio.Task`
+            The task that reports command succeeded or failed.
+        """
         try:
             await task
             if self.command_server.connected:
@@ -979,6 +1087,7 @@ class Controller:
                 await self.write_cmd_failed(command, explanation=repr(e))
 
     async def read_loop(self):
+        """Read and handle commands."""
         self.log.debug("Read loop begins")
         try:
             while self.command_server.connected:
@@ -1003,23 +1112,8 @@ class Controller:
             await self.command_server.close_client()
         self.log.debug("Read loop ends")
 
-    async def reply_to_command(self, command):
-        if not self.command_server.connected:
-            raise RuntimeError(f"reply_to_command({command}) failed: not connected")
-        try:
-            await self.write_cmd_acknowledged(command, timeout=1)
-            if command.command_code not in commands.AckOnlyCommandCodes:
-                await asyncio.sleep(0.1)
-                if not self.command_server.connected:
-                    raise RuntimeError(
-                        f"reply_to_command({command}) failed: disconnected before writing Done"
-                    )
-                await self.write_cmd_succeeded(command)
-        except Exception:
-            self.log.exception(f"reply_to_command({command}) failed")
-            raise
-
     def signal_handler(self):
+        """Deal with SIGTERM and similar signals."""
         asyncio.create_task(self.close())
 
     async def write_cmd_acknowledged(self, command, timeout):
@@ -1127,6 +1221,7 @@ class Controller:
         )
 
     async def write_commander(self):
+        """Write the COMMANDER event."""
         if self.command_server.connected:
             await self.write_reply(
                 make_reply_dict(
