@@ -22,7 +22,7 @@
 __all__ = ["OilSupplySystemDevice"]
 
 from lsst.ts import salobj
-from .. import enums
+from lsst.ts.idl.enums.MTMount import System
 from .base_device import BaseDevice
 
 
@@ -53,9 +53,7 @@ class OilSupplySystemDevice(BaseDevice):
         self.cooling_on = False
         self.main_pump_on = False
         self.oil_on = False
-        super().__init__(
-            controller=controller, device_id=enums.DeviceId.OIL_SUPPLY_SYSTEM
-        )
+        super().__init__(controller=controller, system_id=System.OIL_SUPPLY_SYSTEM)
 
     @property
     def power_on(self):

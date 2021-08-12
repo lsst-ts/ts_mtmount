@@ -19,15 +19,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["MainPowerSupplyDevice"]
+__all__ = ["MainAxesPowerSupplyDevice"]
 
 
 from lsst.ts import salobj
-from .. import enums
+from lsst.ts.idl.enums.MTMount import System
 from .base_device import BaseDevice
 
 
-class MainPowerSupplyDevice(BaseDevice):
+class MainAxesPowerSupplyDevice(BaseDevice):
     """Main power supply.
 
     Parameters
@@ -42,9 +42,7 @@ class MainPowerSupplyDevice(BaseDevice):
     """
 
     def __init__(self, controller):
-        super().__init__(
-            controller=controller, device_id=enums.DeviceId.MAIN_POWER_SUPPLY
-        )
+        super().__init__(controller=controller, system_id=System.MAIN_AXES_POWER_SUPPLY)
 
     def do_power(self, command):
         super().do_power(command)

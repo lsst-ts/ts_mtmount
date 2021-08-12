@@ -6,6 +6,23 @@
 Version History
 ###############
 
+v0.20.0
+-------
+
+Changes:
+
+* Added support for AVAILABLE_SETTINGS, CHILLER_STATE, MOTION_CONTROLLER_STATE, and POWER_STATE low-level controller events;
+  the CSC now supports all controller events except DETAILED_SETTINGS_APPLIED (for which we need more information).
+  This version requires ts_xml 9.2.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 9.2
+
 v0.19.0
 -------
 
@@ -22,7 +39,7 @@ Requires:
 * ts_simactuators 2
 * ts_tcpip 0.1
 * ts_idl 2
-* IDL files for MTMount and MTRotator from ts_xml 9.2
+* IDL files for MTMount and MTRotator from ts_xml 9.1
 
 0.18.1
 -------

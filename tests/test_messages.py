@@ -33,11 +33,20 @@ class MessageTestCase(unittest.TestCase):
         self.doc = f"a doc string for the field named {self.name}"
 
     def check_round_trip(self, message):
+        """Check that Message.str_fields and <message_type>.from_str_fields
+        are inverses.
+
+        Convert a message to str fields, then back to a message
+        and check that it matches the original.
+        """
         str_fields = message.str_fields()
         message_round_trip = type(message).from_str_fields(str_fields)
         self.assertEqual(message, message_round_trip)
 
     def check_message_type(self, message_type):
+        """For a given message type: make several random messages and call
+        check_round_trip.
+        """
         for i in range(10):
             message = MTMount.testutils.make_random_message(message_type)
             self.check_round_trip(message)

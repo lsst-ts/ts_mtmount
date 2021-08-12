@@ -31,7 +31,7 @@ import subprocess
 import types
 
 from lsst.ts import salobj
-from lsst.ts.idl.enums.MTMount import AxisMotionState, System
+from lsst.ts.idl.enums.MTMount import AxisMotionState, PowerState, System
 from .config_schema import CONFIG_SCHEMA
 from . import constants
 from . import command_futures
@@ -71,6 +71,63 @@ ROTATOR_TELEMETRY_TIMEOUT = 1
 # then this will no longer be necessary; we can use the timeout provided
 # by the low-level controller, which is likely to be more accurate.
 MIRROR_COVER_TIMEOUT = 60
+
+
+class SystemStateInfo:
+    """Information about a system state topic.
+
+    Constructing this object has a side effect:
+    it initializes the fields of the topic to unknown/nan.
+
+    Parameters
+    ----------
+    topic : `salobj.topics.ControllerEvent`
+        System state topic.
+
+    Attributes
+    ----------
+    num_elements_power_state : int
+        Length of elementsPowerState; 0 if absent
+    num_motion_controller_state : int
+        Length of motionControllerState; 0 if absent
+    num_thermal : int
+        Length of trackAmbient and setTemperature; 0 if absent
+    """
+
+    def __init__(self, topic: salobj.topics.ControllerEvent) -> None:
+        self.topic = topic
+        data = topic.DataType()
+        topic.set(powerState=PowerState.UNKNOWN)
+        eps = getattr(data, "elementsPowerState", None)
+        if eps is None:
+            self.num_elements_power_state = 0
+        else:
+            self.num_elements_power_state = len(eps)
+            topic.set(
+                elementsPowerState=[PowerState.UNKNOWN] * self.num_elements_power_state
+            )
+        mcs = getattr(data, "motionControllerState", None)
+        if mcs is not None:
+            self.num_motion_controller_state = len(mcs)
+            topic.set(
+                motionControllerState=[PowerState.UNKNOWN]
+                * self.num_motion_controller_state
+            )
+        else:
+            self.num_motion_controller_state = 0
+        ta = getattr(data, "trackAmbient", None)
+        if ta is not None:
+            if isinstance(ta, bool):
+                self.num_thermal = 1
+                topic.set(trackAmbient=False, setTemperature=math.nan)
+            else:
+                self.num_thermal = len(ta)
+                topic.set(
+                    trackAmbient=[False] * self.num_thermal,
+                    setTemperature=[math.nan] * self.num_thermal,
+                )
+        else:
+            self.num_thermal = 0
 
 
 class MTMountCsc(salobj.ConfigurableCsc):
@@ -216,20 +273,57 @@ class MTMountCsc(salobj.ConfigurableCsc):
             simulation_mode=simulation_mode,
         )
 
+        # Dict of system ID: SystemStateInfo;
+        # this provides useful information for handling replies and also
+        # initializes the relevant fields of the events. Initialization is
+        # useful because most of these topics are set by more than one reply
+        # (POWER_STATE plus CHILLER_STATE and/or MOTION_CONTROLLER_STATE),
+        # so they will be output before all fields are known.
+        self.system_state_dict = {}
+        for system_id, topic in (
+            (System.AZIMUTH, self.evt_azimuthSystemState),
+            (System.ELEVATION, self.evt_elevationSystemState),
+            (System.CAMERA_CABLE_WRAP, self.evt_cameraCableWrapSystemState),
+            (System.BALANCE, self.evt_balanceSystemState),
+            (System.MIRROR_COVERS, self.evt_mirrorCoversSystemState),
+            (System.MIRROR_COVER_LOCKS, self.evt_mirrorCoverLocksSystemState),
+            (System.AZIMUTH_CABLE_WRAP, self.evt_azimuthCableWrapSystemState),
+            (System.LOCKING_PINS, self.evt_lockingPinsSystemState),
+            (System.DEPLOYABLE_PLATFORMS, self.evt_deployablePlatformsSystemState),
+            (System.OIL_SUPPLY_SYSTEM, self.evt_oilSupplySystemState),
+            (System.AZIMUTH_DRIVES_THERMAL, self.evt_azimuthDrivesThermalSystemState),
+            (
+                System.ELEVATION_DRIVES_THERMAL,
+                self.evt_elevationDrivesThermalSystemState,
+            ),
+            (System.AZ0101_CABINET_THERMAL, self.evt_az0101CabinetThermalSystemState),
+            (
+                System.MODBUS_TEMPERATURE_CONTROLLERS,
+                self.evt_modbusTemperatureControllersSystemState,
+            ),
+            (System.MAIN_CABINET, self.evt_mainCabinetSystemState),
+            (System.MAIN_AXES_POWER_SUPPLY, self.evt_mainAxesPowerSupplySystemState),
+            (System.TOP_END_CHILLER, self.evt_topEndChillerSystemState),
+        ):
+            self.system_state_dict[system_id] = SystemStateInfo(topic)
+
         # Dict of ReplyId: function to call.
         # The function receives one argument: the reply.
         # Set this after calling super().__init__ so the events are available.
         self.reply_dispatch = {
+            enums.ReplyId.AVAILABLE_SETTINGS: self.handle_available_settings,
+            enums.ReplyId.AXIS_MOTION_STATE: self.handle_axis_motion_state,
             enums.ReplyId.AZIMUTH_TOPPLE_BLOCK: self.handle_azimuth_topple_block,
+            enums.ReplyId.CHILLER_STATE: self.handle_chiller_state,
             enums.ReplyId.CMD_ACKNOWLEDGED: self.handle_command_reply,
             enums.ReplyId.CMD_REJECTED: self.handle_command_reply,
             enums.ReplyId.CMD_SUCCEEDED: self.handle_command_reply,
             enums.ReplyId.CMD_FAILED: self.handle_command_reply,
             enums.ReplyId.CMD_SUPERSEDED: self.handle_command_reply,
             enums.ReplyId.COMMANDER: self.handle_commander,
-            enums.ReplyId.DEPLOYABLE_PLATFORM_MOTION_STATE: functools.partial(
+            enums.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE: functools.partial(
                 self.handle_deployable_motion_state,
-                topic=self.evt_deployablePlatformMotionState,
+                topic=self.evt_deployablePlatformsMotionState,
             ),
             enums.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE: self.handle_elevation_locking_pin_motion_state,
             enums.ReplyId.ERROR: self.handle_error,
@@ -243,9 +337,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.handle_deployable_motion_state,
                 topic=self.evt_mirrorCoversMotionState,
             ),
-            enums.ReplyId.AXIS_MOTION_STATE: self.handle_motion_state,
+            enums.ReplyId.MOTION_CONTROLLER_STATE: self.handle_motion_controller_state,
+            enums.ReplyId.POWER_STATE: self.handle_power_state,
             enums.ReplyId.SAFETY_INTERLOCKS: self.handle_safety_interlocks,
-            enums.ReplyId.SOFT_LIMIT_POSITIONS: self.handle_soft_limit_positions,
             enums.ReplyId.WARNING: self.handle_warning,
         }
 
@@ -268,9 +362,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def begin_enable(self, data):
         """Take control of the mount and initialize devices.
 
-        If taking control fails, raise an exception to leave the state
-        as DISABLED.
-        If initializing fails, go to FAULT state (in enable_devices).
+        If taking control fails, raise an exception in order to leave
+        the state as DISABLED.
+
+        If initializing fails, first try to disable the axis controllers,
+        then raise an exception in order to leave the state as DISABLED.
         """
         self.disable_task.cancel()
         self.enable_task.cancel()
@@ -299,6 +395,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise
 
     async def begin_disable(self, data):
+        """Disable the axis controllers and yield control.
+
+        Leave the top end chiller and oils supply system running.
+        """
         await super().begin_disable(data)
         self.disable_task.cancel()
         self.disable_task = asyncio.create_task(self.disable_devices())
@@ -306,6 +406,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     @property
     def connected(self):
+        """Return True if connected to the low-level controller."""
         return not (
             self.reader is None
             or self.writer is None
@@ -386,7 +487,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             desired_position = rot_data.demandPosition
             desired_velocity = rot_data.demandVelocity
 
-        max_velocity = limits.LimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP].max_velocity
+        max_velocity = limits.LimitsDict[System.CAMERA_CABLE_WRAP].max_velocity
 
         if abs(desired_velocity) > max_velocity:
             excessive_desired_velocity = desired_velocity
@@ -542,16 +643,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Telemetry subprocess terminated")
 
     async def enable_devices(self):
+        """Enable all devices.
+
+        Call this when going to ENABLED state.
+        """
         self.log.info("Enable devices")
         self.disable_task.cancel()
         try:
             for reset_command in [
                 commands.TopEndChillerResetAlarm(),
-                commands.MainPowerSupplyResetAlarm(),
+                commands.MainAxesPowerSupplyResetAlarm(),
                 commands.MirrorCoverLocksResetAlarm(),
                 commands.MirrorCoversResetAlarm(),
-                commands.AzimuthAxisResetAlarm(),
-                commands.ElevationAxisResetAlarm(),
+                commands.AzimuthResetAlarm(),
+                commands.ElevationResetAlarm(),
                 commands.CameraCableWrapResetAlarm(),
             ]:
                 try:
@@ -564,10 +669,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             power_on_commands = [
                 commands.TopEndChillerPower(on=True),
                 commands.TopEndChillerTrackAmbient(on=True, temperature=0),
-                commands.MainPowerSupplyPower(on=True),
+                commands.MainAxesPowerSupplyPower(on=True),
                 commands.OilSupplySystemPower(on=True),
-                commands.AzimuthAxisPower(on=True),
-                commands.ElevationAxisPower(on=True),
+                commands.AzimuthPower(on=True),
+                commands.ElevationPower(on=True),
                 commands.CameraCableWrapPower(on=True),
             ]
             await self.send_commands(*power_on_commands, do_lock=True)
@@ -580,7 +685,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.camera_cable_wrap_follow_start_task
 
     async def disable_devices(self):
-        """Disable all devices and yield control."""
+        """Disable the axis controllers and yield control.
+
+        Leave the top end chiller and oils supply system running.
+
+        Call this when going to DISABLED state.
+        """
         self.log.info("Disable devices")
         self.enable_task.cancel()
         await self.stop_camera_cable_wrap_following()
@@ -589,8 +699,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         for command in [
             commands.BothAxesStop(),
             commands.CameraCableWrapStop(),
-            commands.AzimuthAxisPower(on=False),
-            commands.ElevationAxisPower(on=False),
+            commands.AzimuthPower(on=False),
+            commands.ElevationPower(on=False),
             commands.CameraCableWrapPower(on=False),
         ]:
             try:
@@ -870,6 +980,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     @property
     def camera_cable_wrap_following_enabled(self):
+        """Return True if camera cable wrap following rotator is enabled."""
         return self.evt_cameraCableWrapFollowing.data.enabled
 
     def clear_target(self):
@@ -889,10 +1000,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.config = config
 
     async def do_clearError(self, data):
+        """Handle the clearError command."""
         self.assert_enabled()
         raise salobj.ExpectedError("Not yet implemented")
 
     async def do_closeMirrorCovers(self, data):
+        """Handle the closeMirrorCovers command."""
         self.assert_enabled()
         self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
@@ -913,10 +1026,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
     async def do_disableCameraCableWrapFollowing(self, data):
+        """Handle the disableCameraCableWrapFollowing command."""
         self.assert_enabled()
         await self.stop_camera_cable_wrap_following()
 
     async def do_enableCameraCableWrapFollowing(self, data):
+        """Handle the enableCameraCableWrapFollowing command."""
         self.assert_enabled()
         if self.camera_cable_wrap_follow_loop_task.done():
             self.camera_cable_wrap_follow_start_task = asyncio.create_task(
@@ -925,6 +1040,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.camera_cable_wrap_follow_start_task
 
     async def do_openMirrorCovers(self, data):
+        """Handle the openMirrorCovers command."""
         self.assert_enabled()
         self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
@@ -945,6 +1061,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
     async def do_moveToTarget(self, data):
+        """Handle the moveToTarget command."""
         self.assert_enabled()
         cmd_futures = await self.send_command(
             commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
@@ -955,6 +1072,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await cmd_futures.done
 
     async def do_trackTarget(self, data):
+        """Handle the trackTarget command."""
         self.assert_enabled()
         # Use do_lock=False to prevent a slow command
         # from interrrupting tracking
@@ -981,14 +1099,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
     async def do_startTracking(self, data):
+        """Handle the startTracking command."""
         self.assert_enabled()
         await self.send_commands(
-            commands.ElevationAxisEnableTracking(),
-            commands.AzimuthAxisEnableTracking(),
+            commands.ElevationEnableTracking(),
+            commands.AzimuthEnableTracking(),
             do_lock=True,
         )
 
     async def do_stop(self, data):
+        """Handle the stop command."""
         self.assert_enabled()
         await self.send_commands(
             commands.BothAxesStop(),
@@ -999,14 +1119,66 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
     async def do_stopTracking(self, data):
+        """Handle the stopTracking command."""
         self.assert_enabled()
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
+    def handle_available_settings(self, reply):
+        """Handle a `ReplyId.AVAILABLE_SETTINGS` reply."""
+        self.evt_availableSettings.set_put(
+            names=", ".join(item["name"] for item in reply.sets),
+            descriptions=json.dumps([item["description"] for item in reply.sets]),
+            createdDates=", ".join(item["createdDate"] for item in reply.sets),
+            modifiedDates=", ".join(item["modifiedDate"] for item in reply.sets),
+        )
+
+    def handle_axis_motion_state(self, reply):
+        """Handle a `ReplyId.AXIS_MOTION_STATE` reply."""
+        axis = reply.axis
+        state = reply.motionState
+        was_tracking = self.is_tracking()
+        if axis == System.ELEVATION:
+            self.evt_elevationMotionState.set_put(state=state)
+            if state == AxisMotionState.MOVING_POINT_TO_POINT:
+                self.evt_target.set_put(
+                    elevation=reply.position,
+                    elevationVelocity=0,
+                    taiTime=salobj.current_tai(),
+                    trackId=0,
+                    tracksys="LOCAL",
+                    radesys="",
+                )
+        elif axis == System.AZIMUTH:
+            self.evt_azimuthMotionState.set_put(state=state)
+            if state == AxisMotionState.MOVING_POINT_TO_POINT:
+                self.evt_target.set_put(
+                    azimuth=reply.position,
+                    azimuthVelocity=0,
+                    taiTime=salobj.current_tai(),
+                    trackId=0,
+                    tracksys="LOCAL",
+                    radesys="",
+                )
+        elif axis == System.CAMERA_CABLE_WRAP:
+            self.evt_cameraCableWrapMotionState.set_put(state=state)
+        else:
+            self.log.warning(f"Unrecognized axis={axis} in handle_axis_motion_state")
+        if was_tracking and not self.is_tracking():
+            self.clear_target()
+
     def handle_azimuth_topple_block(self, reply):
-        """Handle a ReplyId.AZIMUTH_TOPPLE_BLOCK reply."""
+        """Handle a `ReplyId.AZIMUTH_TOPPLE_BLOCK` reply."""
         self.evt_azimuthToppleBlock.set_put(
             forward=reply.forward,
             reverse=reply.reverse,
+        )
+
+    def handle_chiller_state(self, reply):
+        """Andle a `ReplyId.CHILLER_STATE` reply."""
+        topic_info = self.system_state_dict[reply.system]
+        topic_info.topic.set_put(
+            trackAmbient=reply.trackAmbient,
+            setTemperature=reply.temperature,
         )
 
     def handle_command_reply(self, reply):
@@ -1045,10 +1217,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
     def handle_deployable_motion_state(self, reply, topic):
         """Handle a generic position event.
 
-        Examples include:
-        * evt_deployablePlatformMotionState
-        * evt_mirrorCoverLocksMotionState
-        * evt_mirrorCoversMotionState
+        Including:
+
+        * `ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE`
+        * `ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE`
+        * `ReplyId.MIRROR_COVERS_MOTION_STATE`
         """
         topic.set_put(state=reply.state, elementState=reply.elementState)
 
@@ -1092,39 +1265,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             topic.set_put(limits=reply.limits)
 
-    def handle_motion_state(self, reply):
-        """Handle a `ReplyId.AXIS_MOTION_STATE` reply."""
-        axis = reply.axis
-        state = reply.motionState
-        was_tracking = self.is_tracking()
-        if axis == System.ELEVATION:
-            self.evt_elevationMotionState.set_put(state=state)
-            if state == AxisMotionState.MOVING_POINT_TO_POINT:
-                self.evt_target.set_put(
-                    elevation=reply.position,
-                    elevationVelocity=0,
-                    taiTime=salobj.current_tai(),
-                    trackId=0,
-                    tracksys="LOCAL",
-                    radesys="",
-                )
-        elif axis == System.AZIMUTH:
-            self.evt_azimuthMotionState.set_put(state=state)
-            if state == AxisMotionState.MOVING_POINT_TO_POINT:
-                self.evt_target.set_put(
-                    azimuth=reply.position,
-                    azimuthVelocity=0,
-                    taiTime=salobj.current_tai(),
-                    trackId=0,
-                    tracksys="LOCAL",
-                    radesys="",
-                )
-        elif axis == System.CAMERA_CABLE_WRAP:
-            self.evt_cameraCableWrapMotionState.set_put(state=state)
+    def handle_motion_controller_state(self, reply):
+        """Handle a `ReplyId.MOTION_CONTROLLER_STATE` reply."""
+        topic_info = self.system_state_dict[reply.system]
+        topic_info.topic.set_put(
+            motionControllerState=reply.motionControllerState,
+        )
+
+    def handle_power_state(self, reply):
+        """Handle a `ReplyId.POWER_STATE` reply."""
+        topic_info = self.system_state_dict[reply.system]
+        if topic_info.num_elements_power_state > 0:
+            topic_info.topic.set_put(
+                powerState=reply.powerState, elementsPowerState=reply.elementPowerState
+            )
         else:
-            self.log.warning(f"Unrecognized axis={axis} in handle_motion_state")
-        if was_tracking and not self.is_tracking():
-            self.clear_target()
+            topic_info.topic.set_put(powerState=reply.powerState)
 
     def handle_safety_interlocks(self, reply):
         """Handle a `ReplyId.SAFETY_INTERLOCKS` reply."""
@@ -1132,20 +1288,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         del data_dict["id"]
         del data_dict["timestamp"]
         self.evt_safetyInterlocks.set_put(**data_dict)
-
-    def handle_soft_limit_positions(self, reply):
-        """Handle a `ReplyId.SOFT_LIMIT_POSITION` reply."""
-        topic = {
-            System.ELEVATION: self.evt_elevationLimitPositions,
-            System.AZIMUTH: self.evt_azimuthLimitPositions,
-            System.CAMERA_CABLE_WRAP: self.evt_cameraCableWrapLimitPositions,
-        }.get(reply.system, None)
-        if topic is None:
-            self.log.warning(
-                f"Unrecognized system={reply.system} in handle_soft_limit_positions"
-            )
-        else:
-            topic.set_put(min=reply.min, max=reply.max)
 
     def handle_warning(self, reply):
         """Handle a `ReplyId.WARNING` reply."""
@@ -1169,6 +1311,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
     async def monitor_telemetry_client(self):
+        """Go to FAULT state if the telemetry client exits prematurely."""
         await self.telemetry_client_process.wait()
         self.fail("Telemetry process exited prematurely")
 
@@ -1191,7 +1334,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
                 handler = self.reply_dispatch.get(reply.id, None)
                 if handler:
-                    handler(reply)
+                    try:
+                        handler(reply)
+                    except Exception as e:
+                        self.log.error(f"Failed to handle reply: {reply}: {e!r}")
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
@@ -1213,6 +1359,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.debug("Read loop ends")
 
     def signal_handler(self):
+        """Handle signals such as SIGTERM."""
         self.terminate_background_processes()
         asyncio.create_task(self.close())
 
@@ -1258,6 +1405,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await super().start()
 
     async def stop_camera_cable_wrap_following(self):
+        """Stop the camera cable wrap from following the rotator."""
         self.evt_cameraCableWrapFollowing.set_put(enabled=False)
         self.camera_cable_wrap_follow_start_task.cancel()
         if self.camera_cable_wrap_follow_loop_task.done():

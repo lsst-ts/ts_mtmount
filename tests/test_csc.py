@@ -27,12 +27,16 @@ import math
 import time
 import unittest
 
+import numpy.testing
+
 from lsst.ts import salobj
 from lsst.ts import MTMount
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
     ElevationLockingPinMotionState,
+    PowerState,
+    System,
 )
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
@@ -222,6 +226,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 subsystemVersions="",
             )
 
+            settings = self.mock_controller.available_settings
+            await self.assert_next_sample(
+                topic=self.remote.evt_availableSettings,
+                names=", ".join(item["name"] for item in settings),
+                createdDates=", ".join(item["createdDate"].iso for item in settings),
+                modifiedDates=", ".join(item["modifiedDate"].iso for item in settings),
+            )
             await self.assert_next_sample(
                 topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=False
             )
@@ -242,25 +253,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             ):
                 await self.assert_next_sample(topic=topic, limits=0)
 
-            for device_id, topic in (
-                (
-                    MTMount.DeviceId.ELEVATION_AXIS,
-                    self.remote.evt_elevationLimitPositions,
-                ),
-                (
-                    MTMount.DeviceId.AZIMUTH_AXIS,
-                    self.remote.evt_azimuthLimitPositions,
-                ),
-                (
-                    MTMount.DeviceId.CAMERA_CABLE_WRAP,
-                    self.remote.evt_cameraCableWrapLimitPositions,
-                ),
-            ):
-                data = await self.assert_next_sample(topic=topic)
-                actuator = self.mock_controller.device_dict[device_id].actuator
-                self.assertAlmostEqual(data.min, actuator.min_position)
-                self.assertAlmostEqual(data.max, actuator.max_position)
-
             for topic in (
                 self.remote.evt_elevationMotionState,
                 self.remote.evt_azimuthMotionState,
@@ -271,7 +263,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 )
 
             await self.assert_next_sample(
-                topic=self.remote.evt_deployablePlatformMotionState,
+                topic=self.remote.evt_deployablePlatformsMotionState,
                 state=DeployableMotionState.RETRACTED,
                 elementState=[DeployableMotionState.RETRACTED] * 2,
             )
@@ -281,6 +273,61 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 state=ElevationLockingPinMotionState.UNLOCKED,
                 elementState=[ElevationLockingPinMotionState.UNLOCKED] * 2,
             )
+
+            # Test xSystemState events
+            # Set of topic name prefixes for systems that are initially on
+            expected_on_topic_name = {
+                f"{prefix}SystemState"
+                for prefix in (
+                    "azimuthDrivesThermal",
+                    "elevationDrivesThermal",
+                    "az0101CabinetThermal",
+                    "modbusTemperatureControllers",
+                    "mainCabinet",
+                    "mainAxesPowerSupply",
+                )
+            }
+            for topic_info in self.csc.system_state_dict.values():
+                # The topic in topic_info is a ControllerEvent;
+                # we want the associated event in the remote
+                system_state_kwargs = dict()
+                topic = getattr(self.remote, topic_info.topic.attr_name)
+                if topic.name in expected_on_topic_name:
+                    expected_power_state = PowerState.ON
+                else:
+                    expected_power_state = PowerState.OFF
+                nskip = 0
+                system_state_kwargs["powerState"] = expected_power_state
+                if topic_info.num_elements_power_state > 1:
+                    system_state_kwargs["elementsPowerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_elements_power_state
+                if topic_info.num_motion_controller_state > 1:
+                    nskip += 1
+                    system_state_kwargs["motionControllerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_motion_controller_state
+                if topic_info.num_thermal > 0:
+                    nskip += 1
+                    if topic_info.num_thermal == 1:
+                        system_state_kwargs["trackAmbient"] = True
+                    else:
+                        system_state_kwargs["trackAmbient"] = [
+                            True
+                        ] * topic_info.num_thermal
+                for i in range(nskip):
+                    await topic.next(flush=False, timeout=STD_TIMEOUT)
+                data = await self.assert_next_sample(topic, **system_state_kwargs)
+                if topic_info.num_thermal == 1:
+                    self.assertAlmostEqual(
+                        data.setTemperature, self.mock_controller.ambient_temperature
+                    )
+                elif topic_info.num_thermal > 1:
+                    numpy.testing.assert_allclose(
+                        data.setTemperature,
+                        [self.mock_controller.ambient_temperature]
+                        * topic_info.num_thermal,
+                    )
 
             for topic in (
                 self.remote.evt_mirrorCoverLocksMotionState,
@@ -302,6 +349,41 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 topic=self.remote.evt_commander, commander=MTMount.Source.CSC
             )
 
+            # Test xSystemState events after the CSC has enabled systems
+            enabled_system_topic_names = {
+                f"{prefix}SystemState"
+                for prefix in (
+                    "azimuth",
+                    "elevation",
+                    "cameraCableWrap",
+                    "azimuthCableWrap",
+                    "oilSupplySystem",
+                    "topEndChiller",
+                )
+            }
+            for topic_info in self.csc.system_state_dict.values():
+                if topic_info.topic.name not in enabled_system_topic_names:
+                    continue
+                # The topic in topic_info is a ControllerEvent;
+                # we want the associated event in the remote
+                system_state_kwargs = dict()
+                topic = getattr(self.remote, topic_info.topic.attr_name)
+                expected_power_state = PowerState.ON
+                system_state_kwargs["powerState"] = expected_power_state
+                nskip = 0
+                if topic_info.num_elements_power_state > 1:
+                    system_state_kwargs["elementsPowerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_elements_power_state
+                if topic_info.num_motion_controller_state > 1:
+                    nskip += 1
+                    system_state_kwargs["motionControllerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_motion_controller_state
+                for i in range(nskip):
+                    await topic.next(flush=False, timeout=STD_TIMEOUT)
+                await self.assert_next_sample(topic, **system_state_kwargs)
+
             # Test initial telemetry
             data = await self.assert_next_sample(
                 topic=self.remote.tel_azimuth,
@@ -314,11 +396,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             self.assertAlmostEqual(
                 data.actualPosition,
-                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.AZIMUTH_AXIS],
+                MTMount.mock.INITIAL_POSITION[System.AZIMUTH],
             )
             self.assertAlmostEqual(
                 data.demandPosition,
-                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.AZIMUTH_AXIS],
+                MTMount.mock.INITIAL_POSITION[System.AZIMUTH],
             )
 
             data = await self.assert_next_sample(
@@ -331,11 +413,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             self.assertAlmostEqual(
                 data.demandPosition,
-                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.ELEVATION_AXIS],
+                MTMount.mock.INITIAL_POSITION[System.ELEVATION],
             )
             self.assertAlmostEqual(
                 data.actualPosition,
-                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.ELEVATION_AXIS],
+                MTMount.mock.INITIAL_POSITION[System.ELEVATION],
             )
 
             data = await self.assert_next_sample(
@@ -346,8 +428,44 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             self.assertAlmostEqual(
                 data.actualPosition,
-                MTMount.mock.INITIAL_POSITION[MTMount.DeviceId.CAMERA_CABLE_WRAP],
+                MTMount.mock.INITIAL_POSITION[System.CAMERA_CABLE_WRAP],
             )
+
+            # Disable the CSC and check xSystemState
+            # for devices the CSC should power down
+            await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
+
+            disabled_system_topic_names = {
+                f"{prefix}SystemState"
+                for prefix in (
+                    "azimuth",
+                    "elevation",
+                    "cameraCableWrap",
+                    "azimuthCableWrap",
+                )
+            }
+            for topic_info in self.csc.system_state_dict.values():
+                if topic_info.topic.name not in disabled_system_topic_names:
+                    continue
+                # The topic in topic_info is a ControllerEvent;
+                # we want the associated event in the remote
+                system_state_kwargs = dict()
+                topic = getattr(self.remote, topic_info.topic.attr_name)
+                expected_power_state = PowerState.OFF
+                system_state_kwargs["powerState"] = expected_power_state
+                nskip = 0
+                if topic_info.num_elements_power_state > 1:
+                    system_state_kwargs["elementsPowerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_elements_power_state
+                if topic_info.num_motion_controller_state > 1:
+                    nskip += 1
+                    system_state_kwargs["motionControllerState"] = [
+                        expected_power_state
+                    ] * topic_info.num_motion_controller_state
+                for i in range(nskip):
+                    await topic.next(flush=False, timeout=STD_TIMEOUT)
+                await self.assert_next_sample(topic, **system_state_kwargs)
 
     async def test_standard_state_transitions(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):
@@ -432,9 +550,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_sample(
                 topic=self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
-            ccw_device = self.mock_controller.device_dict[
-                MTMount.DeviceId.CAMERA_CABLE_WRAP
-            ]
+            ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
             ccw_actuator = ccw_device.actuator
             self.assertFalse(ccw_device.power_on)
             self.assertFalse(ccw_device.enabled)
@@ -537,9 +653,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
     async def test_command_failed(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
-            mock_device = self.mock_controller.device_dict[
-                MTMount.DeviceId.MIRROR_COVERS
-            ]
+            mock_device = self.mock_controller.device_dict[System.MIRROR_COVERS]
             mock_device.fail_next_command = True
 
             # Open the mirror covers.
@@ -552,9 +666,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
             # Slow the device way down so there's plenty of time
             # to supersede the move.
-            mock_device = self.mock_controller.device_dict[
-                MTMount.DeviceId.MIRROR_COVERS
-            ]
+            mock_device = self.mock_controller.device_dict[System.MIRROR_COVERS]
             mock_device.actuator.speed /= 10
 
             # Start opening the mirror covers, then stop all motion.
@@ -574,14 +686,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
         These include:
 
-        * deployablePlatformMotionState
+        * deployablePlatformsMotionState
         * elevationLockingPinMotionState
         * safetyInterlocks
         * limits
         """
         async with self.make_csc(initial_state=salobj.State.DISABLED):
             await self.assert_next_sample(
-                topic=self.remote.evt_deployablePlatformMotionState,
+                topic=self.remote.evt_deployablePlatformsMotionState,
                 state=DeployableMotionState.RETRACTED,
                 elementState=[DeployableMotionState.RETRACTED] * 2,
             )
@@ -607,13 +719,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             for state in reversed(DeployableMotionState):
                 await self.mock_controller.write_reply(
                     MTMount.mock.make_reply_dict(
-                        id=MTMount.ReplyId.DEPLOYABLE_PLATFORM_MOTION_STATE,
+                        id=MTMount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE,
                         state=state,
                         elementState=[state] * 2,
                     )
                 )
                 await self.assert_next_sample(
-                    topic=self.remote.evt_deployablePlatformMotionState,
+                    topic=self.remote.evt_deployablePlatformsMotionState,
                     state=state,
                     elementState=[state] * 2,
                 )
@@ -635,10 +747,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 )
 
             for system, topic in (
-                (MTMount.System.ELEVATION, self.remote.evt_elevationLimits),
-                (MTMount.System.AZIMUTH, self.remote.evt_azimuthLimits),
+                (System.ELEVATION, self.remote.evt_elevationLimits),
+                (System.AZIMUTH, self.remote.evt_azimuthLimits),
                 (
-                    MTMount.System.CAMERA_CABLE_WRAP,
+                    System.CAMERA_CABLE_WRAP,
                     self.remote.evt_cameraCableWrapLimits,
                 ),
             ):
@@ -670,10 +782,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
             self.mock_controller.set_command_queue(maxsize=0)
             mirror_covers_device = self.mock_controller.device_dict[
-                MTMount.DeviceId.MIRROR_COVERS
+                System.MIRROR_COVERS
             ]
             mirror_cover_locks_device = self.mock_controller.device_dict[
-                MTMount.DeviceId.MIRROR_COVER_LOCKS
+                System.MIRROR_COVER_LOCKS
             ]
 
             await self.assert_next_sample(
@@ -811,12 +923,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 state=AxisMotionState.STOPPED,
             )
 
-            mock_azimuth = self.mock_controller.device_dict[
-                MTMount.DeviceId.AZIMUTH_AXIS
-            ]
-            mock_elevation = self.mock_controller.device_dict[
-                MTMount.DeviceId.ELEVATION_AXIS
-            ]
+            mock_azimuth = self.mock_controller.device_dict[System.AZIMUTH]
+            mock_elevation = self.mock_controller.device_dict[System.ELEVATION]
 
             tai = salobj.current_tai()
             azimuth_pvt = mock_azimuth.actuator.path.at(tai)
@@ -941,12 +1049,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_axes_in_position(elevation=False, azimuth=False)
             await self.assert_target_cleared()
 
-            mock_azimuth = self.mock_controller.device_dict[
-                MTMount.DeviceId.AZIMUTH_AXIS
-            ]
-            mock_elevation = self.mock_controller.device_dict[
-                MTMount.DeviceId.ELEVATION_AXIS
-            ]
+            mock_azimuth = self.mock_controller.device_dict[System.AZIMUTH]
+            mock_elevation = self.mock_controller.device_dict[System.ELEVATION]
             self.assertFalse(mock_azimuth.tracking_enabled)
             self.assertFalse(mock_elevation.tracking_enabled)
 
@@ -1009,10 +1113,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     ):
         """Provide a stream of trackTarget commands until cancelled."""
         # Slew and track until both axes are in position
-        mock_azimuth = self.mock_controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
-        mock_elevation = self.mock_controller.device_dict[
-            MTMount.DeviceId.ELEVATION_AXIS
-        ]
+        mock_azimuth = self.mock_controller.device_dict[System.AZIMUTH]
+        mock_elevation = self.mock_controller.device_dict[System.ELEVATION]
         self.assertTrue(mock_azimuth.tracking_enabled)
         self.assertTrue(mock_elevation.tracking_enabled)
         azimuth_actuator = mock_azimuth.actuator
