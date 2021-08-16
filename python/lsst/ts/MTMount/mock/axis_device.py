@@ -76,8 +76,7 @@ class AxisDevice(BaseDevice):
 
     @property
     def end_tai(self):
-        """Get the end time of the current path, as TAI unix seconds.
-        """
+        """Get the end time of the current path, as TAI unix seconds."""
         return self.actuator.path[-1].tai
 
     def assert_enabled(self):
@@ -91,8 +90,7 @@ class AxisDevice(BaseDevice):
             raise RuntimeError("Not enabled")
 
     def assert_tracking_enabled(self, enabled):
-        """Raise `RuntimeError` if tracking is or is not enabled.
-        """
+        """Raise `RuntimeError` if tracking is or is not enabled."""
         if enabled:
             if not self.tracking_enabled:
                 raise RuntimeError("Tracking not enabled")
@@ -122,16 +120,14 @@ class AxisDevice(BaseDevice):
         return self._monitor_move_task
 
     async def _monitor_move(self, command):
-        """Do most of the work for monitor_move_command.
-        """
+        """Do most of the work for monitor_move_command."""
         # Provide some slop for non-monotonic clocks, which are
         # sometimes seen when running Docker on macOS.
         duration = 0.2 + self.end_tai - salobj.current_tai()
         await asyncio.sleep(duration)
 
     def supersede_move_command(self):
-        """Report the current move command (if any) as superseded.
-        """
+        """Report the current move command (if any) as superseded."""
         self._monitor_move_task.cancel()
 
     def abort(self):
@@ -229,8 +225,7 @@ class AxisDevice(BaseDevice):
         self.enabled = command.on
 
     def do_stop(self, command):
-        """Stop the actuator.
-        """
+        """Stop the actuator."""
         self.assert_enabled()
         self.supersede_move_command()
         self.tracking_enabled = False

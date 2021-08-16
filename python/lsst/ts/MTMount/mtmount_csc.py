@@ -364,8 +364,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
-        """Connect to the low-level controller and start the telemetry client.
-        """
+        """Connect to low-level controller and start the telemetry client."""
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
@@ -773,7 +772,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
                 position, velocity, tai = position_velocity_tai
                 command = commands.CameraCableWrapTrack(
-                    position=position, velocity=velocity, tai=tai,
+                    position=position, velocity=velocity, tai=tai
                 )
                 await self.send_command(command)
                 self.evt_cameraCableWrapTarget.set_put(
@@ -803,8 +802,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.fail("Telemetry process exited prematurely")
 
     async def read_loop(self):
-        """Read and process replies from the low-level controller.
-        """
+        """Read and process replies from the low-level controller."""
         self.log.debug("Read loop begins")
         while self.should_be_connected and self.connected:
             try:
@@ -925,7 +923,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Waiting for mock controller to start")
             t0 = salobj.current_tai()
             self.command_port, self.telemetry_port = await asyncio.wait_for(
-                self._wait_for_mock_controller(), timeout=MOCK_CTRL_START_TIMEOUT,
+                self._wait_for_mock_controller(), timeout=MOCK_CTRL_START_TIMEOUT
             )
             dt = salobj.current_tai() - t0
             self.log.info(
@@ -1041,9 +1039,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_stop(self, data):
         self.assert_enabled()
-        await self.send_commands(
-            commands.CameraCableWrapStop(), do_lock=False,
-        )
+        await self.send_commands(commands.CameraCableWrapStop(), do_lock=False)
 
     async def do_stopTracking(self, data):
         self.assert_enabled()

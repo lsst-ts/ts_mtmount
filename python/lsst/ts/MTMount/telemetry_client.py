@@ -82,9 +82,7 @@ class TelemetryTopicHandler:
 class TelemetryClient:
     on_drive_states = frozenset(("Standstill", "Discrete Motion", "Stopping"))
 
-    def __init__(
-        self, host, port=constants.TELEMETRY_PORT, connection_timeout=10,
-    ):
+    def __init__(self, host, port=constants.TELEMETRY_PORT, connection_timeout=10):
         self.host = host
         self.port = port
         self.controller = salobj.Controller(name="MTMount")
@@ -122,9 +120,7 @@ class TelemetryClient:
     @classmethod
     async def amain(cls):
         parser = argparse.ArgumentParser("Run the MTMount telemetry client")
-        parser.add_argument(
-            "--host", help="Telemetry server host.",
-        )
+        parser.add_argument("--host", help="Telemetry server host.")
         parser.add_argument(
             "--port",
             type=int,
@@ -158,8 +154,7 @@ class TelemetryClient:
             print(f"MTMount telemetry client failed: {e!r}")
 
     async def start(self):
-        """Connect to the telemetry port and start the read loop.
-        """
+        """Connect to the telemetry port and start the read loop."""
         self.log.debug("start")
         if self.connected:
             raise RuntimeError("Already connected")
@@ -178,8 +173,7 @@ class TelemetryClient:
         self.read_task = asyncio.create_task(self.read_loop())
 
     async def close(self):
-        """Disconnect from the TCP/IP controller.
-        """
+        """Disconnect from the TCP/IP controller."""
         self.log.debug("disconnect")
         self.start_task.cancel()
         self.read_task.cancel()
@@ -203,8 +197,7 @@ class TelemetryClient:
         return getattr(self, f"_preprocess_{sal_topic_name}", None)
 
     async def read_loop(self):
-        """Read and process status from the low-level controller.
-        """
+        """Read and process status from the low-level controller."""
         while True:
             try:
                 data = await self.reader.readuntil(constants.LINE_TERMINATOR)

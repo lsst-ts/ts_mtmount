@@ -67,8 +67,7 @@ ACK_TIMEOUT = 5
 
 
 async def stdin_generator():
-    """Thanks to http://blog.mathieu-leplatre.info
-    """
+    """Thanks to http://blog.mathieu-leplatre.info"""
     loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader(loop=loop)
     reader_protocol = asyncio.StreamReaderProtocol(reader)
@@ -185,8 +184,7 @@ ask_for_command 1
 
     @classmethod
     async def amain(cls):
-        """Parse command-line arguments and run the TMA commander.
-        """
+        """Parse command-line arguments and run the TMA commander."""
         parser = argparse.ArgumentParser("Send commands to Tekniker's TMA")
         parser.add_argument(
             "--host", default="127.0.0.1", help="TMA operation manager IP address."
@@ -239,8 +237,7 @@ ask_for_command 1
             self.done_task.set_exception(e)
 
     async def command_loop(self):
-        """Read commands from the user and send them to the operations manager.
-        """
+        """Read commands from the user and send to the operations manager."""
         try:
             print(f"\n{self.help_text}")
             async for line in salobj.stream_as_generator(stream=sys.stdin):
@@ -290,8 +287,7 @@ ask_for_command 1
         return " ".join(arg_info.name for arg_info in arg_infos)
 
     def get_command_help(self):
-        """Get help for all commands in self.command_dict, as a single string.
-        """
+        """Get help for all commands in self.command_dict, as one string."""
         help_strs = [
             f"{cmd_name} {self.get_argument_names(cmd_name)}"
             for cmd_name in self.command_dict
@@ -339,8 +335,7 @@ ask_for_command 1
         await self.write_command(cmd)
 
     async def read_loop(self):
-        """Read replies from the operations manager.
-        """
+        """Read replies from the operations manager."""
         try:
             while self.connected:
                 read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
@@ -394,8 +389,7 @@ ask_for_command 1
             await self.close()
 
     async def start_ccw_ramp(self, args):
-        """Start the camera cable wrap tracking a linear ramp.
-        """
+        """Start the camera cable wrap tracking a linear ramp."""
         self.tracking_task.cancel()
         arg_names = ("start_position", "end_position", "speed")
         if len(args) != len(arg_names):
@@ -408,8 +402,7 @@ ask_for_command 1
         self.tracking_task = asyncio.ensure_future(self._ccw_ramp(**kwargs))
 
     async def start_ccw_cosine(self, args):
-        """Start the camera cable wrap tracking one cycle of a cosine wave.
-        """
+        """Start the camera cable wrap tracking one cycle of a cosine wave."""
         self.tracking_task.cancel()
         arg_names = ("center_position", "amplitude", "max_speed")
         if len(args) != len(arg_names):
@@ -493,7 +486,7 @@ ask_for_command 1
             )
             for positions, velocities, tai in ramp_generator():
                 track_command = commands.CameraCableWrapTrack(
-                    position=positions[0], velocity=velocities[0], tai=tai,
+                    position=positions[0], velocity=velocities[0], tai=tai
                 )
                 await self.write_command(track_command, do_wait=True)
                 await asyncio.sleep(TRACK_INTERVAL)
@@ -538,7 +531,7 @@ ask_for_command 1
             )
             for positions, velocities, tai in cosine_generator():
                 track_command = commands.CameraCableWrapTrack(
-                    position=positions[0], velocity=velocities[0], tai=tai,
+                    position=positions[0], velocity=velocities[0], tai=tai
                 )
                 await self.write_command(track_command, do_wait=True)
                 await asyncio.sleep(TRACK_INTERVAL)

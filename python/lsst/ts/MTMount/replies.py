@@ -50,8 +50,7 @@ class Reply(base_message.BaseMessage):
 
 
 def make_reply_doc(cls):
-    """Make and attach a doc string to a reply class.
-    """
+    """Make and attach a doc string to a reply class."""
     short_class_name = cls.__name__
     if short_class_name.endswith("Reply"):
         short_class_name = short_class_name[:-5]
@@ -159,7 +158,7 @@ class ErrorReply(Reply):
         (
             field_info.BoolFieldInfo(name="on", doc="Is the error latched?"),
             field_info.BoolFieldInfo(
-                name="active", doc="Is the condition still present?",
+                name="active", doc="Is the condition still present?"
             ),
             field_info.IntFieldInfo(
                 name="code",

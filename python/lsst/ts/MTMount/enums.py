@@ -215,8 +215,7 @@ class DeviceId(enum.Enum):
 
 
 class EnabledState(enum.IntEnum):
-    """Status of enabling/disabling subsystems.
-    """
+    """Status of enabling/disabling subsystems."""
 
     DISABLED = enum.auto()
     ENABLED = enum.auto()
