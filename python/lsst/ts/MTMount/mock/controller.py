@@ -84,7 +84,7 @@ def as_scalar_or_list(value, nelts):
     value : typing.Any
         Value to return
     nelts : int
-        Number of items. If 1 then return ``value`` as a scalar.
+        Number of elements. If 1 then return ``value`` as a scalar.
         If > 1 then return a list of nelts copies of ``value``.
 
     Raises
