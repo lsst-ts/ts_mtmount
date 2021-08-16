@@ -546,7 +546,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
-        self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
+        self.evt_azimuthInPosition.set_put(inPosition=False)
+        self.evt_elevationInPosition.set_put(inPosition=False)
 
         try:
             self.log.info("Give up command of the mount.")
@@ -855,9 +856,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     self.log.debug(f"Ignoring OnStateInfo reply: {reply}")
                 elif isinstance(reply, replies.InPositionReply):
                     if reply.what == 0:
-                        self.evt_axesInPosition.set_put(azimuth=reply.in_position)
+                        self.evt_azimuthInPosition.set_put(inPosition=reply.in_position)
                     elif reply.what == 1:
-                        self.evt_axesInPosition.set_put(elevation=reply.in_position)
+                        self.evt_elevationInPosition.set_put(
+                            inPosition=reply.in_position
+                        )
                     else:
                         self.log.warning(
                             f"Unrecognized what={reply.what} in InPositionReply"
