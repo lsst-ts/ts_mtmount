@@ -81,6 +81,17 @@ class TelemetryTopicHandler:
 
 class TelemetryClient:
     on_drive_states = frozenset(("Standstill", "Discrete Motion", "Stopping"))
+    """Read telemetry from the low-level controller and write as SAL messages.
+
+    Parameters
+    ----------
+    host : str
+        Host name of low-level telemetry server
+    port : int
+        Port number of low-level telemetry server
+    connection_timeout : float
+        Maximum time to connect (seconds)
+    """
 
     def __init__(self, host, port=constants.TELEMETRY_PORT, connection_timeout=10):
         self.host = host
