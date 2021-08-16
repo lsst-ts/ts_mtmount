@@ -28,7 +28,6 @@ import signal
 import subprocess
 
 from lsst.ts import salobj
-from lsst.ts.idl.enums.MTMount import DriveState
 from .config_schema import CONFIG_SCHEMA
 from . import constants
 from . import command_futures
@@ -166,10 +165,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_dict = dict()
 
         self.command_lock = asyncio.Lock()
-
-        self.on_drive_states = set(
-            (DriveState.MOVING, DriveState.STOPPING, DriveState.STOPPED)
-        )
 
         # Does the CSC have control of the mount?
         # Once the low-level controller reports this in an event,

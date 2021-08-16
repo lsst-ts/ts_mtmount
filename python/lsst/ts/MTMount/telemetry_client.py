@@ -80,7 +80,6 @@ class TelemetryTopicHandler:
 
 
 class TelemetryClient:
-    on_drive_states = frozenset(("Standstill", "Discrete Motion", "Stopping"))
     """Read telemetry from the low-level controller and write as SAL messages.
 
     Parameters
