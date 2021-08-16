@@ -1,6 +1,6 @@
 setupRequired(sconsUtils)
 setupRequired(ts_salobj)
-setupRequired(ts_hexrotcomm)
+setupRequired(ts_tcpip)
 setupRequired(ts_simactuators)
 setupRequired(ts_config_mttcs)
 

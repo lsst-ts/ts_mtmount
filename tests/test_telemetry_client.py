@@ -29,7 +29,7 @@ import unittest
 import numpy as np
 
 from lsst.ts import salobj
-from lsst.ts import hexrotcomm
+from lsst.ts import tcpip
 from lsst.ts import MTMount
 
 # Standard timeout for TCP/IP messages (sec).
@@ -57,12 +57,12 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
 
         Attributes
         ----------
-        server : `lsst.ts.hexrotcomm.OneClientServer`
+        server : `lsst.ts.tcpip.OneClientServer`
             Telemetry server. Publishes telemetry over TCP/IP.
         remote : `lsst.ts.salobj.Remote`
             MTMount remote to read DDS telemetry.
         """
-        self.server = hexrotcomm.OneClientServer(
+        self.server = tcpip.OneClientServer(
             name="TelemetryServer",
             host=salobj.LOCAL_HOST,
             port=0,
