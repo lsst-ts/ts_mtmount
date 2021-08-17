@@ -80,7 +80,7 @@ class TelemetryTopicHandler:
 
 
 class TelemetryClient:
-    """Read telemetry from the low-level controller and write as SAL messages.
+    """Read telemetry from the low-level controller and write it to SAL/DDS.
 
     Parameters
     ----------
