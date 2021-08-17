@@ -6,10 +6,21 @@
 Version History
 ###############
 
-ccw_only 3
-==========
+ccw_only 4
+----------
 
-* Changes
+Changes:
+
+* Update for ts_xml 9.2 (which is required):
+  write azimuthInPosition and elevationInPosition events, instead of axesInPosition.
+* Update formatting to black 20.8b1.
+* Stop using two obsolete enum classes from ts_idl: AxisState and DriveState.
+* Use ts_tcpip instead of ts_hexrotcomm (for the OneClientServer class).
+
+ccw_only 3
+----------
+
+Changes:
 
 * Use a single socket for commands and replies.
 * Use timeout_ms=-1 in `AckReply` replies to indicate a command that is done when acknowledged.
@@ -27,7 +38,7 @@ ccw_only 3
 * Modernize doc/conf.py for documenteer 0.6.
 
 ccw_only 2
-==========
+----------
 
 Changes:
 

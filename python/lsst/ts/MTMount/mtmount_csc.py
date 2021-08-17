@@ -28,7 +28,6 @@ import signal
 import subprocess
 
 from lsst.ts import salobj
-from lsst.ts.idl.enums.MTMount import DriveState
 from .config_schema import CONFIG_SCHEMA
 from . import constants
 from . import command_futures
@@ -166,10 +165,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_dict = dict()
 
         self.command_lock = asyncio.Lock()
-
-        self.on_drive_states = set(
-            (DriveState.MOVING, DriveState.STOPPING, DriveState.STOPPED)
-        )
 
         # Does the CSC have control of the mount?
         # Once the low-level controller reports this in an event,
@@ -364,8 +359,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
-        """Connect to the low-level controller and start the telemetry client.
-        """
+        """Connect to low-level controller and start the telemetry client."""
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
@@ -552,7 +546,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
-        self.evt_axesInPosition.set_put(azimuth=False, elevation=False)
+        self.evt_azimuthInPosition.set_put(inPosition=False)
+        self.evt_elevationInPosition.set_put(inPosition=False)
 
         try:
             self.log.info("Give up command of the mount.")
@@ -773,7 +768,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
                 position, velocity, tai = position_velocity_tai
                 command = commands.CameraCableWrapTrack(
-                    position=position, velocity=velocity, tai=tai,
+                    position=position, velocity=velocity, tai=tai
                 )
                 await self.send_command(command)
                 self.evt_cameraCableWrapTarget.set_put(
@@ -803,8 +798,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.fail("Telemetry process exited prematurely")
 
     async def read_loop(self):
-        """Read and process replies from the low-level controller.
-        """
+        """Read and process replies from the low-level controller."""
         self.log.debug("Read loop begins")
         while self.should_be_connected and self.connected:
             try:
@@ -862,9 +856,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     self.log.debug(f"Ignoring OnStateInfo reply: {reply}")
                 elif isinstance(reply, replies.InPositionReply):
                     if reply.what == 0:
-                        self.evt_axesInPosition.set_put(azimuth=reply.in_position)
+                        self.evt_azimuthInPosition.set_put(inPosition=reply.in_position)
                     elif reply.what == 1:
-                        self.evt_axesInPosition.set_put(elevation=reply.in_position)
+                        self.evt_elevationInPosition.set_put(
+                            inPosition=reply.in_position
+                        )
                     else:
                         self.log.warning(
                             f"Unrecognized what={reply.what} in InPositionReply"
@@ -925,7 +921,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Waiting for mock controller to start")
             t0 = salobj.current_tai()
             self.command_port, self.telemetry_port = await asyncio.wait_for(
-                self._wait_for_mock_controller(), timeout=MOCK_CTRL_START_TIMEOUT,
+                self._wait_for_mock_controller(), timeout=MOCK_CTRL_START_TIMEOUT
             )
             dt = salobj.current_tai() - t0
             self.log.info(
@@ -1041,9 +1037,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_stop(self, data):
         self.assert_enabled()
-        await self.send_commands(
-            commands.CameraCableWrapStop(), do_lock=False,
-        )
+        await self.send_commands(commands.CameraCableWrapStop(), do_lock=False)
 
     async def do_stopTracking(self, data):
         self.assert_enabled()

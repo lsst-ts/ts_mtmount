@@ -96,8 +96,7 @@ class BaseFieldInfo(metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
     def str_from_value(self, value):
-        """Return a string representation of the value.
-        """
+        """Return a string representation of the value."""
         return str(value)
 
 

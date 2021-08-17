@@ -29,7 +29,7 @@ import unittest
 import numpy as np
 
 from lsst.ts import salobj
-from lsst.ts import hexrotcomm
+from lsst.ts import tcpip
 from lsst.ts import MTMount
 
 # Standard timeout for TCP/IP messages (sec).
@@ -57,12 +57,12 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
 
         Attributes
         ----------
-        server : `lsst.ts.hexrotcomm.OneClientServer`
+        server : `lsst.ts.tcpip.OneClientServer`
             Telemetry server. Publishes telemetry over TCP/IP.
         remote : `lsst.ts.salobj.Remote`
             MTMount remote to read DDS telemetry.
         """
-        self.server = hexrotcomm.OneClientServer(
+        self.server = tcpip.OneClientServer(
             name="TelemetryServer",
             host=salobj.LOCAL_HOST,
             port=0,
@@ -88,14 +88,13 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             if not process_ended_early:
                 telemetry_client_process.terminate()
             await asyncio.gather(
-                self.remote.close(), self.server.close(), domain.close(),
+                self.remote.close(), self.server.close(), domain.close()
             )
             if process_ended_early:
                 self.fail("telemetry client exited early")
 
     async def test_telemetry(self):
-        """Test all telemetry topics.
-        """
+        """Test all telemetry topics."""
         async with self.make_all():
             # Arbitrary values that are suitable for both
             # the elevation and azimuth telemetry topics.
@@ -227,7 +226,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         for key, value in dds_data.items():
             llv_key = field_dict[key]
             self.convert_dds_item_to_llv(
-                llv_data=llv_data, llv_key=llv_key, value=value,
+                llv_data=llv_data, llv_key=llv_key, value=value
             )
         llv_data["topicID"] = topic_id
         return llv_data
@@ -266,7 +265,8 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             DDS telemetry data, as field name: value.
         """
         return dict(
-            current=[n * 0.1 for n in range(1, naxes + 1)], timestamp=time.time(),
+            current=[n * 0.1 for n in range(1, naxes + 1)],
+            timestamp=time.time(),
         )
 
     async def publish_data(self, llv_data):

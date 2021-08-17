@@ -28,7 +28,7 @@ import logging
 import signal
 
 from lsst.ts import salobj
-from lsst.ts import hexrotcomm
+from lsst.ts import tcpip
 from .. import commands
 from .. import constants
 from .. import enums
@@ -124,14 +124,14 @@ class Controller:
 
         command_port = 0 if random_ports else constants.CSC_COMMAND_PORT
         telemetry_port = 0 if random_ports else constants.TELEMETRY_PORT
-        self.command_server = hexrotcomm.OneClientServer(
+        self.command_server = tcpip.OneClientServer(
             name="MockControllerCommands",
             host=salobj.LOCAL_HOST,
             port=command_port,
             log=self.log,
             connect_callback=self.command_connect_callback,
         )
-        self.telemetry_server = hexrotcomm.OneClientServer(
+        self.telemetry_server = tcpip.OneClientServer(
             name="MockControllerTelemetry",
             host=salobj.LOCAL_HOST,
             port=telemetry_port,
@@ -159,7 +159,7 @@ class Controller:
         log = logging.getLogger("TMASimulator")
         log.setLevel(namespace.loglevel)
         print("Mock TMA controller")
-        mock_controller = cls(random_ports=namespace.random_ports, log=log,)
+        mock_controller = cls(random_ports=namespace.random_ports, log=log)
         try:
             await mock_controller.start_task
             # Warning: this message is read by the CSC; if you change
@@ -233,8 +233,7 @@ class Controller:
         await self.write_telemetry(data_dict)
 
     async def write_reply(self, reply):
-        """Write a reply to the command/reply stream.
-        """
+        """Write a reply to the command/reply stream."""
         self.log.debug("write_reply(%s)", reply)
         self.command_server.writer.write(reply.encode())
         await self.command_server.writer.drain()
@@ -499,10 +498,10 @@ class Controller:
 
     def do_both_axes_move(self, command):
         azimuth_command = commands.AzimuthAxisMove(
-            sequence_id=command.sequence_id, position=command.azimuth,
+            sequence_id=command.sequence_id, position=command.azimuth
         )
         elevation_command = commands.ElevationAxisMove(
-            sequence_id=command.sequence_id, position=command.elevation,
+            sequence_id=command.sequence_id, position=command.elevation
         )
         azimuth_time, azimuth_task = self.device_dict[
             enums.DeviceId.AZIMUTH_AXIS
@@ -581,7 +580,7 @@ class Controller:
             Command to report as done.
         """
         reply = replies.DoneReply(
-            sequence_id=command.sequence_id, source=command.source,
+            sequence_id=command.sequence_id, source=command.source
         )
         await self.write_reply(reply)
 

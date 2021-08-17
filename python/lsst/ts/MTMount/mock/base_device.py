@@ -91,16 +91,14 @@ class BaseDevice:
         self._power_on = on
 
     def assert_on(self):
-        """Raise `RuntimeError` if device off or in an alarm state.
-        """
+        """Raise `RuntimeError` if device off or in an alarm state."""
         if not self.power_on:
             raise RuntimeError(f"{self.device_id!r} off")
         if self.alarm_on:
             raise RuntimeError(f"{self.device_id!r} in alarm state")
 
     def add_methods(self):
-        """Add do_methods to the command dict
-        """
+        """Add do_methods to the command dict"""
         prefix = f"{self._device_prefix}_"
         prefix_len = len(prefix)
         # Iterate over commands that this device supports.
@@ -117,8 +115,7 @@ class BaseDevice:
                 self.log.debug(f"Add {command_code.name} command to command_dict")
 
     async def close(self):
-        """Cancel any background tasks and clean up resources.
-        """
+        """Cancel any background tasks and clean up resources."""
         pass
 
     def do_power(self, command):
