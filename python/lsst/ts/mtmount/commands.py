@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project

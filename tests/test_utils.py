@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for the LSST Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -21,8 +21,8 @@
 
 import unittest
 
-from lsst.ts import MTMount
-from lsst.ts.MTMount.utils import MAX_DOC_LENGTH
+from lsst.ts import mtmount
+from lsst.ts.mtmount.utils import MAX_DOC_LENGTH
 
 
 class UtilsTestCase(unittest.TestCase):
@@ -34,7 +34,7 @@ class UtilsTestCase(unittest.TestCase):
         long_text = (
             "This is a long line of text that will reach column 79 when wrapped. " * 50
         )
-        wrapped_text = MTMount.wrap_parameter_doc(long_text)
+        wrapped_text = mtmount.wrap_parameter_doc(long_text)
         lines = wrapped_text.split("\n")
         for line in lines:
             self.assertTrue(line.startswith("    "))

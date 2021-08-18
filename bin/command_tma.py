@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -36,7 +36,7 @@ tma_commander.py --help
 
 import asyncio
 
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 
 
-asyncio.run(MTMount.TmaCommander.amain())
+asyncio.run(mtmount.TmaCommander.amain())

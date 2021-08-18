@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for the LSST Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -31,7 +31,7 @@ import unittest.mock
 import numpy.testing
 
 from lsst.ts import salobj
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
@@ -49,17 +49,17 @@ logging.basicConfig()
 
 
 UNSUPPORTED_COMMAND_CODE = (
-    MTMount.enums.CommandCode.TRANSFER_FUNCTION_AZIMUTH_EXCITATION
+    mtmount.enums.CommandCode.TRANSFER_FUNCTION_AZIMUTH_EXCITATION
 )
 
 
-class UnsupportedCommand(MTMount.commands.Command):
-    field_infos = MTMount.commands.make_command_field_infos(UNSUPPORTED_COMMAND_CODE)
+class UnsupportedCommand(mtmount.commands.Command):
+    field_infos = mtmount.commands.make_command_field_infos(UNSUPPORTED_COMMAND_CODE)
 
 
 class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     @contextlib.asynccontextmanager
-    async def make_controller(self, commander=MTMount.Source.CSC):
+    async def make_controller(self, commander=mtmount.Source.CSC):
         """Make a mock controller as self.controller.
 
         Parameters
@@ -78,14 +78,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
           a convenient way to test ``ASK_FOR_COMMAND`` failures.
         """
         log = logging.getLogger()
-        self.controller = MTMount.mock.Controller(
+        self.controller = mtmount.mock.Controller(
             log=log, commander=commander, random_ports=True
         )
         t0 = time.monotonic()
         await asyncio.wait_for(self.controller.start_task, timeout=START_TIMEOUT)
 
         # Dict of task_id: parsed data
-        self.telemetry_dict = {topic_id: None for topic_id in MTMount.TelemetryTopicId}
+        self.telemetry_dict = {topic_id: None for topic_id in mtmount.TelemetryTopicId}
 
         # Connect to the command port
         connect_coro = asyncio.open_connection(
@@ -136,11 +136,11 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         hoisted to the top level.
         """
         read_bytes = await asyncio.wait_for(
-            self.command_reader.readuntil(MTMount.LINE_TERMINATOR), timeout=timeout
+            self.command_reader.readuntil(mtmount.LINE_TERMINATOR), timeout=timeout
         )
         reply_dict = json.loads(read_bytes)
         return types.SimpleNamespace(
-            id=MTMount.ReplyId(reply_dict["id"]),
+            id=mtmount.ReplyId(reply_dict["id"]),
             timestamp=reply_dict["timestamp"],
             **reply_dict["parameters"],
         )
@@ -155,13 +155,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         Parameters
         ----------
 
-        wait_reply_codes : `list` [`MTMount.Reply`]
+        wait_reply_codes : `list` [`mtmount.Reply`]
             Reply codes of messages to wait for, one reply per entry,
             but not necessarily in order.
             If a reply code is listed N times then wait for N such replies.
             Extra replies with these reply codes are ignored,
             unless the reply code also appears in ``other_reply_codes``.
-        other_reply_codes : `list` [`MTMount.Reply`], optional
+        other_reply_codes : `list` [`mtmount.Reply`], optional
             Reply codes of other messages to return, if seen.
             These are not "used up" they simply acts as a filter.
             Duplicates are silently ignored.
@@ -174,7 +174,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
         Returns
         -------
-        replies : `List` [`MTMount.Reply`]
+        replies : `List` [`mtmount.Reply`]
             The read replies.
         """
         nonack_reply_codes_remaining = wait_reply_codes.copy()
@@ -194,7 +194,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         command,
         use_read_loop,
         flush=True,
-        final_reply_code=MTMount.ReplyId.CMD_SUCCEEDED,
+        final_reply_code=mtmount.ReplyId.CMD_SUCCEEDED,
         wait_reply_codes=(),
         other_reply_codes=(),
         return_all_replies=False,
@@ -206,23 +206,23 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
         Parameters
         ----------
-        command : `MTMount.Command`
+        command : `mtmount.Command`
             Command to send.
         use_read_loop : `bool`
             If True then send the command via TCP/IP.
             If False then call self.controller.handle_command directly.
         flush : `bool`, optional
             If True then flush replies before issuing the command.
-        final_reply_code : `MTMount.ReplyId`, optional
+        final_reply_code : `mtmount.ReplyId`, optional
             The expected final CMD_x reply code.
             Defaults to CMD_SUCCEEDED.
-        wait_reply_codes : `list` [`MTMount.Reply`], optional
+        wait_reply_codes : `list` [`mtmount.Reply`], optional
             non-CMD_x reply codes of messages to wait for, one reply per entry,
             but not necessarily in order.
             If a reply code is listed N times then wait for N such replies.
             Extra replies with these reply codes are ignored,
             unless the reply code also appears in ``other_reply_codes``.
-        other_reply_codes : `list` [`MTMount.Reply`], optional
+        other_reply_codes : `list` [`mtmount.Reply`], optional
             Non-CMD_x reply codes of other messages to return, if seen,
             in addition to those in ``wait_reply_codes``.
             Duplicates are silently ignored.
@@ -235,18 +235,18 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
         Returns
         -------
-        non_cmd_replies : `List` [`MTMount.Reply`]
+        non_cmd_replies : `List` [`mtmount.Reply`]
             All non-CMD_x replies read. This list will definitely contain
             the types listed in ``wait_reply_codes`` and may contain
             other replies as well.
         """
         cmd_reply_codes = frozenset(
             (
-                MTMount.ReplyId.CMD_ACKNOWLEDGED,
-                MTMount.ReplyId.CMD_REJECTED,
-                MTMount.ReplyId.CMD_SUCCEEDED,
-                MTMount.ReplyId.CMD_FAILED,
-                MTMount.ReplyId.CMD_SUPERSEDED,
+                mtmount.ReplyId.CMD_ACKNOWLEDGED,
+                mtmount.ReplyId.CMD_REJECTED,
+                mtmount.ReplyId.CMD_SUCCEEDED,
+                mtmount.ReplyId.CMD_FAILED,
+                mtmount.ReplyId.CMD_SUPERSEDED,
             )
         )
         if final_reply_code not in cmd_reply_codes:
@@ -289,14 +289,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 non_cmd_replies.append(reply)
             elif return_all_replies or reply.id in other_reply_codes:
                 non_cmd_replies.append(reply)
-        if final_reply_code == MTMount.ReplyId.CMD_REJECTED:
+        if final_reply_code == mtmount.ReplyId.CMD_REJECTED:
             # Should fail before ack
-            self.assertEqual(reply.id, MTMount.ReplyId.CMD_REJECTED)
+            self.assertEqual(reply.id, mtmount.ReplyId.CMD_REJECTED)
             self.assertEqual(reply.sequenceId, command.sequence_id)
         else:
-            self.assertEqual(reply.id, MTMount.ReplyId.CMD_ACKNOWLEDGED)
+            self.assertEqual(reply.id, mtmount.ReplyId.CMD_ACKNOWLEDGED)
             self.assertEqual(reply.sequenceId, command.sequence_id)
-            if final_reply_code == MTMount.ReplyId.CMD_ACKNOWLEDGED:
+            if final_reply_code == mtmount.ReplyId.CMD_ACKNOWLEDGED:
                 # This command is done when acknowledged
                 return non_cmd_replies
 
@@ -331,7 +331,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         """Read telemetry and add it to ``self.telemetry_dict``."""
         while True:
             try:
-                data = await self.telemetry_reader.readuntil(MTMount.LINE_TERMINATOR)
+                data = await self.telemetry_reader.readuntil(mtmount.LINE_TERMINATOR)
                 decoded_data = data.decode()
                 llv_data = json.loads(decoded_data)
                 topic_id = llv_data.get("topicID")
@@ -345,29 +345,29 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 return
 
     async def test_ask_for_command_ok(self):
-        async with self.make_controller(commander=MTMount.Source.NONE):
+        async with self.make_controller(commander=mtmount.Source.NONE):
             # Until AskForCommand is issued, all other commands should fail;
             # try a sampling of commands.
             sample_commands = (
-                MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
-                MTMount.commands.AzimuthPower(on=True),
-                MTMount.commands.ElevationPower(on=True),
+                mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True),
+                mtmount.commands.AzimuthPower(on=True),
+                mtmount.commands.ElevationPower(on=True),
             )
             for command in sample_commands:
                 await self.run_command(
                     command=command,
-                    final_reply_code=MTMount.ReplyId.CMD_REJECTED,
+                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
                     use_read_loop=True,
                 )
             non_cmd_replies = await self.run_command(
-                command=MTMount.commands.AskForCommand(commander=MTMount.Source.CSC),
-                wait_reply_codes=[MTMount.ReplyId.COMMANDER],
+                command=mtmount.commands.AskForCommand(commander=mtmount.Source.CSC),
+                wait_reply_codes=[mtmount.ReplyId.COMMANDER],
                 use_read_loop=True,
             )
             self.assertEqual(len(non_cmd_replies), 1)
             reply = non_cmd_replies[0]
-            self.assertEqual(reply.id, MTMount.ReplyId.COMMANDER)
-            self.assertEqual(reply.actualCommander, MTMount.Source.CSC)
+            self.assertEqual(reply.id, mtmount.ReplyId.COMMANDER)
+            self.assertEqual(reply.actualCommander, mtmount.Source.CSC)
             for command in sample_commands:
                 await self.run_command(
                     command=command,
@@ -375,26 +375,26 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 )
 
     async def test_ask_for_command_rejected(self):
-        async with self.make_controller(commander=MTMount.Source.HHD):
+        async with self.make_controller(commander=mtmount.Source.HHD):
             # commander=HHD prevents assigning command to any other commander.
             sample_commands = (
-                MTMount.commands.AskForCommand(commander=MTMount.Source.NONE),
-                MTMount.commands.AskForCommand(commander=MTMount.Source.CSC),
-                MTMount.commands.AskForCommand(commander=MTMount.Source.EUI),
-                MTMount.commands.AskForCommand(),  # defaults to CSC
-                MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
-                MTMount.commands.AzimuthPower(on=True),
-                MTMount.commands.ElevationPower(on=True),
+                mtmount.commands.AskForCommand(commander=mtmount.Source.NONE),
+                mtmount.commands.AskForCommand(commander=mtmount.Source.CSC),
+                mtmount.commands.AskForCommand(commander=mtmount.Source.EUI),
+                mtmount.commands.AskForCommand(),  # defaults to CSC
+                mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True),
+                mtmount.commands.AzimuthPower(on=True),
+                mtmount.commands.ElevationPower(on=True),
             )
             for command in sample_commands:
                 await self.run_command(
                     command=command,
-                    final_reply_code=MTMount.ReplyId.CMD_REJECTED,
+                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
                     use_read_loop=True,
                 )
             # Asking for command by the HHD should work, though it is a no-op.
             await self.run_command(
-                command=MTMount.commands.AskForCommand(commander=MTMount.Source.HHD),
+                command=mtmount.commands.AskForCommand(commander=mtmount.Source.HHD),
                 use_read_loop=True,
             )
 
@@ -402,7 +402,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         async with self.make_controller():
             device = self.controller.device_dict[System.MIRROR_COVERS]
             await self.run_command(
-                command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
+                command=mtmount.commands.MirrorCoversPower(drive=-1, on=True),
                 use_read_loop=True,
             )
 
@@ -411,9 +411,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # The mirror covers start deployed, so this will fail quickly.
             device.fail_next_command = True
             await self.run_command(
-                command=MTMount.commands.MirrorCoversDeploy(drive=-1),
+                command=mtmount.commands.MirrorCoversDeploy(drive=-1),
                 use_read_loop=True,
-                final_reply_code=MTMount.ReplyId.CMD_FAILED,
+                final_reply_code=mtmount.ReplyId.CMD_FAILED,
             )
 
     async def test_command_superseded(self):
@@ -421,7 +421,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             device = self.controller.device_dict[System.MIRROR_COVERS]
 
             await self.run_command(
-                command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
+                command=mtmount.commands.MirrorCoversPower(drive=-1, on=True),
                 use_read_loop=True,
             )
 
@@ -429,9 +429,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # then supersede it.
             task = asyncio.create_task(
                 self.run_command(
-                    command=MTMount.commands.MirrorCoversRetract(drive=-1),
+                    command=mtmount.commands.MirrorCoversRetract(drive=-1),
                     use_read_loop=True,  # False is also fine
-                    final_reply_code=MTMount.ReplyId.CMD_SUPERSEDED,
+                    final_reply_code=mtmount.ReplyId.CMD_SUPERSEDED,
                 )
             )
             await asyncio.sleep(0.1)
@@ -439,7 +439,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Supersede the command by directly commanding the device,
             # because run_command is too primitive to handle
             # more than one command at a time.
-            stop_command = MTMount.commands.MirrorCoversStop(drive=-1)
+            stop_command = mtmount.commands.MirrorCoversStop(drive=-1)
             device.do_stop(stop_command)
             await task
 
@@ -452,7 +452,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_state_info_command(self):
         # The STATE_INFO command is accepted regardless of the commander.
 
-        async with self.make_controller(commander=MTMount.Source.HHD):
+        async with self.make_controller(commander=mtmount.Source.HHD):
             # Wait for one iteration of telemetry,
             # to avoid duplicate message.
             await asyncio.wait_for(
@@ -460,7 +460,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             )
 
             replies = await self.run_command(
-                command=MTMount.commands.StateInfo(),
+                command=mtmount.commands.StateInfo(),
                 return_all_replies=True,
                 use_read_loop=True,
             )
@@ -470,7 +470,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             motion_controller_state_systems = []
             power_state_systems = []
             for reply in replies:
-                if reply.id == MTMount.ReplyId.AVAILABLE_SETTINGS:
+                if reply.id == mtmount.ReplyId.AVAILABLE_SETTINGS:
                     self.assertEqual(
                         len(reply.sets), len(self.controller.available_settings)
                     )
@@ -485,13 +485,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                             assert data[key] == desired[key].iso
                         assert desired["modifiedDate"] >= desired["createdDate"]
 
-                elif reply.id == MTMount.ReplyId.AXIS_MOTION_STATE:
+                elif reply.id == mtmount.ReplyId.AXIS_MOTION_STATE:
                     motion_state_axes.append(reply.axis)
                     self.assertEqual(reply.motionState, AxisMotionState.STOPPED)
-                elif reply.id == MTMount.ReplyId.AZIMUTH_TOPPLE_BLOCK:
+                elif reply.id == mtmount.ReplyId.AZIMUTH_TOPPLE_BLOCK:
                     self.assertEqual(reply.reverse, False)
                     self.assertEqual(reply.forward, False)
-                elif reply.id == MTMount.ReplyId.CHILLER_STATE:
+                elif reply.id == mtmount.ReplyId.CHILLER_STATE:
                     chiller_state_systems.append(reply.system)
                     nelts = self.controller.chiller_state_nelts[reply.system]
                     if nelts == 1:
@@ -506,14 +506,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     numpy.testing.assert_allclose(
                         reply.temperature, desired_temperature
                     )
-                elif reply.id == MTMount.ReplyId.COMMANDER:
-                    self.assertEqual(reply.actualCommander, MTMount.Source.HHD)
-                elif reply.id == MTMount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE:
+                elif reply.id == mtmount.ReplyId.COMMANDER:
+                    self.assertEqual(reply.actualCommander, mtmount.Source.HHD)
+                elif reply.id == mtmount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE:
                     self.assertEqual(reply.state, DeployableMotionState.RETRACTED)
                     self.assertEqual(
                         list(reply.elementState), [DeployableMotionState.RETRACTED] * 2
                     )
-                elif reply.id == MTMount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE:
+                elif reply.id == mtmount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE:
                     self.assertEqual(
                         reply.state, ElevationLockingPinMotionState.UNLOCKED
                     )
@@ -521,25 +521,25 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         list(reply.elementState),
                         [ElevationLockingPinMotionState.UNLOCKED] * 2,
                     )
-                elif reply.id == MTMount.ReplyId.LIMITS:
+                elif reply.id == mtmount.ReplyId.LIMITS:
                     limits_systems.append(reply.system)
                     self.assertEqual(reply.limits, 0)
                 elif reply.id in (
-                    MTMount.ReplyId.MIRROR_COVERS_MOTION_STATE,
-                    MTMount.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE,
+                    mtmount.ReplyId.MIRROR_COVERS_MOTION_STATE,
+                    mtmount.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE,
                 ):
                     self.assertEqual(reply.state, DeployableMotionState.DEPLOYED)
                     self.assertEqual(
                         list(reply.elementState), [DeployableMotionState.DEPLOYED] * 4
                     )
-                elif reply.id == MTMount.ReplyId.MOTION_CONTROLLER_STATE:
+                elif reply.id == mtmount.ReplyId.MOTION_CONTROLLER_STATE:
                     motion_controller_state_systems.append(reply.system)
                     nelts = self.controller.motion_controller_state_nelts[reply.system]
                     expected_state = PowerState.OFF
                     self.assertEqual(
                         reply.motionControllerState, [expected_state] * nelts
                     )
-                elif reply.id == MTMount.ReplyId.POWER_STATE:
+                elif reply.id == mtmount.ReplyId.POWER_STATE:
                     power_state_systems.append(reply.system)
                     nelts = self.controller.power_state_nelts[reply.system]
                     if reply.system in {
@@ -561,7 +561,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     else:
                         self.assertFalse(hasattr(reply, "elementsPowerState"))
 
-                elif reply.id == MTMount.ReplyId.SAFETY_INTERLOCKS:
+                elif reply.id == mtmount.ReplyId.SAFETY_INTERLOCKS:
                     params_dict = vars(reply)
                     del params_dict["id"]
                     del params_dict["timestamp"]
@@ -612,13 +612,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
             # Issue a synchronous command
             self.assertFalse(device.power_on)
-            on_command = MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True)
+            on_command = mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True)
             await self.run_command(command=on_command, use_read_loop=use_read_loop)
             self.assertTrue(device.power_on)
 
             # Issue a background command
             self.assertAlmostEqual(device.actuator.position(), device.deployed_position)
-            deploy_command = MTMount.commands.MirrorCoverLocksMoveAll(
+            deploy_command = mtmount.commands.MirrorCoverLocksMoveAll(
                 drive=-1, deploy=False
             )
             await self.run_command(command=deploy_command, use_read_loop=use_read_loop)
@@ -632,31 +632,31 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(device.power_on)
             self.assertFalse(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            power_on_command = MTMount.commands.AzimuthPower(on=True)
+            power_on_command = mtmount.commands.AzimuthPower(on=True)
             await self.run_command(
                 command=power_on_command, use_read_loop=use_read_loop
             )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthEnableTracking()
+            enable_tracking_command = mtmount.commands.AzimuthEnableTracking()
             await self.run_command(
                 command=enable_tracking_command, use_read_loop=use_read_loop
             )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertTrue(device.tracking_enabled)
-            track_command = MTMount.commands.AzimuthTrack(
+            track_command = mtmount.commands.AzimuthTrack(
                 position=45, velocity=0, tai=salobj.current_tai()
             )
             await self.run_command(
                 command=track_command,
-                final_reply_code=MTMount.ReplyId.CMD_ACKNOWLEDGED,
+                final_reply_code=mtmount.ReplyId.CMD_ACKNOWLEDGED,
                 use_read_loop=use_read_loop,
             )
             # Issue one more command to be sure we really didn't get
             # a Done reply for the previous command
-            stop_tracking_command = MTMount.commands.AzimuthStop()
+            stop_tracking_command = mtmount.commands.AzimuthStop()
             await self.run_command(
                 command=stop_tracking_command, use_read_loop=use_read_loop
             )
@@ -668,31 +668,31 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # (tracking while tracking not enabled)
             await self.run_command(
                 command=track_command,
-                final_reply_code=MTMount.ReplyId.CMD_REJECTED,
+                final_reply_code=mtmount.ReplyId.CMD_REJECTED,
                 use_read_loop=use_read_loop,
             )
 
             # Try a command not supported by the mock controller.
-            # Add it to MTMount.commands.CommandDict so the mock controller
+            # Add it to mtmount.commands.CommandDict so the mock controller
             # can parse it as a command.
             unsupported_command = UnsupportedCommand()
             self.assertNotIn(
-                unsupported_command.command_code, MTMount.commands.CommandDict
+                unsupported_command.command_code, mtmount.commands.CommandDict
             )
-            new_command_dict = MTMount.commands.CommandDict.copy()
+            new_command_dict = mtmount.commands.CommandDict.copy()
             new_command_dict[unsupported_command.command_code] = UnsupportedCommand
             with unittest.mock.patch(
-                "lsst.ts.MTMount.commands.CommandDict", new_command_dict
+                "lsst.ts.mtmount.commands.CommandDict", new_command_dict
             ):
                 await self.run_command(
                     command=unsupported_command,
-                    final_reply_code=MTMount.ReplyId.CMD_REJECTED,
+                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
                     use_read_loop=use_read_loop,
                 )
 
     async def next_telemetry(self, topic_id, timeout=STD_TIMEOUT):
         """Wait for a new instance of the specified telemetry topic."""
-        topic_id = MTMount.TelemetryTopicId(topic_id)
+        topic_id = mtmount.TelemetryTopicId(topic_id)
         self.telemetry_dict[topic_id] = None
         t0 = time.monotonic()
         data = None
@@ -723,10 +723,10 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Run two commands.
             device = self.controller.device_dict[System.MIRROR_COVER_LOCKS]
             self.assertFalse(device.power_on)
-            on_command = MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True)
+            on_command = mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True)
             await self.run_command(command=on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
-            off_command = MTMount.commands.MirrorCoverLocksPower(drive=-1, on=False)
+            off_command = mtmount.commands.MirrorCoverLocksPower(drive=-1, on=False)
             await self.run_command(command=off_command, use_read_loop=True)
             self.assertFalse(device.power_on)
 
@@ -749,14 +749,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_initial_telemetry(self):
         async with self.make_controller():
             for topic_id, prefix in (
-                (MTMount.TelemetryTopicId.AZIMUTH, "az"),
-                (MTMount.TelemetryTopicId.ELEVATION, "el"),
+                (mtmount.TelemetryTopicId.AZIMUTH, "az"),
+                (mtmount.TelemetryTopicId.ELEVATION, "el"),
             ):
                 # Elevation does not start at position 0,
                 # so read the position.
                 system_id = {
-                    MTMount.TelemetryTopicId.AZIMUTH: System.AZIMUTH,
-                    MTMount.TelemetryTopicId.ELEVATION: System.ELEVATION,
+                    mtmount.TelemetryTopicId.AZIMUTH: System.AZIMUTH,
+                    mtmount.TelemetryTopicId.ELEVATION: System.ELEVATION,
                 }[topic_id]
                 device = self.controller.device_dict[system_id]
                 # Work around Docker time issues on macOS with an offset
@@ -780,7 +780,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Work around Docker time issues on macOS with an offset
             tai0 = salobj.current_tai() - 0.1
             ccw_telem = await self.next_telemetry(
-                MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP
+                mtmount.TelemetryTopicId.CAMERA_CABLE_WRAP
             )
             for name in (
                 "angle",
@@ -795,7 +795,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         async with self.make_controller():
             replies = await asyncio.wait_for(
                 self.read_replies(
-                    wait_reply_codes=[MTMount.ReplyId.IN_POSITION] * 2,
+                    wait_reply_codes=[mtmount.ReplyId.IN_POSITION] * 2,
                 ),
                 timeout=START_TIMEOUT,
             )
@@ -804,12 +804,12 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(reply.axis, (0, 1))
 
             device = self.controller.device_dict[System.AZIMUTH]
-            power_on_command = MTMount.commands.AzimuthPower(on=True)
+            power_on_command = mtmount.commands.AzimuthPower(on=True)
             await self.run_command(command=power_on_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
-            enable_tracking_command = MTMount.commands.AzimuthEnableTracking()
+            enable_tracking_command = mtmount.commands.AzimuthEnableTracking()
             await self.run_command(command=enable_tracking_command, use_read_loop=True)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
@@ -825,40 +825,40 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 # sometimes seen when running Docker on macOS.
                 if tai <= previous_tai:
                     tai = previous_tai + 0.001
-                track_command = MTMount.commands.AzimuthTrack(
+                track_command = mtmount.commands.AzimuthTrack(
                     position=end_position,
                     velocity=0,
                     tai=tai,
                 )
                 non_cmd_replies = await self.run_command(
                     command=track_command,
-                    final_reply_code=MTMount.ReplyId.CMD_ACKNOWLEDGED,
+                    final_reply_code=mtmount.ReplyId.CMD_ACKNOWLEDGED,
                     flush=False,
                     use_read_loop=True,
-                    other_reply_codes=[MTMount.ReplyId.IN_POSITION],
+                    other_reply_codes=[mtmount.ReplyId.IN_POSITION],
                 )
                 if non_cmd_replies:
                     self.assertEqual(len(non_cmd_replies), 1)
                     reply = non_cmd_replies[0]
-                    self.assertEqual(reply.id, MTMount.ReplyId.IN_POSITION)
+                    self.assertEqual(reply.id, mtmount.ReplyId.IN_POSITION)
                     self.assertEqual(reply.axis, 0)
                     self.assertTrue(reply.inPosition)
                     break
                 previous_tai = tai
                 await asyncio.sleep(0.1)
 
-            stop_tracking_command = MTMount.commands.AzimuthStop()
+            stop_tracking_command = mtmount.commands.AzimuthStop()
             non_cmd_replies = await self.run_command(
                 command=stop_tracking_command,
                 use_read_loop=True,
-                wait_reply_codes=[MTMount.ReplyId.IN_POSITION],
+                wait_reply_codes=[mtmount.ReplyId.IN_POSITION],
             )
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
             self.assertEqual(len(non_cmd_replies), 1)
             reply = non_cmd_replies[0]
-            self.assertEqual(reply.id, MTMount.ReplyId.IN_POSITION)
+            self.assertEqual(reply.id, mtmount.ReplyId.IN_POSITION)
             self.assertFalse(reply.inPosition)
             self.assertEqual(reply.axis, 0)
 
@@ -874,54 +874,54 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             n_power_state = len(self.controller.power_state_dict)
             replies = await asyncio.wait_for(
                 self.read_replies(
-                    wait_reply_codes=[MTMount.ReplyId.IN_POSITION] * n_in_position
-                    + [MTMount.ReplyId.MOTION_CONTROLLER_STATE]
+                    wait_reply_codes=[mtmount.ReplyId.IN_POSITION] * n_in_position
+                    + [mtmount.ReplyId.MOTION_CONTROLLER_STATE]
                     * n_motion_controller_state
-                    + [MTMount.ReplyId.POWER_STATE] * n_power_state
-                    + [MTMount.ReplyId.AXIS_MOTION_STATE] * n_axis_motion_state,
+                    + [mtmount.ReplyId.POWER_STATE] * n_power_state
+                    + [mtmount.ReplyId.AXIS_MOTION_STATE] * n_axis_motion_state,
                 ),
                 timeout=START_TIMEOUT,
             )
             for reply in replies:
-                if reply.id == MTMount.ReplyId.IN_POSITION:
+                if reply.id == mtmount.ReplyId.IN_POSITION:
                     assert reply.axis in self.controller.axis_motion_state_dict
                     self.assertFalse(reply.inPosition)
-                elif reply.id == MTMount.ReplyId.MOTION_CONTROLLER_STATE:
+                elif reply.id == mtmount.ReplyId.MOTION_CONTROLLER_STATE:
                     assert (
                         reply.system in self.controller.motion_controller_state_dict
                         or reply.system == System.AZIMUTH_CABLE_WRAP
                     )
                     nelts = self.controller.motion_controller_state_nelts[reply.system]
                     assert reply.motionControllerState == [PowerState.OFF] * nelts
-                elif reply.id == MTMount.ReplyId.POWER_STATE:
+                elif reply.id == mtmount.ReplyId.POWER_STATE:
                     assert (
                         reply.system in self.controller.power_state_dict
                         or reply.system == System.AZIMUTH_CABLE_WRAP
                     )
                     assert reply.powerState == PowerState.OFF
-                elif reply.id == MTMount.ReplyId.AXIS_MOTION_STATE:
+                elif reply.id == mtmount.ReplyId.AXIS_MOTION_STATE:
                     assert reply.axis in self.controller.axis_motion_state_dict
                     assert reply.motionState == AxisMotionState.STOPPED
 
             device = self.controller.device_dict[System.ELEVATION]
-            power_on_command = MTMount.commands.ElevationPower(on=True)
+            power_on_command = mtmount.commands.ElevationPower(on=True)
             non_cmd_replies = await self.run_command(
                 command=power_on_command,
                 use_read_loop=True,
                 wait_reply_codes=[
-                    MTMount.ReplyId.MOTION_CONTROLLER_STATE,
-                    MTMount.ReplyId.POWER_STATE,
+                    mtmount.ReplyId.MOTION_CONTROLLER_STATE,
+                    mtmount.ReplyId.POWER_STATE,
                 ],
             )
             assert len(non_cmd_replies) == 2
             assert len(set(reply.id for reply in non_cmd_replies)) == 2
             for reply in non_cmd_replies:
-                if reply.id == MTMount.ReplyId.MOTION_CONTROLLER_STATE:
+                if reply.id == mtmount.ReplyId.MOTION_CONTROLLER_STATE:
                     nelts = self.controller.motion_controller_state_nelts[
                         System.ELEVATION
                     ]
                     assert reply.motionControllerState == [PowerState.ON] * nelts
-                elif reply.id == MTMount.ReplyId.POWER_STATE:
+                elif reply.id == mtmount.ReplyId.POWER_STATE:
                     assert reply.powerState == PowerState.ON
                     assert not hasattr(reply, "elementsPowerState")
                 else:
@@ -932,14 +932,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
             start_position = device.actuator.path.at(salobj.current_tai()).position
             end_position = start_position + 1
-            move_command = MTMount.commands.ElevationMove(position=end_position)
+            move_command = mtmount.commands.ElevationMove(position=end_position)
             estimated_move_time = 2  # seconds
             t0 = time.monotonic()
             non_cmd_replies = await self.run_command(
                 command=move_command,
                 use_read_loop=True,
                 timeout=estimated_move_time + STD_TIMEOUT,
-                wait_reply_codes=[MTMount.ReplyId.IN_POSITION],
+                wait_reply_codes=[mtmount.ReplyId.IN_POSITION],
             )
             dt = time.monotonic() - t0
             print(f"Move duration={dt:0.2f} second")
@@ -952,7 +952,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(reply.axis, 1)
 
             # Test telemetry after move
-            axis_telem = await self.next_telemetry(MTMount.TelemetryTopicId.ELEVATION)
+            axis_telem = await self.next_telemetry(mtmount.TelemetryTopicId.ELEVATION)
             for name in (
                 "angleActual",
                 "angleSet",

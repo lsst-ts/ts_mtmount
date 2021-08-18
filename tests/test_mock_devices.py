@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for the LSST Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -24,7 +24,7 @@ import logging
 import unittest
 
 from lsst.ts import salobj
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState, System
 
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
@@ -42,25 +42,25 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.controller = TrivialMockController()
         axis_devices = [
-            MTMount.mock.AxisDevice(
+            mtmount.mock.AxisDevice(
                 controller=self.controller,
                 system_id=system_id,
-                start_position=MTMount.mock.INITIAL_POSITION[system_id],
+                start_position=mtmount.mock.INITIAL_POSITION[system_id],
             )
-            for system_id in MTMount.LimitsDict
+            for system_id in mtmount.LimitsDict
         ]
         devices = axis_devices + [
-            MTMount.mock.MainAxesPowerSupplyDevice(controller=self.controller),
-            MTMount.mock.MirrorCoverLocksDevice(controller=self.controller),
-            MTMount.mock.MirrorCoversDevice(controller=self.controller),
-            MTMount.mock.OilSupplySystemDevice(controller=self.controller),
-            MTMount.mock.TopEndChillerDevice(controller=self.controller),
+            mtmount.mock.MainAxesPowerSupplyDevice(controller=self.controller),
+            mtmount.mock.MirrorCoverLocksDevice(controller=self.controller),
+            mtmount.mock.MirrorCoversDevice(controller=self.controller),
+            mtmount.mock.OilSupplySystemDevice(controller=self.controller),
+            mtmount.mock.TopEndChillerDevice(controller=self.controller),
         ]
         self.device_dict = {device.system_id: device for device in devices}
 
     def get_command_class(self, command_code_name):
-        command_code = getattr(MTMount.CommandCode, command_code_name.upper())
-        return MTMount.commands.CommandDict[command_code]
+        command_code = getattr(mtmount.CommandCode, command_code_name.upper())
+        return mtmount.commands.CommandDict[command_code]
 
     async def run_command(
         self, command, min_timeout=None, should_be_superseded=False, should_fail=False
@@ -69,7 +69,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         Parameters
         ----------
-        command : `MTMount.commands.Command`
+        command : `mtmount.commands.Command`
             Command to execute.
         min_timeout : `float` or `None`, optional
             Minimum timeout. Must be specified if the command method
@@ -104,7 +104,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(task, timeout=timeout + STD_TIMEOUT)
             if should_fail:
                 self.fail(f"Command {command} succeeded but should_fail true")
-        except (MTMount.CommandSupersededException, asyncio.CancelledError) as e:
+        except (mtmount.CommandSupersededException, asyncio.CancelledError) as e:
             if not should_be_superseded:
                 self.fail(
                     f"Command {command} superseded, but should_be_superseded false: {e!r}"
@@ -130,14 +130,14 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         await self.check_deployable_device(
             device=device,
-            power_on_command=MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
-            deploy_command=MTMount.commands.MirrorCoverLocksMoveAll(
+            power_on_command=mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True),
+            deploy_command=mtmount.commands.MirrorCoverLocksMoveAll(
                 drive=-1, deploy=True
             ),
-            retract_command=MTMount.commands.MirrorCoverLocksMoveAll(
+            retract_command=mtmount.commands.MirrorCoverLocksMoveAll(
                 drive=-1, deploy=False
             ),
-            stop_command=MTMount.commands.MirrorCoverLocksStop(drive=-1),
+            stop_command=mtmount.commands.MirrorCoverLocksStop(drive=-1),
             start_deployed=True,
             move_min_timeout=0.5,
             power_on_min_timeout=None,
@@ -148,10 +148,10 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         await self.check_deployable_device(
             device=device,
-            power_on_command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
-            deploy_command=MTMount.commands.MirrorCoversDeploy(drive=-1),
-            retract_command=MTMount.commands.MirrorCoversRetract(drive=-1),
-            stop_command=MTMount.commands.MirrorCoversStop(drive=-1),
+            power_on_command=mtmount.commands.MirrorCoversPower(drive=-1, on=True),
+            deploy_command=mtmount.commands.MirrorCoversDeploy(drive=-1),
+            retract_command=mtmount.commands.MirrorCoversRetract(drive=-1),
+            stop_command=mtmount.commands.MirrorCoversStop(drive=-1),
             start_deployed=True,
             move_min_timeout=0.5,
             power_on_min_timeout=None,
@@ -167,7 +167,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.main_pump_on)
 
         await self.run_command(
-            command=MTMount.commands.OilSupplySystemPower(on=True), min_timeout=900
+            command=mtmount.commands.OilSupplySystemPower(on=True), min_timeout=900
         )
         self.assertTrue(device.power_on)
         self.assertTrue(device.cooling_on)
@@ -175,7 +175,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(device.main_pump_on)
 
         await self.run_command(
-            command=MTMount.commands.OilSupplySystemPower(on=False), min_timeout=0
+            command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0
         )
         self.assertFalse(device.power_on)
         self.assertFalse(device.cooling_on)
@@ -184,9 +184,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Test the subsystem power commands.
         subsystem_command_dict = {
-            "cooling": MTMount.commands.OilSupplySystemPowerCooling,
-            "oil": MTMount.commands.OilSupplySystemPowerOil,
-            "main_pump": MTMount.commands.OilSupplySystemPowerMainPump,
+            "cooling": mtmount.commands.OilSupplySystemPowerCooling,
+            "oil": mtmount.commands.OilSupplySystemPowerOil,
+            "main_pump": mtmount.commands.OilSupplySystemPowerMainPump,
         }
 
         def get_value_dict():
@@ -206,7 +206,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             expected_values[name] = True
             min_timeout = (
                 900
-                if command_class is MTMount.commands.OilSupplySystemPowerCooling
+                if command_class is mtmount.commands.OilSupplySystemPowerCooling
                 else None
             )
             await self.run_command(command_class(on=True), min_timeout=min_timeout)
@@ -217,7 +217,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             expected_values[name] = False
             min_timeout = (
                 0
-                if command_class is MTMount.commands.OilSupplySystemPowerCooling
+                if command_class is mtmount.commands.OilSupplySystemPowerCooling
                 else None
             )
             await self.run_command(command_class(on=False), min_timeout=min_timeout)
@@ -236,13 +236,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(device.temperature, temperature1)
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                MTMount.commands.TopEndChillerTrackAmbient(
+                mtmount.commands.TopEndChillerTrackAmbient(
                     on=True, temperature=temperature1
                 )
             )
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                MTMount.commands.TopEndChillerTrackAmbient(
+                mtmount.commands.TopEndChillerTrackAmbient(
                     on=False, temperature=temperature1
                 )
             )
@@ -250,13 +250,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.track_ambient, initial_track_ambient)
         self.assertEqual(device.temperature, initial_temperature)
 
-        await self.run_command(MTMount.commands.TopEndChillerPower(on=True))
+        await self.run_command(mtmount.commands.TopEndChillerPower(on=True))
         self.assertTrue(device.power_on)
         self.assertEqual(device.track_ambient, initial_track_ambient)
         self.assertEqual(device.temperature, initial_temperature)
 
         await self.run_command(
-            MTMount.commands.TopEndChillerTrackAmbient(
+            mtmount.commands.TopEndChillerTrackAmbient(
                 on=True, temperature=temperature1
             )
         )
@@ -266,7 +266,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         temperature2 = 0.12  # A different arbitrary value
         await self.run_command(
-            MTMount.commands.TopEndChillerTrackAmbient(
+            mtmount.commands.TopEndChillerTrackAmbient(
                 on=False, temperature=temperature2
             )
         )
@@ -286,11 +286,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_command_failure(self):
         device = self.device_dict[System.MIRROR_COVERS]
-        await self.run_command(MTMount.commands.MirrorCoversPower(drive=-1, on=True))
+        await self.run_command(mtmount.commands.MirrorCoversPower(drive=-1, on=True))
         self.assertTrue(device.power_on)
         device.fail_next_command = True
         await self.run_command(
-            MTMount.commands.MirrorCoversDeploy(drive=-1),
+            mtmount.commands.MirrorCoversDeploy(drive=-1),
             min_timeout=0,
             should_fail=True,
         )
@@ -320,11 +320,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             short_command_names.append("home")
         dev_prefix = f"{device.system_id.name}_"
         command_codes = {
-            name: getattr(MTMount.CommandCode, dev_prefix + name.upper())
+            name: getattr(mtmount.CommandCode, dev_prefix + name.upper())
             for name in short_command_names
         }
         command_classes = {
-            name: MTMount.commands.CommandDict[cmd_id]
+            name: mtmount.commands.CommandDict[cmd_id]
             for name, cmd_id in command_codes.items()
         }
         slow_command_codes = {command_codes[name] for name in ("move", "track")}
@@ -533,7 +533,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Wait for tracking to time out; add some time to deal with
         # clock errors in macOS Docker.
-        await asyncio.sleep(MTMount.mock.MAX_TRACKING_DELAY + 0.2)
+        await asyncio.sleep(mtmount.mock.MAX_TRACKING_DELAY + 0.2)
         self.assertTrue(device.alarm_on)
         self.assertFalse(device.power_on)
         self.assertFalse(device.enabled)
@@ -583,7 +583,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             )
 
             # Make sure the tracking timer does not fire
-            await asyncio.sleep(MTMount.mock.MAX_TRACKING_DELAY + 0.2)
+            await asyncio.sleep(mtmount.mock.MAX_TRACKING_DELAY + 0.2)
             self.assertTrue(device.power_on)
             self.assertTrue(device.enabled)
             self.assertTrue(device.tracking_enabled)
@@ -677,7 +677,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         Parameters
         ----------
-        device : `MTMount.mock.BaseDevice`
+        device : `mtmount.mock.BaseDevice`
             Mock device to test.
         drive : `int` or `None`
             Value for ``drive`` argument of power commands.

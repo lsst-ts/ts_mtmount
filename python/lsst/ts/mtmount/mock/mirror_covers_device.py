@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -19,14 +19,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["MirrorCoverLocksDevice"]
+__all__ = ["MirrorCoversDevice"]
 
 from lsst.ts.idl.enums.MTMount import System
+
 from .deployable_device import DeployableDevice
 
 
-class MirrorCoverLocksDevice(DeployableDevice):
-    """Mirror cover locks.
+class MirrorCoversDevice(DeployableDevice):
+    """Mirror covers.
 
     Parameters
     ----------
@@ -37,6 +38,8 @@ class MirrorCoverLocksDevice(DeployableDevice):
     def __init__(self, controller):
         super().__init__(
             controller=controller,
-            system_id=System.MIRROR_COVER_LOCKS,
+            system_id=System.MIRROR_COVERS,
+            deployed_position=0,
+            retracted_position=100,
             start_deployed=True,
         )

@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -19,30 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["TopEndChillerDevice"]
-
-from lsst.ts.idl.enums.MTMount import System
-from .base_device import BaseDevice
-
-
-class TopEndChillerDevice(BaseDevice):
-    """Top end chiller.
-
-    Parameters
-    ----------
-    controller : `MockController`
-        Mock controller.
-    """
-
-    def __init__(self, controller):
-        # I am guessing that the top end chiller will track ambient
-        # when turned on, but I don't know.
-        self.track_ambient = True
-        self.temperature = 0
-        super().__init__(controller=controller, system_id=System.TOP_END_CHILLER)
-
-    def do_track_ambient(self, command):
-        if not self.power_on:
-            raise RuntimeError("Device not powered on.")
-        self.track_ambient = command.on
-        self.temperature = command.temperature
+from .axis_device import *
+from .deployable_device import *
+from .main_power_supply_device import *
+from .mirror_cover_locks_device import *
+from .mirror_covers_device import *
+from .oil_supply_system_device import *
+from .top_end_chiller_device import *
+from .controller import *

@@ -1,8 +1,8 @@
 ##########
-ts_MTMount
+ts_mtmount
 ##########
 
-``ts_MTMount`` is a CSC that controls the Simonyi Survey Telescope main axes and related components.
+``ts_mtmount`` is a CSC that controls the Simonyi Survey Telescope main axes and related components.
 
 `Documentation <https://ts-mtmount.lsst.io>`_
 

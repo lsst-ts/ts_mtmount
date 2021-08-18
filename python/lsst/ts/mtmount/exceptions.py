@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -19,32 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = [
-    "wrap_parameter_doc",
-]
-
-import textwrap
-
-# Maximum documentation string length (chars)
-MAX_DOC_LENGTH = 79
+__all__ = ["CommandSupersededException"]
 
 
-_ParamWrapper = textwrap.TextWrapper(
-    width=MAX_DOC_LENGTH, initial_indent="    ", subsequent_indent="    "
-)
-
-
-def wrap_parameter_doc(text):
-    """Wrap a parameter description appropriately for a doc string.
-
-    Parameters
-    ----------
-    doc : `str`
-       Documentation to wrap; typically a `FieldInfo.doc`.
-
-    Returns
-    -------
-    wrapped_doc : `str`
-        The doc wrapped to 79 characters with 4 spaces of indentation.
-    """
-    return _ParamWrapper.fill(text)
+class CommandSupersededException(Exception):
+    def __init__(self, command):
+        self.command = command
+        super().__init__("Superseded")

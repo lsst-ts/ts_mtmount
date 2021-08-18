@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -19,19 +19,24 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = [
-    "CSC_COMMAND_PORT",
-    "TELEMETRY_PORT",
-    "MIRROR_COVER_DRIVES",
-    "LINE_TERMINATOR",
-]
+__all__ = ["MirrorCoverLocksDevice"]
 
-CSC_COMMAND_PORT = 30005
+from lsst.ts.idl.enums.MTMount import System
+from .deployable_device import DeployableDevice
 
-TELEMETRY_PORT = 50035
 
-# We probably don't need this, because -1 means "all drives".
-MIRROR_COVER_DRIVES = (0, 1, 2, 3)
+class MirrorCoverLocksDevice(DeployableDevice):
+    """Mirror cover locks.
 
-# TCP/IP line terminator (bytes)
-LINE_TERMINATOR = b"\r\n"
+    Parameters
+    ----------
+    controller : `MockController`
+        Mock controller.
+    """
+
+    def __init__(self, controller):
+        super().__init__(
+            controller=controller,
+            system_id=System.MIRROR_COVER_LOCKS,
+            start_deployed=True,
+        )

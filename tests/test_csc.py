@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -30,7 +30,7 @@ import unittest
 import numpy.testing
 
 from lsst.ts import salobj
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
@@ -74,7 +74,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         else:
             mock_command_port = None
             mock_telemetry_port = None
-        csc = MTMount.MTMountCsc(
+        csc = mtmount.MTMountCsc(
             initial_state=initial_state,
             config_dir=config_dir,
             simulation_mode=simulation_mode,
@@ -115,7 +115,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             Ignored if ``simulation_mode == 0``.
         """
         if simulation_mode != 0 and not internal_mock_controller:
-            self.mock_controller = MTMount.mock.Controller(
+            self.mock_controller = mtmount.mock.Controller(
                 log=logging.getLogger(),
                 random_ports=True,
             )
@@ -202,8 +202,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         )
 
     def test_class_attributes(self):
-        self.assertEqual(tuple(MTMount.MTMountCsc.valid_simulation_modes), (0, 1))
-        self.assertEqual(MTMount.MTMountCsc.version, MTMount.__version__)
+        self.assertEqual(tuple(mtmount.MTMountCsc.valid_simulation_modes), (0, 1))
+        self.assertEqual(mtmount.MTMountCsc.version, mtmount.__version__)
 
     async def test_disconnect(self):
         """Test that the CSC goes to FAULT state if it loses connection
@@ -222,7 +222,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         ):
             await self.assert_next_sample(
                 topic=self.remote.evt_softwareVersions,
-                cscVersion=MTMount.__version__,
+                cscVersion=mtmount.__version__,
                 subsystemVersions="",
             )
 
@@ -243,7 +243,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # When the CSC first connects it ask for current state,
             # before it asks to be the commander.
             await self.assert_next_sample(
-                topic=self.remote.evt_commander, commander=MTMount.Source.NONE
+                topic=self.remote.evt_commander, commander=mtmount.Source.NONE
             )
 
             for topic in (
@@ -346,7 +346,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             # After the initial state the CSC asks to be commander.
             await self.assert_next_sample(
-                topic=self.remote.evt_commander, commander=MTMount.Source.CSC
+                topic=self.remote.evt_commander, commander=mtmount.Source.CSC
             )
 
             # Test xSystemState events after the CSC has enabled systems
@@ -396,11 +396,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             self.assertAlmostEqual(
                 data.actualPosition,
-                MTMount.mock.INITIAL_POSITION[System.AZIMUTH],
+                mtmount.mock.INITIAL_POSITION[System.AZIMUTH],
             )
             self.assertAlmostEqual(
                 data.demandPosition,
-                MTMount.mock.INITIAL_POSITION[System.AZIMUTH],
+                mtmount.mock.INITIAL_POSITION[System.AZIMUTH],
             )
 
             data = await self.assert_next_sample(
@@ -413,11 +413,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             self.assertAlmostEqual(
                 data.demandPosition,
-                MTMount.mock.INITIAL_POSITION[System.ELEVATION],
+                mtmount.mock.INITIAL_POSITION[System.ELEVATION],
             )
             self.assertAlmostEqual(
                 data.actualPosition,
-                MTMount.mock.INITIAL_POSITION[System.ELEVATION],
+                mtmount.mock.INITIAL_POSITION[System.ELEVATION],
             )
 
             data = await self.assert_next_sample(
@@ -428,7 +428,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             self.assertAlmostEqual(
                 data.actualPosition,
-                MTMount.mock.INITIAL_POSITION[System.CAMERA_CABLE_WRAP],
+                mtmount.mock.INITIAL_POSITION[System.CAMERA_CABLE_WRAP],
             )
 
             # Disable the CSC and check xSystemState
@@ -589,7 +589,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     delay = salobj.current_tai() - tai
                     self.assertEqual(
                         command.command_code,
-                        MTMount.CommandCode.CAMERA_CABLE_WRAP_TRACK,
+                        mtmount.CommandCode.CAMERA_CABLE_WRAP_TRACK,
                     )
                     desired_command_tai = (
                         tai + self.csc.config.camera_cable_wrap_advance_time
@@ -625,7 +625,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 command = await self.next_lowlevel_command()
                 self.assertEqual(
                     command.command_code,
-                    MTMount.CommandCode.CAMERA_CABLE_WRAP_STOP,
+                    mtmount.CommandCode.CAMERA_CABLE_WRAP_STOP,
                 )
                 self.assertTrue(ccw_device.enabled)
                 self.assertFalse(ccw_device.tracking_enabled)
@@ -718,8 +718,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # which is the current value
             for state in reversed(DeployableMotionState):
                 await self.mock_controller.write_reply(
-                    MTMount.mock.make_reply_dict(
-                        id=MTMount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE,
+                    mtmount.mock.make_reply_dict(
+                        id=mtmount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE,
                         state=state,
                         elementState=[state] * 2,
                     )
@@ -734,8 +734,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # the first entry (it will never be the last entry).
             for state in reversed(ElevationLockingPinMotionState):
                 await self.mock_controller.write_reply(
-                    MTMount.mock.make_reply_dict(
-                        id=MTMount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE,
+                    mtmount.mock.make_reply_dict(
+                        id=mtmount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE,
                         state=state,
                         elementState=[state] * 2,
                     )
@@ -756,8 +756,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             ):
                 value = system.value + 10  # arbitary positive value
                 await self.mock_controller.write_reply(
-                    MTMount.mock.make_reply_dict(
-                        id=MTMount.ReplyId.LIMITS,
+                    mtmount.mock.make_reply_dict(
+                        id=mtmount.ReplyId.LIMITS,
                         system=system,
                         limits=value,
                     )
@@ -769,8 +769,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 safety_data = initial_safety_data.copy()
                 safety_data[field] = value
                 await self.mock_controller.write_reply(
-                    MTMount.mock.make_reply_dict(
-                        id=MTMount.ReplyId.SAFETY_INTERLOCKS,
+                    mtmount.mock.make_reply_dict(
+                        id=mtmount.ReplyId.SAFETY_INTERLOCKS,
                         **safety_data,
                     )
                 )
