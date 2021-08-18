@@ -1,6 +1,6 @@
-.. py:currentmodule:: lsst.ts.MTMount
+.. py:currentmodule:: lsst.ts.mtmount
 
-.. _lsst.ts.MTMount.developer_guide:
+.. _lsst.ts.mtmount.developer_guide:
 
 ###############
 Developer Guide
@@ -13,9 +13,9 @@ It also reads telemetry from another TCP/IP connection using a background proces
 
 This version of the software only controls the camera cable wrap (CCW).
 
-See :ref:`lsst.ts.MTMount-tma_interface` for information about the low-level controller.
+See :ref:`lsst.ts.mtmount-tma_interface` for information about the low-level controller.
 
-.. _lsst.ts.MTMount.api:
+.. _lsst.ts.mtmount.api:
 
 API
 ===
@@ -25,10 +25,10 @@ The primary classes are:
 * `MTMountCsc`: control for the mount.
 * `TelemetryClient`: read telemetry and translated it to SAL/DDS.
 
-.. automodapi:: lsst.ts.MTMount
+.. automodapi:: lsst.ts.mtmount
     :no-main-docstr:
 
-.. _lsst.ts.MTMount.build:
+.. _lsst.ts.mtmount.build:
 
 Build and Test
 ==============
@@ -49,10 +49,10 @@ Tekniker Info
     tma_interface
     :maxdepth: 2
 
-.. _lsst.ts.MTMount.contributing:
+.. _lsst.ts.mtmount.contributing:
 
 Contributing
 ============
 
-``lsst.ts.MTMount`` is developed at https://github.com/lsst-ts/ts_MTMount.
-Bug reports and feature requests use `Jira with labels=ts_MTMount <https://jira.lsstcorp.org/issues/?jql=project%20%3D%20DM%20AND%20labels%20%20%3D%20ts_MTMount>`_.
+``lsst.ts.mtmount`` is developed at https://github.com/lsst-ts/ts_mtmount.
+Bug reports and feature requests use `Jira with labels=ts_mtmount <https://jira.lsstcorp.org/issues/?jql=project%20%3D%20DM%20AND%20labels%20%20%3D%20ts_MTMount>`_.

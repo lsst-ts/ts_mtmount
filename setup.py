@@ -10,10 +10,10 @@ __version__ = "{version}"
 """
 
 setuptools.setup(
-    name="ts_MTMount",
+    name="ts_mtmount",
     description="",
     use_scm_version={
-        "write_to": "python/lsst/ts/MTMount/version.py",
+        "write_to": "python/lsst/ts/mtmount/version.py",
         "write_to_template": scm_version_template,
     },
     setup_requires=["setuptools_scm", "pytest-runner"],
@@ -33,6 +33,6 @@ setuptools.setup(
     license="GPL",
     project_urls={
         "Bug Tracker": "https://jira.lsstcorp.org/secure/Dashboard.jspa",
-        "Source Code": "https://github.com/lsst-ts/ts_MTMount",
+        "Source Code": "https://github.com/lsst-ts/ts_mtmount",
     },
 )
