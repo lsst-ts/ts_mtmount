@@ -1,6 +1,6 @@
-.. py:currentmodule:: lsst.ts.MTMount
+.. py:currentmodule:: lsst.ts.mtmount
 
-.. _lsst.ts.MTMount-tma_interface:
+.. _lsst.ts.mtmount-tma_interface:
 
 Interface with the Telescope Mount Assembly
 ===========================================
@@ -33,7 +33,7 @@ Components
 * EUI (LabVIEW). Sends commands to the PXI and reads command acknowledgements, using TCP/IP through the Operation Manager. Gets state from the PXI using LabVIEW Network Shared Variables.
 * HHD (LabVIEW). Same communication scheme as the EUI.
 * TCS (C++). Tekniker's CSC code; written as part of the Operation Manager. Reads SAL MTMount Commands and writes SAL MTMount Events. Obsolete.
-* CSC (Python): the code in this ts_MTMount package. This replaces Tekniker's TCS code. Initially it will communicate with the Operation Manager using the HHD port, but we plan to ask Tekniker to provide us a new TCP/IP port dedicated to the CSC.
+* CSC (Python): the code in this ts_mtmount package. This replaces Tekniker's TCS code. Initially it will communicate with the Operation Manager using the HHD port, but we plan to ask Tekniker to provide us a new TCP/IP port dedicated to the CSC.
 * Operation Manager (C++). Talks to the EUI, HHD and PXI via TCP/IP. Coordinates who can talk to the PXI.
 * PXI (LabVIEW): there are two low level PXI computers running LabVIEW. One controls the azimuth and altitude axes and the other does the remaining low level control, including communication with the Operation Manager using TCP/IP and writing SAL MTMount Telemetry topics.
 

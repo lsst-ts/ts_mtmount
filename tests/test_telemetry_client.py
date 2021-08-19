@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -30,7 +30,7 @@ import numpy as np
 
 from lsst.ts import salobj
 from lsst.ts import tcpip
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 
 # Standard timeout for TCP/IP messages (sec).
 STD_TIMEOUT = 5
@@ -110,7 +110,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             # topic_id is from telemetry_map.yaml
             azimuth_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elaz_dds_data,
-                topic_id=MTMount.TelemetryTopicId.AZIMUTH,
+                topic_id=mtmount.TelemetryTopicId.AZIMUTH,
             )
             azimuth_llv_data["this_extra_field_should_be_ignored"] = 55.2
             await self.publish_data(azimuth_llv_data)
@@ -120,7 +120,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
 
             elevation_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elaz_dds_data,
-                topic_id=MTMount.TelemetryTopicId.ELEVATION,
+                topic_id=mtmount.TelemetryTopicId.ELEVATION,
             )
             await self.publish_data(elevation_llv_data)
             await self.assert_next_telemetry(
@@ -130,7 +130,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             desired_azimuth_drives_dds_data = self.make_elaz_drives_dds_data(naxes=16)
             azimuth_drives_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_azimuth_drives_dds_data,
-                topic_id=MTMount.TelemetryTopicId.AZIMUTH_DRIVE,
+                topic_id=mtmount.TelemetryTopicId.AZIMUTH_DRIVE,
             )
             await self.publish_data(azimuth_drives_llv_data)
             await self.assert_next_telemetry(
@@ -140,7 +140,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             desired_elevation_drives_dds_data = self.make_elaz_drives_dds_data(naxes=12)
             elevation_drives_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elevation_drives_dds_data,
-                topic_id=MTMount.TelemetryTopicId.ELEVATION_DRIVE,
+                topic_id=mtmount.TelemetryTopicId.ELEVATION_DRIVE,
             )
             await self.publish_data(elevation_drives_llv_data)
             await self.assert_next_telemetry(
@@ -155,7 +155,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             )
             ccw_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_ccw_dds_data,
-                topic_id=MTMount.TelemetryTopicId.CAMERA_CABLE_WRAP,
+                topic_id=mtmount.TelemetryTopicId.CAMERA_CABLE_WRAP,
             )
             await self.publish_data(ccw_llv_data)
             await self.assert_next_telemetry(
@@ -222,7 +222,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             Dict of low-level field name: value telemetry data.
         """
         llv_data = dict(topicID=topic_id)
-        field_dict = MTMount.TELEMETRY_MAP[topic_id][1]
+        field_dict = mtmount.TELEMETRY_MAP[topic_id][1]
         for key, value in dds_data.items():
             llv_key = field_dict[key]
             self.convert_dds_item_to_llv(
@@ -278,7 +278,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             Low-level controller telemetry data.
         """
         data_json = json.dumps(llv_data)
-        self.server.writer.write(data_json.encode() + MTMount.LINE_TERMINATOR)
+        self.server.writer.write(data_json.encode() + mtmount.LINE_TERMINATOR)
         await self.server.writer.drain()
 
 

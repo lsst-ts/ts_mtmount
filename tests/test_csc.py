@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -27,7 +27,7 @@ import time
 import unittest
 
 from lsst.ts import salobj
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 
 STD_TIMEOUT = 10  # standard command timeout (sec)
 # timeout for opening or closing mirror covers (sec)
@@ -49,7 +49,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         else:
             mock_command_port = None
             mock_telemetry_port = None
-        csc = MTMount.MTMountCsc(
+        csc = mtmount.MTMountCsc(
             initial_state=initial_state,
             config_dir=config_dir,
             simulation_mode=simulation_mode,
@@ -90,7 +90,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             Ignored if ``simulation_mode == 0``.
         """
         if simulation_mode != 0 and not internal_mock_controller:
-            self.mock_controller = MTMount.mock.Controller(
+            self.mock_controller = mtmount.mock.Controller(
                 log=logging.getLogger(), random_ports=True
             )
             self.addAsyncCleanup(self.mock_controller.close)
@@ -111,8 +111,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         )
 
     def test_class_attributes(self):
-        self.assertEqual(tuple(MTMount.MTMountCsc.valid_simulation_modes), (0, 1))
-        self.assertEqual(MTMount.MTMountCsc.version, MTMount.__version__)
+        self.assertEqual(tuple(mtmount.MTMountCsc.valid_simulation_modes), (0, 1))
+        self.assertEqual(mtmount.MTMountCsc.version, mtmount.__version__)
 
     async def test_disconnect(self):
         """Test that the CSC goes to FAULT state if it loses connection
@@ -131,7 +131,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         ):
             await self.assert_next_sample(
                 self.remote.evt_softwareVersions,
-                cscVersion=MTMount.__version__,
+                cscVersion=mtmount.__version__,
                 subsystemVersions="",
             )
 
@@ -160,7 +160,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 demandVelocity=0,
             )
             min_elevation = (
-                MTMount.LimitsDict[MTMount.DeviceId.ELEVATION_AXIS]
+                mtmount.LimitsDict[mtmount.DeviceId.ELEVATION_AXIS]
                 .scaled()
                 .min_position
             )
@@ -234,7 +234,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
             ccw_device = self.mock_controller.device_dict[
-                MTMount.DeviceId.CAMERA_CABLE_WRAP
+                mtmount.DeviceId.CAMERA_CABLE_WRAP
             ]
             ccw_actuator = ccw_device.actuator
             self.assertFalse(ccw_device.power_on)
@@ -279,7 +279,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     delay = salobj.current_tai() - tai
                     self.assertEqual(
                         command.command_code,
-                        MTMount.CommandCode.CAMERA_CABLE_WRAP_TRACK,
+                        mtmount.CommandCode.CAMERA_CABLE_WRAP_TRACK,
                     )
                     desired_command_tai = (
                         tai + self.csc.config.camera_cable_wrap_advance_time
@@ -314,7 +314,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 )
                 command = await self.next_lowlevel_command()
                 self.assertEqual(
-                    command.command_code, MTMount.CommandCode.CAMERA_CABLE_WRAP_STOP
+                    command.command_code, mtmount.CommandCode.CAMERA_CABLE_WRAP_STOP
                 )
                 self.assertTrue(ccw_device.enabled)
                 self.assertFalse(ccw_device.tracking_enabled)
@@ -346,7 +346,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.mock_controller.set_command_queue(maxsize=0)
 
             mock_device = self.mock_controller.device_dict[
-                MTMount.DeviceId.MIRROR_COVERS
+                mtmount.DeviceId.MIRROR_COVERS
             ]
             actuator = mock_device.actuator
 
@@ -398,10 +398,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
 
             mock_azimuth = self.mock_controller.device_dict[
-                MTMount.DeviceId.AZIMUTH_AXIS
+                mtmount.DeviceId.AZIMUTH_AXIS
             ]
             mock_elevation = self.mock_controller.device_dict[
-                MTMount.DeviceId.ELEVATION_AXIS
+                mtmount.DeviceId.ELEVATION_AXIS
             ]
 
             tai = salobj.current_tai()
@@ -473,10 +473,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
 
             mock_azimuth = self.mock_controller.device_dict[
-                MTMount.DeviceId.AZIMUTH_AXIS
+                mtmount.DeviceId.AZIMUTH_AXIS
             ]
             mock_elevation = self.mock_controller.device_dict[
-                MTMount.DeviceId.ELEVATION_AXIS
+                mtmount.DeviceId.ELEVATION_AXIS
             ]
             self.assertFalse(mock_azimuth.tracking_enabled)
             self.assertFalse(mock_elevation.tracking_enabled)
@@ -542,9 +542,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     ):
         """Provide a stream of trackTarget commands until cancelled."""
         # Slew and track until both axes are in position
-        mock_azimuth = self.mock_controller.device_dict[MTMount.DeviceId.AZIMUTH_AXIS]
+        mock_azimuth = self.mock_controller.device_dict[mtmount.DeviceId.AZIMUTH_AXIS]
         mock_elevation = self.mock_controller.device_dict[
-            MTMount.DeviceId.ELEVATION_AXIS
+            mtmount.DeviceId.ELEVATION_AXIS
         ]
         self.assertTrue(mock_azimuth.tracking_enabled)
         self.assertTrue(mock_elevation.tracking_enabled)

@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -24,7 +24,7 @@ import unittest
 
 import astropy.time
 
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 
 
 class ExampleEnum(enum.Enum):
@@ -113,7 +113,7 @@ class FieldInfoTestCase(unittest.TestCase):
                 )
 
     def test_bool_field_info(self):
-        field_info = MTMount.field_info.BoolFieldInfo(name=self.name, doc=self.doc)
+        field_info = mtmount.field_info.BoolFieldInfo(name=self.name, doc=self.doc)
         self.check_name_doc(field_info)
         self.check_field_basics(
             field_info=field_info,
@@ -122,7 +122,7 @@ class FieldInfoTestCase(unittest.TestCase):
         )
 
     def test_enum_field_info(self):
-        field_info = MTMount.field_info.EnumFieldInfo(
+        field_info = mtmount.field_info.EnumFieldInfo(
             name=self.name, doc=self.doc, dtype=ExampleEnum
         )
         self.check_name_doc(field_info)
@@ -135,7 +135,7 @@ class FieldInfoTestCase(unittest.TestCase):
 
     def test_fixed_enum_field_info(self):
         def factory(default):
-            return MTMount.field_info.FixedEnumFieldInfo(
+            return mtmount.field_info.FixedEnumFieldInfo(
                 name=self.name, default=default
             )
 
@@ -144,7 +144,7 @@ class FieldInfoTestCase(unittest.TestCase):
         )
 
     def test_float_field_info(self):
-        field_info = MTMount.field_info.FloatFieldInfo(name=self.name, doc=self.doc)
+        field_info = mtmount.field_info.FloatFieldInfo(name=self.name, doc=self.doc)
         self.check_name_doc(field_info)
         str_value_dict = {
             str(float(value)): value for value in (0, 1, -1, 3.14, 9e99, 1e-5)
@@ -156,7 +156,7 @@ class FieldInfoTestCase(unittest.TestCase):
         )
 
     def test_int_field_info(self):
-        field_info = MTMount.field_info.IntFieldInfo(name=self.name, doc=self.doc)
+        field_info = mtmount.field_info.IntFieldInfo(name=self.name, doc=self.doc)
         self.check_name_doc(field_info)
         # Note: True and False are valid values (1 and 0, respectively).
         # Floats are also valid values (they get truncated).
@@ -167,7 +167,7 @@ class FieldInfoTestCase(unittest.TestCase):
         )
 
     def test_str_field_info(self):
-        field_info = MTMount.field_info.StrFieldInfo(name=self.name, doc=self.doc)
+        field_info = mtmount.field_info.StrFieldInfo(name=self.name, doc=self.doc)
         self.check_name_doc(field_info)
         self.check_field_basics(
             field_info=field_info,
@@ -179,13 +179,13 @@ class FieldInfoTestCase(unittest.TestCase):
 
     def test_command_code_field_info(self):
         self.check_fixed_field_info(
-            MTMount.field_info.CommandCodeFieldInfo,
-            dtype=MTMount.CommandCode,
+            mtmount.field_info.CommandCodeFieldInfo,
+            dtype=mtmount.CommandCode,
             expected_name="command_code",
         )
 
     def test_timestamp_field_info(self):
-        field_info = MTMount.field_info.TimestampFieldInfo()
+        field_info = mtmount.field_info.TimestampFieldInfo()
         self.assertEqual(field_info.name, "timestamp")
         valid_date_str = "2020-04-06T22:33:57.335"
         valid_times = (
@@ -201,18 +201,18 @@ class FieldInfoTestCase(unittest.TestCase):
 
     def test_reply_code_field_info(self):
         self.check_fixed_field_info(
-            MTMount.field_info.ReplyCodeFieldInfo,
-            dtype=MTMount.ReplyCode,
+            mtmount.field_info.ReplyCodeFieldInfo,
+            dtype=mtmount.ReplyCode,
             expected_name="reply_code",
         )
 
     def test_source_field_info(self):
         for what in ("command", "warning"):
-            field_info = MTMount.field_info.SourceFieldInfo(what=what)
+            field_info = mtmount.field_info.SourceFieldInfo(what=what)
             self.assertEqual(field_info.name, "source")
             self.assertIn(what, field_info.doc)
-            self.assertIsInstance(field_info, MTMount.field_info.EnumFieldInfo)
-            self.assertIs(field_info.dtype, MTMount.Source)
+            self.assertIsInstance(field_info, mtmount.field_info.EnumFieldInfo)
+            self.assertIs(field_info.dtype, mtmount.Source)
 
 
 if __name__ == "__main__":

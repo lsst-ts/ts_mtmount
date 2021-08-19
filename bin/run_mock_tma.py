@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -20,9 +20,9 @@
 import asyncio
 import logging
 
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 
 logging.basicConfig()
 
 
-asyncio.run(MTMount.mock.Controller.amain())
+asyncio.run(mtmount.mock.Controller.amain())

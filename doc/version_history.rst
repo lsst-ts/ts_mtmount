@@ -1,10 +1,17 @@
-.. py:currentmodule:: lsst.ts.MTMount
+.. py:currentmodule:: lsst.ts.mtmount
 
-.. _lsst.ts.MTMount.version_history:
+.. _lsst.ts.mtmount.version_history:
 
 ###############
 Version History
 ###############
+
+ccw_only 5
+----------
+
+Changes:
+
+* Rename the package from ts_MTMount to ts_mtmount and the Python namespace from lsst.ts.MTMount to lsst.ts.mtmount.
 
 ccw_only 4
 ----------

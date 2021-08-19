@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -22,7 +22,7 @@
 import random
 import unittest
 
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 
 random.seed(314)
 
@@ -39,19 +39,19 @@ class MessageTestCase(unittest.TestCase):
 
     def check_message_type(self, message_type):
         for i in range(10):
-            message = MTMount.testutils.make_random_message(message_type)
+            message = mtmount.testutils.make_random_message(message_type)
             self.check_round_trip(message)
 
-            message2 = MTMount.testutils.make_random_message_with_defaults(message_type)
+            message2 = mtmount.testutils.make_random_message_with_defaults(message_type)
             self.check_round_trip(message2)
 
     def test_commands(self):
-        for command_type in MTMount.commands.Commands:
+        for command_type in mtmount.commands.Commands:
             with self.subTest(command_type=command_type.__name__):
                 self.check_message_type(command_type)
 
     def test_replies(self):
-        for reply_type in MTMount.replies.Replies:
+        for reply_type in mtmount.replies.Replies:
             with self.subTest(reply_type=reply_type.__name__):
                 self.check_message_type(reply_type)
 
