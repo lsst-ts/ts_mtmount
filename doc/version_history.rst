@@ -6,22 +6,6 @@
 Version History
 ###############
 
-v0.21.0
--------
-
-Changes:
-
-* Renamed the package from ts_MTMount to ts_mtmount,
-  and the Python namespace from lsst.ts.MTMount to lsst.ts.mtmount.
-
-Requires:
-
-* ts_salobj 6.3
-* ts_simactuators 2
-* ts_tcpip 0.1
-* ts_idl 2
-* IDL files for MTMount and MTRotator from ts_xml 9.2
-
 v0.20.0
 -------
 
@@ -30,6 +14,8 @@ Changes:
 * Added support for AVAILABLE_SETTINGS, CHILLER_STATE, MOTION_CONTROLLER_STATE, and POWER_STATE low-level controller events;
   the CSC now supports all controller events except DETAILED_SETTINGS_APPLIED (for which we need more information).
   This version requires ts_xml 9.2.
+* Renamed the package from ts_MTMount to ts_mtmount,
+  and the Python namespace from lsst.ts.MTMount to lsst.ts.mtmount.
 
 Requires:
 
