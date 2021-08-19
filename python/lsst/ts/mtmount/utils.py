@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
@@ -20,23 +19,32 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""A simple command-line script that sends commands to
-the low-level controller (Operation Manager).
+__all__ = [
+    "wrap_parameter_doc",
+]
 
-Must be connected to a low-level port on the Operation Manger.
-At this time the only available port is for the hand-held device,
-but Tekniker plans to make an additional port available for our CSC.
+import textwrap
 
-Warning: this should not be used while the CSC is running.
-
-For more information:
-
-tma_commander.py --help
-"""
-
-import asyncio
-
-from lsst.ts import mtmount
+# Maximum documentation string length (chars)
+MAX_DOC_LENGTH = 79
 
 
-asyncio.run(mtmount.TmaCommander.amain())
+_ParamWrapper = textwrap.TextWrapper(
+    width=MAX_DOC_LENGTH, initial_indent="    ", subsequent_indent="    "
+)
+
+
+def wrap_parameter_doc(text):
+    """Wrap a parameter description appropriately for a doc string.
+
+    Parameters
+    ----------
+    doc : `str`
+       Documentation to wrap; typically a `FieldInfo.doc`.
+
+    Returns
+    -------
+    wrapped_doc : `str`
+        The doc wrapped to 79 characters with 4 spaces of indentation.
+    """
+    return _ParamWrapper.fill(text)

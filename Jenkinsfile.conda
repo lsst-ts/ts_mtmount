@@ -1,2 +1,2 @@
 @Library('JenkinsShared')_
-CondaPipeline(["ts_config_mttcs"], "ts-mtmount", "lsst.ts.MTMount")
+CondaPipeline(["ts_config_mttcs"], "ts-mtmount", "lsst.ts.mtmount")

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
@@ -20,23 +19,33 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""A simple command-line script that sends commands to
-the low-level controller (Operation Manager).
-
-Must be connected to a low-level port on the Operation Manger.
-At this time the only available port is for the hand-held device,
-but Tekniker plans to make an additional port available for our CSC.
-
-Warning: this should not be used while the CSC is running.
-
-For more information:
-
-tma_commander.py --help
-"""
-
-import asyncio
-
-from lsst.ts import mtmount
+__all__ = ["MainAxesPowerSupplyDevice"]
 
 
-asyncio.run(mtmount.TmaCommander.amain())
+from lsst.ts import salobj
+from lsst.ts.idl.enums.MTMount import System
+from .base_device import BaseDevice
+
+
+class MainAxesPowerSupplyDevice(BaseDevice):
+    """Main power supply.
+
+    Parameters
+    ----------
+    controller : `MockController`
+        Mock controller.
+
+    Notes
+    -----
+    The real main power supply takes about 2 minutes to turn on.
+    This mock is fast, to avoid needlessly slowing down unit tests.
+    """
+
+    def __init__(self, controller):
+        super().__init__(controller=controller, system_id=System.MAIN_AXES_POWER_SUPPLY)
+
+    def do_power(self, command):
+        super().do_power(command)
+        # The real system takes about 2 minutes to turn on.
+        timeout = 120 if command.on else 0
+        return timeout, salobj.make_done_future()

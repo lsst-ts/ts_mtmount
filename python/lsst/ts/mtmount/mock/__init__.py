@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
@@ -20,23 +19,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""A simple command-line script that sends commands to
-the low-level controller (Operation Manager).
-
-Must be connected to a low-level port on the Operation Manger.
-At this time the only available port is for the hand-held device,
-but Tekniker plans to make an additional port available for our CSC.
-
-Warning: this should not be used while the CSC is running.
-
-For more information:
-
-tma_commander.py --help
-"""
-
-import asyncio
-
-from lsst.ts import mtmount
-
-
-asyncio.run(mtmount.TmaCommander.amain())
+from .axis_device import *
+from .deployable_device import *
+from .main_power_supply_device import *
+from .mirror_cover_locks_device import *
+from .mirror_covers_device import *
+from .oil_supply_system_device import *
+from .top_end_chiller_device import *
+from .controller import *

@@ -1,10 +1,26 @@
-.. py:currentmodule:: lsst.ts.MTMount
+.. py:currentmodule:: lsst.ts.mtmount
 
-.. _lsst.ts.MTMount.version_history:
+.. _lsst.ts.mtmount.version_history:
 
 ###############
 Version History
 ###############
+
+v0.21.0
+-------
+
+Changes:
+
+* Renamed the package from ts_MTMount to ts_mtmount,
+  and the Python namespace from lsst.ts.MTMount to lsst.ts.mtmount.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 2
+* IDL files for MTMount and MTRotator from ts_xml 9.2
 
 v0.20.0
 -------
