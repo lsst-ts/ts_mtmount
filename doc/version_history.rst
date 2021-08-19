@@ -6,14 +6,17 @@
 Version History
 ###############
 
-v0.20.0
+v0.19.0
 -------
 
 Changes:
 
-* Added support for AVAILABLE_SETTINGS, CHILLER_STATE, MOTION_CONTROLLER_STATE, and POWER_STATE low-level controller events;
-  the CSC now supports all controller events except DETAILED_SETTINGS_APPLIED (for which we need more information).
-  This version requires ts_xml 9.2.
+* Added support for all but one of the new low-level controller events.
+  The one missing event is DETAILED_SETTINGS_APPLIED;
+  its documentation is incomplete and we need to decide which of the many fields to publish.
+  This version requires ts_xml 9.2 and ts_idl 3.2.
+* Lock the low-level TCP/IP stream for a few more commands,
+  to reduce the chance of sending a command that will be rejected.
 * Renamed the package from ts_MTMount to ts_mtmount,
   and the Python namespace from lsst.ts.MTMount to lsst.ts.mtmount.
 
@@ -22,26 +25,8 @@ Requires:
 * ts_salobj 6.3
 * ts_simactuators 2
 * ts_tcpip 0.1
-* ts_idl 2
+* ts_idl 3.2
 * IDL files for MTMount and MTRotator from ts_xml 9.2
-
-v0.19.0
--------
-
-Changes:
-
-* Added support for many new TMA events.
-  This version requires ts_xml 9.1.
-* Lock the low-level TCP/IP stream for a few more commands,
-  to reduce the chance of sending a command that will be rejected.
-
-Requires:
-
-* ts_salobj 6.3
-* ts_simactuators 2
-* ts_tcpip 0.1
-* ts_idl 2
-* IDL files for MTMount and MTRotator from ts_xml 9.1
 
 0.18.1
 -------
@@ -57,7 +42,7 @@ Requires:
 * ts_salobj 6.3
 * ts_simactuators 2
 * ts_tcpip 0.1
-* ts_idl 2
+* ts_idl 3.1
 * IDL files for MTMount and MTRotator from ts_xml 7.2
 
 v0.18.0
