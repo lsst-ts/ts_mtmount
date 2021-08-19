@@ -31,7 +31,7 @@ Stop the CSC by sending it to the OFFLINE state.
 
 See MTMount `SAL communication interface <https://ts-xml.lsst.io/sal_interfaces/MTMount.html>`_ for commands, events and telemetry.
 
-When MTMount is started (sent from STANDBY to DISABLED state) it launches a background process
+When the MTMount CSC is started (sent from STANDBY to DISABLED state) it launches a background process
 to read telemetry from the low-level controller and publish it as SAL/DDS.
 
 To control the MTMount CSC from the command line (e.g. for engineering), you may use the CSC commander.
