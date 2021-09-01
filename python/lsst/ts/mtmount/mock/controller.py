@@ -162,7 +162,7 @@ class Controller:
 
     # Dict of system: number of elements for CHILLER_STATE events
     chiller_state_nelts = {
-        System.OIL_SUPPLY_SYSTEM: 1,
+        System.OIL_SUPPLY_SYSTEM: 2,
         System.AZIMUTH_DRIVES_THERMAL: 4,
         System.ELEVATION_DRIVES_THERMAL: 2,
         System.AZ0101_CABINET_THERMAL: 1,
