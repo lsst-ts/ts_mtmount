@@ -14,7 +14,7 @@ Changes:
 * Added support for all but one of the new low-level controller events.
   The one missing event is DETAILED_SETTINGS_APPLIED;
   its documentation is incomplete and we need to decide which of the many fields to publish.
-  This version requires ts_xml 9.2 and ts_idl 3.2.
+  This version requires ts_xml 10.0 and ts_idl 3.2.
 * Lock the low-level TCP/IP stream for a few more commands,
   to reduce the chance of sending a command that will be rejected.
 * Renamed the package from ts_MTMount to ts_mtmount,
@@ -26,7 +26,7 @@ Requires:
 * ts_simactuators 2
 * ts_tcpip 0.1
 * ts_idl 3.2
-* IDL files for MTMount and MTRotator from ts_xml 9.2
+* IDL files for MTMount and MTRotator from ts_xml 10.0
 
 0.18.1
 -------
