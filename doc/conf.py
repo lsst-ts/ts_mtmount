@@ -4,9 +4,9 @@ This configuration only affects single-package Sphinx documentation builds.
 """
 
 from documenteer.conf.pipelinespkg import *  # noqa
-import lsst.ts.MTMount  # noqa
+import lsst.ts.mtmount  # noqa
 
-project = "ts_MTMount"
+project = "ts_mtmount"
 html_theme_options["logotext"] = project  # noqa
 html_title = project
 html_short_title = project

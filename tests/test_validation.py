@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for the LSST Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -24,14 +24,14 @@ import unittest
 import jsonschema
 
 from lsst.ts import salobj
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 
 
 class ValidationTestCase(unittest.TestCase):
     """Test validation of the config schema."""
 
     def setUp(self):
-        self.schema = MTMount.CONFIG_SCHEMA
+        self.schema = mtmount.CONFIG_SCHEMA
         self.validator = salobj.DefaultingValidator(schema=self.schema)
         self.default = dict(
             host="ccw-mgmt.cp.lsst.org",

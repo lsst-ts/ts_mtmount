@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
@@ -20,23 +19,19 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""A simple command-line script that sends commands to
-the low-level controller (Operation Manager).
+__all__ = [
+    "CSC_COMMAND_PORT",
+    "TELEMETRY_PORT",
+    "MIRROR_COVER_DRIVES",
+    "LINE_TERMINATOR",
+]
 
-Must be connected to a low-level port on the Operation Manger.
-At this time the only available port is for the hand-held device,
-but Tekniker plans to make an additional port available for our CSC.
+CSC_COMMAND_PORT = 30005
 
-Warning: this should not be used while the CSC is running.
+TELEMETRY_PORT = 50035
 
-For more information:
+# We probably don't need this, because -1 means "all drives".
+MIRROR_COVER_DRIVES = (0, 1, 2, 3)
 
-tma_commander.py --help
-"""
-
-import asyncio
-
-from lsst.ts import mtmount
-
-
-asyncio.run(mtmount.TmaCommander.amain())
+# TCP/IP line terminator (bytes)
+LINE_TERMINATOR = b"\r\n"

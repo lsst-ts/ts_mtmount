@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -22,7 +22,7 @@
 import random
 import unittest
 
-from lsst.ts import MTMount
+from lsst.ts import mtmount
 
 random.seed(314)
 
@@ -33,20 +33,29 @@ class MessageTestCase(unittest.TestCase):
         self.doc = f"a doc string for the field named {self.name}"
 
     def check_round_trip(self, message):
+        """Check that Message.str_fields and <message_type>.from_str_fields
+        are inverses.
+
+        Convert a message to str fields, then back to a message
+        and check that it matches the original.
+        """
         str_fields = message.str_fields()
         message_round_trip = type(message).from_str_fields(str_fields)
         self.assertEqual(message, message_round_trip)
 
     def check_message_type(self, message_type):
+        """For a given message type: make several random messages and call
+        check_round_trip.
+        """
         for i in range(10):
-            message = MTMount.testutils.make_random_message(message_type)
+            message = mtmount.testutils.make_random_message(message_type)
             self.check_round_trip(message)
 
-            message2 = MTMount.testutils.make_random_message_with_defaults(message_type)
+            message2 = mtmount.testutils.make_random_message_with_defaults(message_type)
             self.check_round_trip(message2)
 
     def test_commands(self):
-        for command_type in MTMount.commands.Commands:
+        for command_type in mtmount.commands.Commands:
             with self.subTest(command_type=command_type.__name__):
                 self.check_message_type(command_type)
 

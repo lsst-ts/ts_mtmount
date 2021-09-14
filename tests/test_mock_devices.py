@@ -1,4 +1,4 @@
-# This file is part of ts_MTMount.
+# This file is part of ts_mtmount.
 #
 # Developed for the LSST Telescope and Site Systems.
 # This product includes software developed by the LSST Project
@@ -24,7 +24,8 @@ import logging
 import unittest
 
 from lsst.ts import salobj
-from lsst.ts import MTMount
+from lsst.ts import mtmount
+from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState, System
 
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
 # Padding for the time limit returned by device do_methods
@@ -41,25 +42,25 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.controller = TrivialMockController()
         axis_devices = [
-            MTMount.mock.AxisDevice(
+            mtmount.mock.AxisDevice(
                 controller=self.controller,
-                device_id=device_id,
-                start_position=MTMount.mock.INITIAL_POSITION[device_id],
+                system_id=system_id,
+                start_position=mtmount.mock.INITIAL_POSITION[system_id],
             )
-            for device_id in MTMount.LimitsDict
+            for system_id in mtmount.LimitsDict
         ]
         devices = axis_devices + [
-            MTMount.mock.MainPowerSupplyDevice(controller=self.controller),
-            MTMount.mock.MirrorCoverLocksDevice(controller=self.controller),
-            MTMount.mock.MirrorCoversDevice(controller=self.controller),
-            MTMount.mock.OilSupplySystemDevice(controller=self.controller),
-            MTMount.mock.TopEndChillerDevice(controller=self.controller),
+            mtmount.mock.MainAxesPowerSupplyDevice(controller=self.controller),
+            mtmount.mock.MirrorCoverLocksDevice(controller=self.controller),
+            mtmount.mock.MirrorCoversDevice(controller=self.controller),
+            mtmount.mock.OilSupplySystemDevice(controller=self.controller),
+            mtmount.mock.TopEndChillerDevice(controller=self.controller),
         ]
-        self.device_dict = {device.device_id: device for device in devices}
+        self.device_dict = {device.system_id: device for device in devices}
 
     def get_command_class(self, command_code_name):
-        command_code = getattr(MTMount.CommandCode, command_code_name.upper())
-        return MTMount.commands.CommandDict[command_code]
+        command_code = getattr(mtmount.CommandCode, command_code_name.upper())
+        return mtmount.commands.CommandDict[command_code]
 
     async def run_command(
         self, command, min_timeout=None, should_be_superseded=False, should_fail=False
@@ -68,7 +69,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         Parameters
         ----------
-        command : `MTMount.commands.Command`
+        command : `mtmount.commands.Command`
             Command to execute.
         min_timeout : `float` or `None`, optional
             Minimum timeout. Must be specified if the command method
@@ -103,7 +104,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(task, timeout=timeout + STD_TIMEOUT)
             if should_fail:
                 self.fail(f"Command {command} succeeded but should_fail true")
-        except (MTMount.CommandSupersededException, asyncio.CancelledError) as e:
+        except (mtmount.CommandSupersededException, asyncio.CancelledError) as e:
             if not should_be_superseded:
                 self.fail(
                     f"Command {command} superseded, but should_be_superseded false: {e!r}"
@@ -113,11 +114,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 self.fail(f"Command {command} failed, but should_fail false: {e!r}")
 
     async def test_base_commands(self):
-        for device_id, device in self.device_dict.items():
-            with self.subTest(device_id=device.device_id.name):
-                if device_id in (
-                    MTMount.DeviceId.MIRROR_COVERS,
-                    MTMount.DeviceId.MIRROR_COVER_LOCKS,
+        for system_id, device in self.device_dict.items():
+            with self.subTest(system_id=device.system_id.name):
+                if system_id in (
+                    System.MIRROR_COVERS,
+                    System.MIRROR_COVER_LOCKS,
                 ):
                     drive = -1
                 else:
@@ -125,39 +126,39 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 await self.check_base_commands(device=device, drive=drive)
 
     async def test_mirror_cover_locks(self):
-        device = self.device_dict[MTMount.DeviceId.MIRROR_COVER_LOCKS]
+        device = self.device_dict[System.MIRROR_COVER_LOCKS]
 
-        await self.check_point_to_point_device(
+        await self.check_deployable_device(
             device=device,
-            power_on_command=MTMount.commands.MirrorCoverLocksPower(drive=-1, on=True),
-            goto_min_command=MTMount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, deploy=False
-            ),
-            goto_max_command=MTMount.commands.MirrorCoverLocksMoveAll(
+            power_on_command=mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True),
+            deploy_command=mtmount.commands.MirrorCoverLocksMoveAll(
                 drive=-1, deploy=True
             ),
-            stop_command=MTMount.commands.MirrorCoverLocksStop(drive=-1),
-            start_at_min=True,
+            retract_command=mtmount.commands.MirrorCoverLocksMoveAll(
+                drive=-1, deploy=False
+            ),
+            stop_command=mtmount.commands.MirrorCoverLocksStop(drive=-1),
+            start_deployed=True,
             move_min_timeout=0.5,
             power_on_min_timeout=None,
         )
 
     async def test_mirror_covers(self):
-        device = self.device_dict[MTMount.DeviceId.MIRROR_COVERS]
+        device = self.device_dict[System.MIRROR_COVERS]
 
-        await self.check_point_to_point_device(
+        await self.check_deployable_device(
             device=device,
-            power_on_command=MTMount.commands.MirrorCoversPower(drive=-1, on=True),
-            goto_min_command=MTMount.commands.MirrorCoversDeploy(drive=-1),
-            goto_max_command=MTMount.commands.MirrorCoversRetract(drive=-1),
-            stop_command=MTMount.commands.MirrorCoversStop(drive=-1),
-            start_at_min=True,
+            power_on_command=mtmount.commands.MirrorCoversPower(drive=-1, on=True),
+            deploy_command=mtmount.commands.MirrorCoversDeploy(drive=-1),
+            retract_command=mtmount.commands.MirrorCoversRetract(drive=-1),
+            stop_command=mtmount.commands.MirrorCoversStop(drive=-1),
+            start_deployed=True,
             move_min_timeout=0.5,
             power_on_min_timeout=None,
         )
 
     async def test_oil_supply_system(self):
-        device = self.device_dict[MTMount.DeviceId.OIL_SUPPLY_SYSTEM]
+        device = self.device_dict[System.OIL_SUPPLY_SYSTEM]
 
         # Test the OilSupplySystemPower command
         self.assertFalse(device.power_on)
@@ -166,7 +167,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.main_pump_on)
 
         await self.run_command(
-            command=MTMount.commands.OilSupplySystemPower(on=True), min_timeout=900
+            command=mtmount.commands.OilSupplySystemPower(on=True), min_timeout=900
         )
         self.assertTrue(device.power_on)
         self.assertTrue(device.cooling_on)
@@ -174,7 +175,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(device.main_pump_on)
 
         await self.run_command(
-            command=MTMount.commands.OilSupplySystemPower(on=False), min_timeout=0
+            command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0
         )
         self.assertFalse(device.power_on)
         self.assertFalse(device.cooling_on)
@@ -183,9 +184,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Test the subsystem power commands.
         subsystem_command_dict = {
-            "cooling": MTMount.commands.OilSupplySystemPowerCooling,
-            "oil": MTMount.commands.OilSupplySystemPowerOil,
-            "main_pump": MTMount.commands.OilSupplySystemPowerMainPump,
+            "cooling": mtmount.commands.OilSupplySystemPowerCooling,
+            "oil": mtmount.commands.OilSupplySystemPowerOil,
+            "main_pump": mtmount.commands.OilSupplySystemPowerMainPump,
         }
 
         def get_value_dict():
@@ -205,7 +206,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             expected_values[name] = True
             min_timeout = (
                 900
-                if command_class is MTMount.commands.OilSupplySystemPowerCooling
+                if command_class is mtmount.commands.OilSupplySystemPowerCooling
                 else None
             )
             await self.run_command(command_class(on=True), min_timeout=min_timeout)
@@ -216,7 +217,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             expected_values[name] = False
             min_timeout = (
                 0
-                if command_class is MTMount.commands.OilSupplySystemPowerCooling
+                if command_class is mtmount.commands.OilSupplySystemPowerCooling
                 else None
             )
             await self.run_command(command_class(on=False), min_timeout=min_timeout)
@@ -224,7 +225,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(values, expected_values)
 
     async def test_top_end_chiller(self):
-        device = self.device_dict[MTMount.DeviceId.TOP_END_CHILLER]
+        device = self.device_dict[System.TOP_END_CHILLER]
         initial_track_ambient = device.track_ambient
         initial_temperature = device.temperature
         temperature1 = 5.1  # An arbitrary value
@@ -235,13 +236,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(device.temperature, temperature1)
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                MTMount.commands.TopEndChillerTrackAmbient(
+                mtmount.commands.TopEndChillerTrackAmbient(
                     on=True, temperature=temperature1
                 )
             )
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                MTMount.commands.TopEndChillerTrackAmbient(
+                mtmount.commands.TopEndChillerTrackAmbient(
                     on=False, temperature=temperature1
                 )
             )
@@ -249,13 +250,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.track_ambient, initial_track_ambient)
         self.assertEqual(device.temperature, initial_temperature)
 
-        await self.run_command(MTMount.commands.TopEndChillerPower(on=True))
+        await self.run_command(mtmount.commands.TopEndChillerPower(on=True))
         self.assertTrue(device.power_on)
         self.assertEqual(device.track_ambient, initial_track_ambient)
         self.assertEqual(device.temperature, initial_temperature)
 
         await self.run_command(
-            MTMount.commands.TopEndChillerTrackAmbient(
+            mtmount.commands.TopEndChillerTrackAmbient(
                 on=True, temperature=temperature1
             )
         )
@@ -265,7 +266,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         temperature2 = 0.12  # A different arbitrary value
         await self.run_command(
-            MTMount.commands.TopEndChillerTrackAmbient(
+            mtmount.commands.TopEndChillerTrackAmbient(
                 on=False, temperature=temperature2
             )
         )
@@ -274,35 +275,36 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(device.temperature, temperature2)
 
     async def test_axis_devices(self):
-        for device_id in (
-            MTMount.DeviceId.AZIMUTH_AXIS,
-            MTMount.DeviceId.ELEVATION_AXIS,
-            MTMount.DeviceId.CAMERA_CABLE_WRAP,
+        for system_id in (
+            System.AZIMUTH,
+            System.ELEVATION,
+            System.CAMERA_CABLE_WRAP,
         ):
-            with self.subTest(device_id=device_id.name):
-                device = self.device_dict[device_id]
+            with self.subTest(system_id=system_id.name):
+                device = self.device_dict[system_id]
                 await self.check_axis_device(device)
 
     async def test_command_failure(self):
-        device = self.device_dict[MTMount.DeviceId.MIRROR_COVERS]
-        await self.run_command(MTMount.commands.MirrorCoversPower(drive=-1, on=True))
+        device = self.device_dict[System.MIRROR_COVERS]
+        await self.run_command(mtmount.commands.MirrorCoversPower(drive=-1, on=True))
         self.assertTrue(device.power_on)
         device.fail_next_command = True
         await self.run_command(
-            MTMount.commands.MirrorCoversDeploy(drive=-1),
+            mtmount.commands.MirrorCoversDeploy(drive=-1),
             min_timeout=0,
             should_fail=True,
         )
 
     async def check_axis_device(self, device):
-        is_elaz = device.device_id in (
-            MTMount.DeviceId.AZIMUTH_AXIS,
-            MTMount.DeviceId.ELEVATION_AXIS,
+        is_elaz = device.system_id in (
+            System.AZIMUTH,
+            System.ELEVATION,
         )
 
         self.assertFalse(device.power_on)
         self.assertFalse(device.enabled)
         self.assertFalse(device.has_target)
+        self.assertFalse(device.moving_point_to_point)
 
         short_command_names = [
             "drive_enable",
@@ -316,13 +318,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         ]
         if is_elaz:
             short_command_names.append("home")
-        dev_prefix = f"{device.device_id.name}_"
+        dev_prefix = f"{device.system_id.name}_"
         command_codes = {
-            name: getattr(MTMount.CommandCode, dev_prefix + name.upper())
+            name: getattr(mtmount.CommandCode, dev_prefix + name.upper())
             for name in short_command_names
         }
         command_classes = {
-            name: MTMount.commands.CommandDict[cmd_id]
+            name: mtmount.commands.CommandDict[cmd_id]
             for name, cmd_id in command_codes.items()
         }
         slow_command_codes = {command_codes[name] for name in ("move", "track")}
@@ -411,6 +413,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.has_target)
 
         # Do a point to point move
+        self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
         start_segment = device.actuator.path.at(salobj.current_tai())
         self.assertEqual(start_segment.velocity, 0)
         start_position = start_segment.position
@@ -419,22 +422,28 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         task = asyncio.create_task(self.run_command(move_command, min_timeout=0.5))
 
         await asyncio.sleep(0.1)  # give command time to start
+        self.assertEqual(device.motion_state(), AxisMotionState.MOVING_POINT_TO_POINT)
         self.assertAlmostEqual(device.actuator.target.position, end_position)
         self.assertEqual(device.actuator.target.velocity, 0)
         segment = device.actuator.path.at(salobj.current_tai())
         self.assertGreater(abs(segment.velocity), 0.01)
         self.assertTrue(device.has_target)
+        self.assertTrue(device.moving_point_to_point)
+        self.assertAlmostEqual(device.point_to_point_target, end_position)
 
         await task
+        self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
         end_segment = device.actuator.path.at(salobj.current_tai())
         self.assertAlmostEqual(end_segment.velocity, 0)
         self.assertAlmostEqual(end_segment.position, end_position)
         self.assertTrue(device.has_target)
+        self.assertAlmostEqual(device.point_to_point_target, end_position)
 
         # Start homing or a big point to point move, then stop the axes
         # (Homing is a point to point move, and it's slow).
         if is_elaz:
             slow_move_command = home_command
+            end_position = device.home_position
         else:
             start_position = start_segment.position
             end_position = start_position + 10
@@ -446,12 +455,22 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
         await asyncio.sleep(0.1)
+        self.assertAlmostEqual(device.point_to_point_target, end_position)
+        self.assertEqual(device.motion_state(), AxisMotionState.MOVING_POINT_TO_POINT)
 
         await self.run_command(stop_command)
         await task
-        stop_duration = device.actuator.path[-1].tai - salobj.current_tai()
+        stop_end_tai = device.actuator.path[-1].tai
+        stop_duration = stop_end_tai - salobj.current_tai()
+        # Check STOPPING state; the specified tai can be any time
+        # earlier than the end time of the stop.
+        self.assertEqual(
+            device.motion_state(stop_end_tai - 0.1), AxisMotionState.STOPPING
+        )
         await asyncio.sleep(stop_duration)
         self.assertFalse(device.has_target)
+        self.assertAlmostEqual(device.point_to_point_target, end_position)
+        self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
 
         # The tracking command should fail when not in tracking mode.
         track_command = track_command_class(
@@ -473,6 +492,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(device.tracking_enabled)
         self.assertFalse(device.tracking_paused)
         self.assertFalse(device.has_target)
+        self.assertFalse(device.moving_point_to_point)
+        self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
 
         non_tracking_mode_commands = [
             home_command,
@@ -507,17 +528,19 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertAlmostEqual(device.actuator.target.velocity, velocity)
             self.assertAlmostEqual(device.actuator.target.tai, tai, delta=1e-5)
             self.assertTrue(device.has_target)
+            self.assertEqual(device.motion_state(tai), AxisMotionState.TRACKING)
             await asyncio.sleep(0.1)
 
         # Wait for tracking to time out; add some time to deal with
         # clock errors in macOS Docker.
-        await asyncio.sleep(MTMount.mock.MAX_TRACKING_DELAY + 0.2)
+        await asyncio.sleep(mtmount.mock.MAX_TRACKING_DELAY + 0.2)
         self.assertTrue(device.alarm_on)
         self.assertFalse(device.power_on)
         self.assertFalse(device.enabled)
         self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.tracking_paused)
         self.assertFalse(device.has_target)
+        self.assertEqual(device.motion_state(tai), AxisMotionState.STOPPED)
 
         # Re-enable tracking and supply one tracking update
         await self.run_command(reset_alarm_command)
@@ -532,11 +555,12 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         await self.run_command(
             track_command_class(
                 position=device.actuator.path[-1].position,
-                velocity=0,
+                velocity=1,
                 tai=salobj.current_tai(),
             )
         )
         self.assertTrue(device.has_target)
+        self.assertEqual(device.motion_state(tai), AxisMotionState.TRACKING)
 
         # If camera cable wrap, pause tracking and check state
         if not is_elaz:
@@ -547,6 +571,23 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(device.tracking_enabled)
             self.assertTrue(device.tracking_paused)
             self.assertFalse(device.has_target)
+            # Note: there may eventually be an AxisMotionState for paused
+            # tracking but Tekniker does not report it yet.
+            self.assertEqual(
+                device.motion_state(tai=device.actuator.path[-1].tai - 0.01),
+                AxisMotionState.STOPPING,
+            )
+            self.assertEqual(
+                device.motion_state(tai=device.actuator.path[-1].tai + 0.01),
+                AxisMotionState.TRACKING_PAUSED,
+            )
+
+            # Make sure the tracking timer does not fire
+            await asyncio.sleep(mtmount.mock.MAX_TRACKING_DELAY + 0.2)
+            self.assertTrue(device.power_on)
+            self.assertTrue(device.enabled)
+            self.assertTrue(device.tracking_enabled)
+            self.assertTrue(device.tracking_paused)
 
             # Un-pause tracking
             await self.run_command(enable_tracking_on_command)
@@ -555,6 +596,14 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(device.tracking_enabled)
             self.assertFalse(device.tracking_paused)
             self.assertFalse(device.has_target)
+            await self.run_command(
+                track_command_class(
+                    position=device.actuator.path[-1].position,
+                    velocity=1,
+                    tai=salobj.current_tai(),
+                )
+            )
+            self.assertEqual(device.motion_state(tai), AxisMotionState.TRACKING)
 
         # Check that stop disables tracking
         await self.run_command(stop_command)
@@ -563,6 +612,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.tracking_enabled)
         self.assertFalse(device.tracking_paused)
         self.assertFalse(device.has_target)
+        stop_end_tai = device.actuator.path[-1].tai
+        self.assertEqual(
+            device.motion_state(stop_end_tai - 0.01), AxisMotionState.STOPPING
+        )
+        self.assertEqual(
+            device.motion_state(stop_end_tai + 0.01), AxisMotionState.STOPPED
+        )
 
         # Check that drive_disable disables tracking
         # but does not turn off power.
@@ -621,7 +677,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         Parameters
         ----------
-        device : `MTMount.mock.BaseDevice`
+        device : `mtmount.mock.BaseDevice`
             Mock device to test.
         drive : `int` or `None`
             Value for ``drive`` argument of power commands.
@@ -630,7 +686,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.power_on)
         self.assertFalse(device.alarm_on)
 
-        device_prefix = device.device_id.name
+        device_prefix = device.system_id.name
         power_command_class = self.get_command_class(f"{device_prefix}_POWER")
         reset_alarm_command_class = self.get_command_class(
             f"{device_prefix}_RESET_ALARM"
@@ -644,13 +700,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         reset_alarm_command = reset_alarm_command_class()
 
         min_on_timeout = {
-            MTMount.DeviceId.MAIN_POWER_SUPPLY: 5,
-            MTMount.DeviceId.OIL_SUPPLY_SYSTEM: 900,
-        }.get(device.device_id, None)
+            System.MAIN_AXES_POWER_SUPPLY: 5,
+            System.OIL_SUPPLY_SYSTEM: 900,
+        }.get(device.system_id, None)
         min_off_timeout = {
-            MTMount.DeviceId.MAIN_POWER_SUPPLY: 0,
-            MTMount.DeviceId.OIL_SUPPLY_SYSTEM: 0,
-        }.get(device.device_id, None)
+            System.MAIN_AXES_POWER_SUPPLY: 0,
+            System.OIL_SUPPLY_SYSTEM: 0,
+        }.get(device.system_id, None)
 
         await self.run_command(power_command_on, min_timeout=min_on_timeout)
         self.assertTrue(device.power_on)
@@ -665,48 +721,67 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(device.power_on)
         self.assertFalse(device.alarm_on)
 
-    async def check_point_to_point_device(
+    async def check_deployable_device(
         self,
         device,
         power_on_command,
-        goto_min_command,
-        goto_max_command,
+        deploy_command,
+        retract_command,
         stop_command,
-        start_at_min,
+        start_deployed,
         move_min_timeout,
         power_on_min_timeout,
     ):
-        def assert_at_end(at_min):
-            """Assert the device is its min or max position."""
-            if at_min:
-                self.assertAlmostEqual(
-                    device.actuator.position(), device.actuator.min_position
-                )
-                self.assertAlmostEqual(
-                    device.actuator.end_position, device.actuator.min_position
-                )
-            else:
-                self.assertAlmostEqual(
-                    device.actuator.position(), device.actuator.max_position
-                )
-                self.assertAlmostEqual(
-                    device.actuator.end_position, device.actuator.max_position
-                )
-            self.assertFalse(device.actuator.moving())
+        def assert_motion_state(motion_state, tai=None):
+            if tai is None:
+                tai = salobj.current_tai()
+            position = device.actuator.position(tai)
+            velocity = device.actuator.velocity(tai)
+            actual_motion_state = device.motion_state(tai)
+            self.assertEqual(actual_motion_state, motion_state)
 
-        assert_at_end(at_min=start_at_min)
+            if motion_state == DeployableMotionState.DEPLOYED:
+                self.assertAlmostEqual(position, device.deployed_position)
+                self.assertEqual(velocity, 0)
+            elif motion_state == DeployableMotionState.RETRACTED:
+                self.assertAlmostEqual(position, device.retracted_position)
+                self.assertEqual(velocity, 0)
+            elif motion_state == DeployableMotionState.LOST:
+                self.assertNotAlmostEqual(position, device.deployed_position)
+                self.assertNotAlmostEqual(position, device.retracted_position)
+                self.assertEqual(velocity, 0)
+            elif motion_state == DeployableMotionState.DEPLOYING:
+                self.assertNotEqual(velocity, 0)
+                if device.deployed_position > device.retracted_position:
+                    self.assertGreater(velocity, 0)
+                else:
+                    self.assertLess(velocity, 0)
+            elif motion_state == DeployableMotionState.RETRACTING:
+                self.assertNotEqual(velocity, 0)
+                if device.deployed_position > device.retracted_position:
+                    self.assertLess(velocity, 0)
+                else:
+                    self.assertGreater(velocity, 0)
+            else:
+                self.fail(f"Unrecognized motion_state={motion_state}")
+
+        assert_motion_state(
+            DeployableMotionState.DEPLOYED
+            if start_deployed
+            else DeployableMotionState.RETRACTED
+        )
 
         # Test that moves fail if not powered on.
         # This failure happens before the command starts running,
         # so the should_fail argument is not relevant.
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                command=goto_min_command,
+                command=deploy_command,
                 min_timeout=move_min_timeout,
             )
         with self.assertRaises(RuntimeError):
             await self.run_command(
-                command=goto_max_command,
+                command=retract_command,
                 min_timeout=move_min_timeout,
             )
 
@@ -714,50 +789,40 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             command=power_on_command, min_timeout=power_on_min_timeout
         )
 
-        # Move to min position
-        await self.run_command(
-            command=goto_min_command,
-            min_timeout=0 if start_at_min else move_min_timeout,
-        )
-        assert_at_end(at_min=True)
+        # Deploy the device, if not already deployed.
+        if not start_deployed:
+            await self.run_command(
+                command=deploy_command,
+                min_timeout=move_min_timeout,
+            )
+            assert_motion_state(DeployableMotionState.DEPLOYED)
 
         # Stop should have no effect while halted
         await self.run_command(command=stop_command, min_timeout=None)
-        assert_at_end(at_min=True)
+        assert_motion_state(DeployableMotionState.DEPLOYED)
 
-        # Start a move to max and check that it is as expected
+        # Start retracting and check motion state
         task = asyncio.create_task(
-            self.run_command(command=goto_max_command, min_timeout=move_min_timeout)
+            self.run_command(command=retract_command, min_timeout=move_min_timeout)
         )
         await asyncio.sleep(0.1)  # Let the move begin
-        self.assertGreaterEqual(
-            device.actuator.position(), device.actuator.min_position
-        )
-        self.assertAlmostEqual(
-            device.actuator.end_position, device.actuator.max_position
-        )
-        self.assertTrue(device.actuator.moving())
+        assert_motion_state(DeployableMotionState.RETRACTING)
 
         await task
-        assert_at_end(at_min=False)
+        assert_motion_state(DeployableMotionState.RETRACTED)
 
-        # Move back to min but stop partway
+        # Start deploying and stop partway
         task = asyncio.create_task(
             self.run_command(
-                command=goto_min_command,
+                command=deploy_command,
                 min_timeout=move_min_timeout,
                 should_be_superseded=True,
             )
         )
         await asyncio.sleep(0.1)  # Let the move begin
-        self.assertLess(device.actuator.position(), device.actuator.max_position)
-        self.assertAlmostEqual(
-            device.actuator.end_position, device.actuator.min_position
-        )
-        self.assertTrue(device.actuator.moving())
+        assert_motion_state(DeployableMotionState.DEPLOYING)
         await self.run_command(command=stop_command, min_timeout=None)
-        self.assertLess(device.actuator.position(), device.actuator.max_position)
-        self.assertFalse(device.actuator.moving())
+        assert_motion_state(DeployableMotionState.LOST)
 
         await task
 
