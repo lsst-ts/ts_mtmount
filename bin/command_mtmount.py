@@ -34,4 +34,4 @@ import asyncio
 
 from lsst.ts import mtmount
 
-asyncio.run(mtmount.mtmountCommander.amain(index=0))
+asyncio.run(mtmount.MTMountCommander.amain(index=0))
