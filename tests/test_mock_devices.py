@@ -23,7 +23,7 @@ import asyncio
 import logging
 import unittest
 
-from lsst.ts import salobj
+from lsst.ts import utils
 from lsst.ts import mtmount
 from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState, System
 
@@ -386,7 +386,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             track_command_class(
                 position=device.actuator.min_position + 1,
                 velocity=0,
-                tai=salobj.current_tai(),
+                tai=utils.current_tai(),
             ),
         ]
         if is_elaz:
@@ -414,7 +414,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Do a point to point move
         self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
-        start_segment = device.actuator.path.at(salobj.current_tai())
+        start_segment = device.actuator.path.at(utils.current_tai())
         self.assertEqual(start_segment.velocity, 0)
         start_position = start_segment.position
         end_position = start_position + 2
@@ -425,7 +425,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(device.motion_state(), AxisMotionState.MOVING_POINT_TO_POINT)
         self.assertAlmostEqual(device.actuator.target.position, end_position)
         self.assertEqual(device.actuator.target.velocity, 0)
-        segment = device.actuator.path.at(salobj.current_tai())
+        segment = device.actuator.path.at(utils.current_tai())
         self.assertGreater(abs(segment.velocity), 0.01)
         self.assertTrue(device.has_target)
         self.assertTrue(device.moving_point_to_point)
@@ -433,7 +433,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         await task
         self.assertEqual(device.motion_state(), AxisMotionState.STOPPED)
-        end_segment = device.actuator.path.at(salobj.current_tai())
+        end_segment = device.actuator.path.at(utils.current_tai())
         self.assertAlmostEqual(end_segment.velocity, 0)
         self.assertAlmostEqual(end_segment.position, end_position)
         self.assertTrue(device.has_target)
@@ -461,7 +461,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         await self.run_command(stop_command)
         await task
         stop_end_tai = device.actuator.path[-1].tai
-        stop_duration = stop_end_tai - salobj.current_tai()
+        stop_duration = stop_end_tai - utils.current_tai()
         # Check STOPPING state; the specified tai can be any time
         # earlier than the end time of the stop.
         self.assertEqual(
@@ -476,7 +476,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         track_command = track_command_class(
             position=device.actuator.min_position + 1,
             velocity=0,
-            tai=salobj.current_tai(),
+            tai=utils.current_tai(),
         )
         with self.assertRaises(RuntimeError):
             await self.run_command(track_command)
@@ -507,11 +507,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Issue a few tracking commands; confirm that the actuator path
         # is updated accordingly.
-        tai0 = salobj.current_tai()
+        tai0 = utils.current_tai()
         previous_tai = tai0
         position0 = device.actuator.path[-1].position + 1
         for i in range(3):
-            tai = salobj.current_tai()
+            tai = utils.current_tai()
             if tai < previous_tai:
                 tai = previous_tai + 0.01
             previous_tai = tai
@@ -556,7 +556,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             track_command_class(
                 position=device.actuator.path[-1].position,
                 velocity=1,
-                tai=salobj.current_tai(),
+                tai=utils.current_tai(),
             )
         )
         self.assertTrue(device.has_target)
@@ -600,7 +600,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 track_command_class(
                     position=device.actuator.path[-1].position,
                     velocity=1,
-                    tai=salobj.current_tai(),
+                    tai=utils.current_tai(),
                 )
             )
             self.assertEqual(device.motion_state(tai), AxisMotionState.TRACKING)
@@ -734,7 +734,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
     ):
         def assert_motion_state(motion_state, tai=None):
             if tai is None:
-                tai = salobj.current_tai()
+                tai = utils.current_tai()
             position = device.actuator.position(tai)
             velocity = device.actuator.velocity(tai)
             actual_motion_state = device.motion_state(tai)

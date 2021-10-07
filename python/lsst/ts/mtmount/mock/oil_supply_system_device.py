@@ -21,7 +21,7 @@
 
 __all__ = ["OilSupplySystemDevice"]
 
-from lsst.ts import salobj
+from lsst.ts import utils
 from lsst.ts.idl.enums.MTMount import System
 from .base_device import BaseDevice
 
@@ -71,14 +71,14 @@ class OilSupplySystemDevice(BaseDevice):
         # The real system can take roughly 15 minutes
         # to bring the oil to an acceptable temperature.
         timeout = 15 * 60 if command.on else 1
-        return timeout, salobj.make_done_future()
+        return timeout, utils.make_done_future()
 
     def do_power_cooling(self, command):
         self.cooling_on = command.on
         # The real system can take roughly 15 minutes
         # to bring the oil to an acceptable temperature.
         timeout = 15 * 60 if command.on else 1
-        return timeout, salobj.make_done_future()
+        return timeout, utils.make_done_future()
 
     def do_power_main_pump(self, command):
         self.main_pump_on = command.on

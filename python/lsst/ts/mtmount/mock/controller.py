@@ -30,6 +30,7 @@ import signal
 
 import astropy.time
 
+from lsst.ts import utils
 from lsst.ts import salobj
 from lsst.ts import tcpip
 from lsst.ts.idl.enums.MTMount import (
@@ -71,7 +72,7 @@ def make_reply_dict(id, **parameters):
     """Make a reply dict."""
     return dict(
         id=enums.ReplyId(id),
-        timestamp=salobj.current_tai(),
+        timestamp=utils.current_tai(),
         parameters=parameters,
     )
 
@@ -684,7 +685,7 @@ class Controller:
 
         Warning: the telemetry is minimal and simplistic.
         """
-        tai = salobj.current_tai()
+        tai = utils.current_tai()
         for system_id in (
             System.AZIMUTH,
             System.ELEVATION,
