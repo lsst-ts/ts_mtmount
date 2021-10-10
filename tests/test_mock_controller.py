@@ -516,6 +516,81 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         list(reply.elementState)
                         == [DeployableMotionState.RETRACTED] * 2
                     )
+                elif reply.id == mtmount.ReplyId.DETAILED_SETTINGS_APPLIED:
+                    # Make a dict that only has the parameters
+                    # (no "id" or "timestamp" field)
+                    reply_dict = vars(reply)
+                    del reply_dict["id"]
+                    del reply_dict["timestamp"]
+                    assert reply_dict == self.controller.detailed_settings
+
+                    ccw_actuator = self.controller.device_dict[
+                        System.CAMERA_CABLE_WRAP
+                    ].actuator
+                    ccw_limits = mtmount.LimitsDict[System.CAMERA_CABLE_WRAP]
+                    ccw_settings = reply.CW["CCW"]
+                    assert ccw_settings["MinPosition"] == ccw_limits.min_position
+                    assert ccw_settings["MaxPosition"] == ccw_limits.max_position
+                    assert ccw_settings["MaxSpeed"] == ccw_limits.max_velocity
+                    assert (
+                        ccw_settings["MaxAcceleration"] == ccw_limits.max_acceleration
+                    )
+                    assert ccw_settings["TrackingSpeed"] == ccw_actuator.max_velocity
+                    assert (
+                        ccw_settings["TrackingAcceleration"]
+                        == ccw_actuator.max_acceleration
+                    )
+
+                    for axis_name, system_id in (
+                        ("Azimuth", System.AZIMUTH),
+                        ("Elevation", System.ELEVATION),
+                    ):
+                        axis_limits = mtmount.LimitsDict[system_id]
+                        axis_actuator = self.controller.device_dict[system_id].actuator
+                        axis_settings = reply.MainAxis[axis_name]
+                        for limit_enable_name in (
+                            "LimitsMinPositionEnable",
+                            "LimitsMaxPositionEnable",
+                            "LimitsNegativeSoftwareLimitEnable",
+                            "LimitsPositiveSoftwareLimitEnable",
+                            "LimitsNegativeAdjustableSoftwareLimitEnable",
+                            "LimitsPositiveAdjustableSoftwareLimitEnable",
+                            "LimitsNegativeLimitSwitchEnable",
+                            "LimitsPositiveLimitSwitchEnable",
+                        ):
+                            assert axis_settings[limit_enable_name]
+                        for limit_enable_name in (
+                            "LimitsNegativeOperationalLimitSwitchEnable",
+                            "LimitsPositiveOperationalLimitSwitchEnable",
+                        ):
+                            if axis_name == "Azimuth":
+                                # Azimuth has no operational L2 limits,
+                                # but still reports this setting.
+                                assert not axis_settings[limit_enable_name]
+                            else:
+                                assert axis_settings[limit_enable_name]
+                        assert (
+                            axis_settings["LimitsMinPositionValue"]
+                            == axis_limits.min_position
+                        )
+                        assert (
+                            axis_settings["LimitsMaxPositionValue"]
+                            == axis_limits.max_position
+                        )
+                        assert axis_settings["TcsMaxSpeed"] == axis_limits.max_velocity
+                        assert (
+                            axis_settings["TcsMaxAcceleration"]
+                            == axis_limits.max_acceleration
+                        )
+                        assert (
+                            axis_settings["SoftmotionTrackingMaxSpeed"]
+                            == axis_actuator.max_velocity
+                        )
+                        assert (
+                            axis_settings["SoftmotionTrackingMaxAcceleration"]
+                            == axis_actuator.max_acceleration
+                        )
+
                 elif reply.id == mtmount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE:
                     assert reply.state == ElevationLockingPinMotionState.UNLOCKED
                     assert (
