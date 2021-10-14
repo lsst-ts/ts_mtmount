@@ -35,7 +35,7 @@ __all__ = [
 import abc
 import enum
 
-from lsst.ts import salobj
+from lsst.ts import utils
 from . import enums
 
 
@@ -289,7 +289,7 @@ class TimestampFieldInfo(FloatFieldInfo):
 
     @property
     def default(self):
-        return salobj.current_tai()
+        return utils.current_tai()
 
 
 class CommandCodeFieldInfo(FixedEnumFieldInfo):

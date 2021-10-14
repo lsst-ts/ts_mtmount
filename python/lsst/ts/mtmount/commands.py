@@ -85,7 +85,7 @@ from lsst.ts import salobj
 from . import base_message
 from . import enums
 from . import field_info
-from . import utils
+from .utils import wrap_parameter_doc
 
 MAX_SEQUENCE_ID = (1 << 31) - 1
 
@@ -124,7 +124,7 @@ def make_command_doc(cls):
     """Make and attach a doc string to a command class."""
     param_strings = []
     for finfo in cls.field_infos:
-        param_doc = utils.wrap_parameter_doc(finfo.doc)
+        param_doc = wrap_parameter_doc(finfo.doc)
         is_optional = finfo.default is not None or finfo.name == "sequence_id"
         optional_str = ", optional" if is_optional else ""
         param_strings.append(
