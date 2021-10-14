@@ -6,18 +6,35 @@
 Version History
 ###############
 
+v0.19.1
+-------
+
+Changes:
+
+* Use ts_utils.
+* Fix tests/test_csc.py; two tests were failing because they did not provide regular rotation telemetry.
+* Fix a typo in bin/command_mtmount.py.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 10.0
+
 v0.19.0
 -------
 
 Changes:
 
-* Added support for all but one of the new low-level controller events.
+* Add support for all but one of the new low-level controller events.
   The one missing event is DETAILED_SETTINGS_APPLIED;
   its documentation is incomplete and we need to decide which of the many fields to publish.
   This version requires ts_xml 10.0 and ts_idl 3.2.
 * Lock the low-level TCP/IP stream for a few more commands,
   to reduce the chance of sending a command that will be rejected.
-* Renamed the package from ts_MTMount to ts_mtmount,
+* Rename the package from ts_MTMount to ts_mtmount,
   and the Python namespace from lsst.ts.MTMount to lsst.ts.mtmount.
 
 Requires:
