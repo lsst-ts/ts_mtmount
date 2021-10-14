@@ -45,12 +45,11 @@ class Limits:
         self.max_velocity = max_velocity
         self.max_acceleration = max_acceleration
 
-    def scaled(self, factor=1.01):
+    def scaled(self, factor=1.1):
         """Return a copy scaled by the specified factor.
 
         Intended for use in mock axis controllers, because the actuator
-        soft limits should be slighly larger than the limits
-        allowed by the CSC.
+        limits should be larger than the command limits allowed by the CSC.
         """
         return Limits(
             min_position=self.min_position * factor,
@@ -60,6 +59,8 @@ class Limits:
         )
 
 
+# Command limits (the CSC does not actually command velocity or acceleration,
+# but in theory it could).
 LimitsDict = {
     # From LTS-103.
     enums.DeviceId.ELEVATION_AXIS: Limits(
@@ -69,8 +70,9 @@ LimitsDict = {
     enums.DeviceId.AZIMUTH_AXIS: Limits(
         min_position=-270, max_position=270, max_velocity=7.0, max_acceleration=7.0
     ),
-    # From LTS-218.
+    # From the EUI 2021-10-14 (note that velocity and acceleration
+    # are larger than LTS-218).
     enums.DeviceId.CAMERA_CABLE_WRAP: Limits(
-        min_position=-90, max_position=90, max_velocity=4.0, max_acceleration=1.5
+        min_position=-90.5, max_position=90.5, max_velocity=5.0, max_acceleration=4.0
     ),
 }
