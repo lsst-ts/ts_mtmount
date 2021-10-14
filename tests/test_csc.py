@@ -227,13 +227,86 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 cscVersion=mtmount.__version__,
                 subsystemVersions="",
             )
+            await self.assert_next_sample(
+                topic=self.remote.evt_appliedSettingsMatchStart,
+                appliedSettingsMatchStartIsTrue=True,
+            )
+            for axis_name in ("Azimuth", "Elevation"):
+                system_id = getattr(System, axis_name.upper())
+                topic = getattr(
+                    self.remote, f"evt_{axis_name.lower()}ControllerSettings"
+                )
+                axis_actuator = self.mock_controller.device_dict[system_id].actuator
+                axis_settings = self.mock_controller.detailed_settings["MainAxis"][
+                    axis_name
+                ]
+                axis_limits = mtmount.LimitsDict[system_id]
+                if axis_name == "Elevation":
+                    extra_elevation_fields = dict(
+                        minOperationalL2LimitEnabled=True,
+                        maxOperationalL2LimitEnabled=True,
+                    )
+                else:
+                    extra_elevation_fields = dict()
+                await self.assert_next_sample(
+                    topic=topic,
+                    minCmdPositionEnabled=True,
+                    maxCmdPositionEnabled=True,
+                    minL1LimitEnabled=True,
+                    maxL1LimitEnabled=True,
+                    minOperationalL1LimitEnabled=True,
+                    maxOperationalL1LimitEnabled=True,
+                    minL2LimitEnabled=True,
+                    maxL2LimitEnabled=True,
+                    minCmdPosition=axis_limits.min_position,
+                    maxCmdPosition=axis_limits.max_position,
+                    minL1Limit=axis_settings[
+                        "LimitsNegativeAdjustableSoftwareLimitValue"
+                    ],
+                    maxL1Limit=axis_settings[
+                        "LimitsPositiveAdjustableSoftwareLimitValue"
+                    ],
+                    maxCmdVelocity=axis_limits.max_velocity,
+                    maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
+                    maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
+                    maxMoveJerk=axis_settings["TcsDefaultJerk"],
+                    maxTrackingVelocity=axis_actuator.max_velocity,
+                    maxTrackingAcceleration=axis_actuator.max_acceleration,
+                    maxTrackingJerk=axis_settings["SoftmotionTrackingMaxJerk"],
+                    **extra_elevation_fields,
+                )
+            ccw_actuator = self.mock_controller.device_dict[
+                System.CAMERA_CABLE_WRAP
+            ].actuator
+            ccw_limits = mtmount.LimitsDict[System.CAMERA_CABLE_WRAP]
+            ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]
+            await self.assert_next_sample(
+                topic=self.remote.evt_cameraCableWrapControllerSettings,
+                l1LimitsEnabled=True,
+                l2LimitsEnabled=True,
+                minCmdPosition=ccw_limits.min_position,
+                maxCmdPosition=ccw_limits.max_position,
+                minL1Limit=ccw_settings["MinSoftwareLimit"],
+                maxL1Limit=ccw_settings["MaxSoftwareLimit"],
+                maxCmdVelocity=ccw_limits.max_velocity,
+                maxMoveVelocity=ccw_settings["DefaultSpeed"],
+                maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
+                maxMoveJerk=ccw_settings["DefaultJerk"],
+                maxTrackingVelocity=ccw_actuator.max_velocity,
+                maxTrackingAcceleration=ccw_actuator.max_acceleration,
+                maxTrackingJerk=ccw_settings["TrackingJerk"],
+            )
 
-            settings = self.mock_controller.available_settings
+            available_settings = self.mock_controller.available_settings
             await self.assert_next_sample(
                 topic=self.remote.evt_availableSettings,
-                names=", ".join(item["name"] for item in settings),
-                createdDates=", ".join(item["createdDate"].iso for item in settings),
-                modifiedDates=", ".join(item["modifiedDate"].iso for item in settings),
+                names=", ".join(item["name"] for item in available_settings),
+                createdDates=", ".join(
+                    item["createdDate"].iso for item in available_settings
+                ),
+                modifiedDates=", ".join(
+                    item["modifiedDate"].iso for item in available_settings
+                ),
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=False
