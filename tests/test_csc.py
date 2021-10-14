@@ -514,6 +514,40 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.mock_controller.command_queue.get(), timeout=timeout
         )
 
+    @contextlib.asynccontextmanager
+    async def fake_rotation_loop(self, rotator, position=0, velocity=0, interval=0.2):
+        """Publish regular MTRotator rotation telemetry messages.
+
+        Parameters
+        ----------
+        rotator : `Remote`
+            MTRotator remote
+        position : `float`, optional
+            Position (deg)
+        velocity : `float`, optional
+            Velocity (deg/sec)
+        interval : `float`, optional
+            Interval between rotator updates (second)
+        """
+
+        async def _implement_loop(rotator, position, velocity, interval):
+            while True:
+                print("put fake rotation")
+                self.put_fake_rotation(
+                    rotator=rotator, position=position, velocity=velocity
+                )
+                await asyncio.sleep(interval)
+
+        loop_task = asyncio.create_task(
+            _implement_loop(
+                rotator=rotator, position=position, velocity=velocity, interval=interval
+            )
+        )
+        try:
+            yield
+        finally:
+            loop_task.cancel()
+
     def put_fake_rotation(self, rotator, position=0, velocity=0, tai=None):
         """Publish one MTRotator rotation telemetry message.
 
@@ -523,9 +557,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             MTRotator remote
         position : `float`, optional
             Position (deg)
-        velocity : `float`
+        velocity : `float`, optional
             Velocity (deg/sec)
-        tai : `float` or `None`
+        tai : `float` or `None`, optional
             Date as TAI unix seconds; current time if None
         """
         if tai is None:
@@ -901,8 +935,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def test_move_to_target(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
             name="MTRotator"
-        ) as rotator:
-            self.put_fake_rotation(rotator=rotator)
+        ) as rotator, self.fake_rotation_loop(rotator=rotator):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
@@ -1037,9 +1070,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def test_tracking(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
             name="MTRotator"
-        ) as rotator:
-            self.put_fake_rotation(rotator=rotator)
-
+        ) as rotator, self.fake_rotation_loop(rotator=rotator):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
