@@ -21,7 +21,7 @@
 
 __all__ = ["DeployableDevice"]
 
-from lsst.ts import salobj
+from lsst.ts import utils
 from lsst.ts.idl.enums.MTMount import DeployableMotionState
 
 from .point_to_point_device import PointToPointDevice
@@ -107,7 +107,7 @@ class DeployableDevice(PointToPointDevice):
             Motion state.
         """
         if tai is None:
-            tai = salobj.current_tai()
+            tai = utils.current_tai()
         velocity = self.actuator.velocity(tai)
         position = self.actuator.position(tai)
         if velocity == 0:

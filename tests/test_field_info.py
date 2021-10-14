@@ -22,7 +22,7 @@
 import enum
 import unittest
 
-from lsst.ts import salobj
+from lsst.ts import utils
 from lsst.ts import mtmount
 
 
@@ -185,9 +185,9 @@ class FieldInfoTestCase(unittest.TestCase):
 
     def test_timestamp_field_info(self):
         field_info = mtmount.field_info.TimestampFieldInfo()
-        t0 = salobj.current_tai()
+        t0 = utils.current_tai()
         default = field_info.default
-        t1 = salobj.current_tai()
+        t1 = utils.current_tai()
         self.assertEqual(field_info.name, "timestamp")
         # The constant works around a non-monotonic time bug in macOS Docker.
         self.assertLessEqual(t0 - 0.2, default)

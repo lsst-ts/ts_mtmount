@@ -23,7 +23,7 @@ __all__ = ["MAX_TRACKING_DELAY", "AxisDevice"]
 
 import asyncio
 
-from lsst.ts import salobj
+from lsst.ts import utils
 from lsst.ts import simactuators
 from lsst.ts.idl.enums.MTMount import AxisMotionState, System
 from .. import limits
@@ -150,7 +150,7 @@ class AxisDevice(BaseDevice):
         """Do most of the work for monitor_move_command."""
         # Provide some slop for non-monotonic clocks, which are
         # sometimes seen when running Docker on macOS.
-        duration = 0.2 + self.end_tai - salobj.current_tai()
+        duration = 0.2 + self.end_tai - utils.current_tai()
         await asyncio.sleep(duration)
         if not self._move_result_task.done():
             self._move_result_task.set_result(None)
@@ -283,7 +283,7 @@ class AxisDevice(BaseDevice):
             Motion state.
         """
         if tai is None:
-            tai = salobj.current_tai()
+            tai = utils.current_tai()
         kind = self.actuator.kind(tai)
         motion_state = {
             self.actuator.Kind.Stopping: AxisMotionState.STOPPING,
@@ -328,7 +328,7 @@ class AxisDevice(BaseDevice):
         self.supersede_move_command(command)
         self.moving_point_to_point = True
         self.point_to_point_target = position
-        tai = salobj.current_tai()
+        tai = utils.current_tai()
         self.actuator.set_target(tai=tai, position=position, velocity=0)
         self.has_target = True
         timeout = self.end_tai - tai
@@ -342,7 +342,7 @@ class AxisDevice(BaseDevice):
         (if tracking is not paused).
         """
         self._tracking_timeout_task.cancel()
-        duration = MAX_TRACKING_DELAY + command.tai - salobj.current_tai()
+        duration = MAX_TRACKING_DELAY + command.tai - utils.current_tai()
         if duration <= 0:
             raise RuntimeError(f"track command too late by {-duration:0.2} seconds")
         self._tracking_timeout_task = asyncio.create_task(

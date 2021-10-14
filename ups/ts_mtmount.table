@@ -1,4 +1,5 @@
 setupRequired(sconsUtils)
+setupRequired(ts_utils)
 setupRequired(ts_salobj)
 setupRequired(ts_tcpip)
 setupRequired(ts_simactuators)

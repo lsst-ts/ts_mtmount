@@ -30,6 +30,7 @@ import signal
 import subprocess
 import types
 
+from lsst.ts import utils
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import AxisMotionState, PowerState, System
 from .config_schema import CONFIG_SCHEMA
@@ -237,21 +238,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.has_control = False
 
         # Task that waits while connecting to the TCP/IP controller.
-        self.connect_task = salobj.make_done_future()
+        self.connect_task = utils.make_done_future()
 
         # Task to track enabling and disabling
-        self.enable_task = salobj.make_done_future()
-        self.disable_task = salobj.make_done_future()
+        self.enable_task = utils.make_done_future()
+        self.disable_task = utils.make_done_future()
 
         self.mock_controller_started_task = asyncio.Future()
-        self.monitor_telemetry_client_task = salobj.make_done_future()
+        self.monitor_telemetry_client_task = utils.make_done_future()
 
         # Tasks for camera cable wrap following the rotator
-        self.camera_cable_wrap_follow_start_task = salobj.make_done_future()
-        self.camera_cable_wrap_follow_loop_task = salobj.make_done_future()
+        self.camera_cable_wrap_follow_start_task = utils.make_done_future()
+        self.camera_cable_wrap_follow_loop_task = utils.make_done_future()
 
         # Task for self.read_loop
-        self.read_loop_task = salobj.make_done_future()
+        self.read_loop_task = utils.make_done_future()
 
         # Is camera rotator actual position - demand position
         # greater than config.max_rotator_position_error?
@@ -465,7 +466,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             flush=True, timeout=ROTATOR_TELEMETRY_TIMEOUT
         )
 
-        desired_tai = salobj.current_tai() + self.config.camera_cable_wrap_advance_time
+        desired_tai = utils.current_tai() + self.config.camera_cable_wrap_advance_time
         dt = rot_data.timestamp - desired_tai
 
         if (
@@ -1143,7 +1144,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.evt_target.set_put(
                     elevation=reply.position,
                     elevationVelocity=0,
-                    taiTime=salobj.current_tai(),
+                    taiTime=utils.current_tai(),
                     trackId=0,
                     tracksys="LOCAL",
                     radesys="",
@@ -1154,7 +1155,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.evt_target.set_put(
                     azimuth=reply.position,
                     azimuthVelocity=0,
-                    taiTime=salobj.current_tai(),
+                    taiTime=utils.current_tai(),
                     trackId=0,
                     tracksys="LOCAL",
                     radesys="",
@@ -1388,12 +1389,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 return
 
             self.log.info("Waiting for mock controller to start")
-            t0 = salobj.current_tai()
+            t0 = utils.current_tai()
             self.command_port, self.telemetry_port = await asyncio.wait_for(
                 self._wait_for_mock_controller(),
                 timeout=MOCK_CTRL_START_TIMEOUT,
             )
-            dt = salobj.current_tai() - t0
+            dt = utils.current_tai() - t0
             self.log.info(
                 f"Mock controller running with command_port={self.command_port} "
                 f"telemetry_port={self.telemetry_port}; {dt:0.1f} seconds to start"
