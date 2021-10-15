@@ -19,9 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = [
-    "wrap_parameter_doc",
-]
+__all__ = ["truncate_value", "wrap_parameter_doc"]
 
 import textwrap
 
@@ -32,6 +30,32 @@ MAX_DOC_LENGTH = 79
 _ParamWrapper = textwrap.TextWrapper(
     width=MAX_DOC_LENGTH, initial_indent="    ", subsequent_indent="    "
 )
+
+
+def truncate_value(value, min_value, max_value, descr):
+    """Truncate a value, if necessary.
+
+    Returns
+    -------
+    A tuple:
+    - truncated_value: one of value, min_value, or max_value, as appropriate.
+    - message in format f"{descr} from {value:0.2f} to {truncated_value:0.2f}"
+      or "" if the value is not truncated.
+
+    Raises
+    ------
+    ValueError
+        If min_value >= max_value.
+    """
+    if min_value >= max_value:
+        raise ValueError(
+            f"Invalid {descr} limits: min_value={min_value} >= {max_value}=max_value"
+        )
+    if value < min_value:
+        return (min_value, f"{descr} from {value:0.2f} to {min_value:0.2f}")
+    elif value > max_value:
+        return (max_value, f"{descr} from {value:0.2f} to {max_value:0.2f}")
+    return value, ""
 
 
 def wrap_parameter_doc(text):
