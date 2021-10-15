@@ -82,9 +82,11 @@ properties:
     default: 0.1
 required:
   - host
+  - telemetry_host
   - connection_timeout
   - ack_timeout
   - camera_cable_wrap_advance_time
+  - camera_cable_wrap_interval
   - max_rotator_position_error
 additionalProperties: false
 """
