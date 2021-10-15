@@ -6,6 +6,18 @@
 Version History
 ###############
 
+ccw_only 6
+----------
+
+Changes:
+
+* Update the hard-coded command LimitsDict for the camera cable wrap to match the current values.
+* Limit the camera cable wrap commanded position to be within acceptable limits, taking into account the new config fields.
+  Use the hard-coded LimitsDict for this purpose, because the low-level controller does not publish the information.
+* Update to use ts_utils.
+* Modernize the unit tests to use bare assert and a few pytest functions.
+* Renamed LimitsDict to CmdLimitsDict.
+
 ccw_only 5
 ----------
 
