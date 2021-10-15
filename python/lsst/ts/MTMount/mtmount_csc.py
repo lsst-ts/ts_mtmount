@@ -22,7 +22,6 @@
 __all__ = ["MTMountCsc"]
 
 import asyncio
-import math
 import re
 import signal
 import subprocess
@@ -36,6 +35,7 @@ from . import commands
 from . import enums
 from . import limits
 from . import replies
+from .utils import truncate_value
 from . import __version__
 
 # Extra time to wait for commands to be done (sec)
@@ -346,17 +346,40 @@ class MTMountCsc(salobj.ConfigurableCsc):
             desired_position = rot_data.demandPosition
             desired_velocity = rot_data.demandVelocity
 
-        max_velocity = limits.LimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP].max_velocity
+        ccw_limits = limits.LimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP]
 
-        if abs(desired_velocity) > max_velocity:
-            excessive_desired_velocity = desired_velocity
-            desired_velocity = math.copysign(max_velocity, desired_velocity)
+        # List of warning strings about truncated position and velocity
+        # (in that order).
+        truncation_warnings = []
+
+        desired_velocity, warning_message = truncate_value(
+            value=desired_velocity,
+            min_value=-ccw_limits.max_velocity,
+            max_value=ccw_limits.max_velocity,
+            descr="velocity",
+        )
+        if warning_message:
+            truncation_warnings.append(warning_message)
+
+        # Adjust the desired position for the time offset,
+        # then truncate it to be in bounds.
+        adjusted_desired_position = desired_position + desired_velocity * dt
+
+        adjusted_desired_position, warning_message = truncate_value(
+            value=adjusted_desired_position,
+            min_value=ccw_limits.min_position,
+            max_value=ccw_limits.max_position,
+            descr="position",
+        )
+        if warning_message:
+            truncation_warnings.insert(0, warning_message)
+
+        if truncation_warnings:
             self.log.warning(
-                f"Limiting desired velocity from {excessive_desired_velocity:0.2f} "
-                f"to {desired_velocity:0.2f}"
+                "Limiting camera cable wrap commanded "
+                + " and ".join(truncation_warnings)
             )
 
-        adjusted_desired_position = desired_position + desired_velocity * dt
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
