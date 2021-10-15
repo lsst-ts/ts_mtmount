@@ -23,8 +23,8 @@ __all__ = ["AxisDevice"]
 
 import asyncio
 
-from lsst.ts import salobj
 from lsst.ts import simactuators
+from lsst.ts import utils
 from .. import enums
 from .. import limits
 from .base_device import BaseDevice
@@ -123,7 +123,7 @@ class AxisDevice(BaseDevice):
         """Do most of the work for monitor_move_command."""
         # Provide some slop for non-monotonic clocks, which are
         # sometimes seen when running Docker on macOS.
-        duration = 0.2 + self.end_tai - salobj.current_tai()
+        duration = 0.2 + self.end_tai - utils.current_tai()
         await asyncio.sleep(duration)
 
     def supersede_move_command(self):
@@ -270,7 +270,7 @@ class AxisDevice(BaseDevice):
         self.assert_enabled()
         self.assert_tracking_enabled(False)
         self.supersede_move_command()
-        tai = salobj.current_tai()
+        tai = utils.current_tai()
         self.actuator.set_target(tai=tai, position=position, velocity=0)
         self.has_target = True
         self.monitor_move_command(command)

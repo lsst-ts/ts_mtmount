@@ -27,8 +27,8 @@ import json
 import logging
 import signal
 
-from lsst.ts import salobj
 from lsst.ts import tcpip
+from lsst.ts import utils
 from .. import commands
 from .. import constants
 from .. import enums
@@ -126,14 +126,14 @@ class Controller:
         telemetry_port = 0 if random_ports else constants.TELEMETRY_PORT
         self.command_server = tcpip.OneClientServer(
             name="MockControllerCommands",
-            host=salobj.LOCAL_HOST,
+            host=tcpip.LOCAL_HOST,
             port=command_port,
             log=self.log,
             connect_callback=self.command_connect_callback,
         )
         self.telemetry_server = tcpip.OneClientServer(
             name="MockControllerTelemetry",
-            host=salobj.LOCAL_HOST,
+            host=tcpip.LOCAL_HOST,
             port=telemetry_port,
             log=self.log,
             connect_callback=self.telemetry_connect_callback,
@@ -262,7 +262,7 @@ class Controller:
         """Warning: this minimal and simplistic."""
         try:
             while self.telemetry_server.connected:
-                tai = salobj.current_tai()
+                tai = utils.current_tai()
                 await self.put_axis_telemetry(
                     device_id=enums.DeviceId.AZIMUTH_AXIS, tai=tai
                 )

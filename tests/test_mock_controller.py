@@ -29,6 +29,7 @@ import unittest.mock
 
 from lsst.ts import salobj
 from lsst.ts import mtmount
+from lsst.ts import utils
 
 START_TIMEOUT = 20  # Time for startup (sec)
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
@@ -352,7 +353,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(device.enabled)
             self.assertTrue(device.tracking_enabled)
             track_command = mtmount.commands.AzimuthAxisTrack(
-                position=45, velocity=0, tai=salobj.current_tai()
+                position=45, velocity=0, tai=utils.current_tai()
             )
             await self.run_command(
                 track_command, read_done=False, use_read_loop=use_read_loop
@@ -457,7 +458,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 }[topic_id]
                 device = self.controller.device_dict[device_id]
                 # Work around Docker time issues on macOS with an offset
-                tai0 = salobj.current_tai() - 0.1
+                tai0 = utils.current_tai() - 0.1
                 axis_telem = await self.next_telemetry(topic_id)
                 for name in (
                     "angleActual",
@@ -475,7 +476,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 self.assertGreater(axis_telem["timestamp"], tai0)
 
             # Work around Docker time issues on macOS with an offset
-            tai0 = salobj.current_tai() - 0.1
+            tai0 = utils.current_tai() - 0.1
             ccw_telem = await self.next_telemetry(
                 mtmount.TelemetryTopicId.CAMERA_CABLE_WRAP
             )
@@ -513,12 +514,12 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(device.enabled)
             self.assertTrue(device.tracking_enabled)
 
-            start_position = device.actuator.path.at(salobj.current_tai()).position
+            start_position = device.actuator.path.at(utils.current_tai()).position
             end_position = start_position + 3
             previous_tai = 0
             # Send tracking updates until an InPosition reply is seen.
             while True:
-                tai = salobj.current_tai()
+                tai = utils.current_tai()
                 # Work around non-monotonic clocks, which are
                 # sometimes seen when running Docker on macOS.
                 if tai <= previous_tai:
@@ -584,7 +585,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(device.enabled)
             self.assertFalse(device.tracking_enabled)
 
-            start_position = device.actuator.path.at(salobj.current_tai()).position
+            start_position = device.actuator.path.at(utils.current_tai()).position
             end_position = start_position + 1
             move_command = mtmount.commands.ElevationAxisMove(position=end_position)
             estimated_move_time = 2  # seconds

@@ -42,6 +42,7 @@ import traceback
 
 from lsst.ts import salobj
 from lsst.ts import simactuators
+from lsst.ts import utils
 
 from . import constants
 from . import command_futures
@@ -105,9 +106,9 @@ class TmaCommander:
         self.log.setLevel(log_level)
 
         self.done_task = asyncio.Future()
-        self.command_loop_task = salobj.make_done_future()
-        self.read_loop_task = salobj.make_done_future()
-        self.tracking_task = salobj.make_done_future()
+        self.command_loop_task = utils.make_done_future()
+        self.read_loop_task = utils.make_done_future()
+        self.tracking_task = utils.make_done_future()
 
         # Dict of command_id: CommandFuture
         self.command_futures_dict = dict()
@@ -329,7 +330,7 @@ ask_for_command 1
             info.name: info.value_from_str(arg) for arg, info in zip(args, arg_infos)
         }
         if has_tai_argument:
-            kwargs["tai"] = salobj.current_tai()
+            kwargs["tai"] = utils.current_tai()
 
         cmd = CommandClass(**kwargs)
         await self.write_command(cmd)

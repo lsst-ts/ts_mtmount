@@ -22,7 +22,7 @@
 __all__ = ["MainPowerSupplyDevice"]
 
 
-from lsst.ts import salobj
+from lsst.ts import utils
 from .. import enums
 from .base_device import BaseDevice
 
@@ -50,4 +50,4 @@ class MainPowerSupplyDevice(BaseDevice):
         super().do_power(command)
         # The real system takes about 2 minutes to turn on.
         timeout = 120 if command.on else 0
-        return timeout, salobj.make_done_future()
+        return timeout, utils.make_done_future()

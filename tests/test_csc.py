@@ -28,6 +28,7 @@ import unittest
 
 from lsst.ts import salobj
 from lsst.ts import mtmount
+from lsst.ts import utils
 
 STD_TIMEOUT = 10  # standard command timeout (sec)
 # timeout for opening or closing mirror covers (sec)
@@ -204,7 +205,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     ):
         """Make keyword argumetns for the trackTarget command."""
         if taiTime is None:
-            taiTime = salobj.current_tai()
+            taiTime = utils.current_tai()
         return dict(
             azimuth=azimuth,
             elevation=elevation,
@@ -256,11 +257,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 # Test regular tracking mode. CCW and MTRotator start in sync.
                 position0 = 0.0
                 velocity = 0.1
-                tai0 = salobj.current_tai()
+                tai0 = utils.current_tai()
                 num_rotator_samples = 10
                 previous_tai = 0
                 for i in range(num_rotator_samples):
-                    tai = salobj.current_tai()
+                    tai = utils.current_tai()
                     # Work around non-monotonic clocks, which are
                     # sometimes seen when running Docker on macOS.
                     if tai < previous_tai:
@@ -276,7 +277,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         timestamp=tai,
                     )
                     command = await self.next_lowlevel_command()
-                    delay = salobj.current_tai() - tai
+                    delay = utils.current_tai() - tai
                     self.assertEqual(
                         command.command_code,
                         mtmount.CommandCode.CAMERA_CABLE_WRAP_TRACK,
@@ -329,7 +330,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         demandAcceleration=0,
                         actualPosition=45,
                         actualVelocity=1,
-                        timestamp=salobj.current_tai(),
+                        timestamp=utils.current_tai(),
                     )
                     await asyncio.sleep(0.1)
                 self.assertTrue(self.mock_controller.command_queue.empty())
@@ -404,7 +405,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 mtmount.DeviceId.ELEVATION_AXIS
             ]
 
-            tai = salobj.current_tai()
+            tai = utils.current_tai()
             azimuth_pvt = mock_azimuth.actuator.path.at(tai)
             elevation_pvt = mock_elevation.actuator.path.at(tai)
             self.assertAlmostEqual(elevation_pvt.velocity, 0)
@@ -433,7 +434,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             await asyncio.sleep(0.1)  # Give the command a chance to start
             # Print move duration; the elevation move will take longer
-            duration = mock_elevation.end_tai - salobj.current_tai()
+            duration = mock_elevation.end_tai - utils.current_tai()
             print(f"axis move duration={duration:0.2f} sec")
             await self.assert_next_sample(
                 topic=self.remote.evt_azimuthInPosition, inPosition=True
@@ -442,7 +443,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 topic=self.remote.evt_elevationInPosition, inPosition=True
             )
             await task
-            tai = salobj.current_tai()
+            tai = utils.current_tai()
             elevation_pvt = mock_elevation.actuator.path.at(tai)
             azimuth_pvt = mock_azimuth.actuator.path.at(tai)
             self.assertAlmostEqual(azimuth_pvt.position, target_azimuth)
@@ -481,7 +482,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             self.assertFalse(mock_azimuth.tracking_enabled)
             self.assertFalse(mock_elevation.tracking_enabled)
 
-            tai = salobj.current_tai()
+            tai = utils.current_tai()
             initial_azimuth = mock_azimuth.actuator.path.at(tai).position
             initial_elevation = mock_elevation.actuator.path.at(tai).position
 
@@ -551,11 +552,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         azimuth_actuator = mock_azimuth.actuator
         elevation_actuator = mock_elevation.actuator
 
-        initial_tai = salobj.current_tai()
+        initial_tai = utils.current_tai()
         previous_tai = 0
         while True:
             await asyncio.sleep(0.1)
-            tai = salobj.current_tai()
+            tai = utils.current_tai()
             # Work around non-monotonic clocks, which are
             # sometimes seen when running Docker on macOS.
             if tai < previous_tai:

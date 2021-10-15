@@ -26,6 +26,7 @@ import dataclasses
 
 from lsst.ts import salobj
 from lsst.ts import simactuators
+from lsst.ts import utils
 
 STD_TIMEOUT = 2
 
@@ -55,7 +56,7 @@ class MTMountCommander(salobj.CscCommander):
         for command_to_ignore in ("abort", "setValue"):
             self.command_dict.pop(command_to_ignore, None)
 
-        self.tracking_task = salobj.make_done_future()
+        self.tracking_task = utils.make_done_future()
 
         ramp_arg_names = list(RampArgs.__dataclass_fields__)
         self.help_dict["ramp"] = " ".join(ramp_arg_names) + " # track a ramp"
