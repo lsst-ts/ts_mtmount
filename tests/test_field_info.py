@@ -22,6 +22,8 @@
 import enum
 import unittest
 
+import pytest
+
 from lsst.ts import utils
 from lsst.ts import mtmount
 
@@ -53,8 +55,8 @@ class FieldInfoTestCase(unittest.TestCase):
             name = self.name
         if doc is None:
             doc = self.doc
-        self.assertEqual(field_info.name, name)
-        self.assertEqual(field_info.doc, doc)
+        assert field_info.name == name
+        assert field_info.doc == doc
 
     def check_field_basics(self, field_info, str_value_dict, bad_values):
         """Check basic field methods.
@@ -71,16 +73,16 @@ class FieldInfoTestCase(unittest.TestCase):
         for strval, expected_value in str_value_dict.items():
             with self.subTest(strval=strval, expected_value=expected_value):
                 value = field_info.value_from_str(strval)
-                self.assertEqual(value, expected_value)
+                assert value == expected_value
 
                 field_info.assert_value_ok(value)
 
                 strval_round_trip = field_info.str_from_value(value)
-                self.assertEqual(strval_round_trip, strval)
+                assert strval_round_trip == strval
 
         for bad_value in bad_values:
             with self.subTest(bad_value=bad_value):
-                with self.assertRaises(ValueError):
+                with pytest.raises(ValueError):
                     field_info.assert_value_ok(bad_value)
 
     def check_fixed_field_info(self, factory, dtype, expected_name):
@@ -99,8 +101,8 @@ class FieldInfoTestCase(unittest.TestCase):
         for default in dtype:
             with self.subTest(default=default):
                 field_info = factory(default=default)
-                self.assertIs(field_info.dtype, dtype)
-                self.assertEqual(field_info.name, expected_name)
+                assert field_info.dtype is dtype
+                assert field_info.name == expected_name
 
                 other_values = tuple(value for value in dtype if value != default)
                 other_int_values = tuple(value.value for value in other_values)
@@ -188,10 +190,10 @@ class FieldInfoTestCase(unittest.TestCase):
         t0 = utils.current_tai()
         default = field_info.default
         t1 = utils.current_tai()
-        self.assertEqual(field_info.name, "timestamp")
+        assert field_info.name == "timestamp"
         # The constant works around a non-monotonic time bug in macOS Docker.
-        self.assertLessEqual(t0 - 0.2, default)
-        self.assertGreaterEqual(t1 + 0.2, default)
+        assert t0 - 0.2 <= default
+        assert t1 + 0.2 >= default
         valid_times = (
             1614451963.1,
             1000000000.2,
@@ -205,11 +207,7 @@ class FieldInfoTestCase(unittest.TestCase):
     def test_source_field_info(self):
         for what in ("command", "warning"):
             field_info = mtmount.field_info.SourceFieldInfo(what=what)
-            self.assertEqual(field_info.name, "source")
-            self.assertIn(what, field_info.doc)
-            self.assertIsInstance(field_info, mtmount.field_info.EnumFieldInfo)
-            self.assertIs(field_info.dtype, mtmount.Source)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert field_info.name == "source"
+            assert what in field_info.doc
+            assert isinstance(field_info, mtmount.field_info.EnumFieldInfo)
+            assert field_info.dtype is mtmount.Source

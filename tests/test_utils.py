@@ -37,9 +37,5 @@ class UtilsTestCase(unittest.TestCase):
         wrapped_text = mtmount.wrap_parameter_doc(long_text)
         lines = wrapped_text.split("\n")
         for line in lines:
-            self.assertTrue(line.startswith("    "))
-            self.assertLessEqual(len(line), MAX_DOC_LENGTH)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            assert line.startswith("    ")
+            assert len(line) <= MAX_DOC_LENGTH
