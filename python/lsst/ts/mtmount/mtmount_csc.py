@@ -34,11 +34,11 @@ from lsst.ts import utils
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import AxisMotionState, PowerState, System
 from .config_schema import CONFIG_SCHEMA
+from .utils import truncate_value
 from . import constants
 from . import command_futures
 from . import commands
 from . import enums
-from . import limits
 from . import __version__
 
 # Extra time to wait for commands to be done (sec)
@@ -180,6 +180,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     valid_simulation_modes = (0, 1)
     version = __version__
+
+    # For the rotator following loop: commanded position and velocity
+    # must be within this margin of the command limits.
+    # The value is based on the fact that the low-level controller
+    # reports all limits rounded to 2 decimal places.
+    limits_margin = 0.01
 
     def __init__(
         self,
@@ -489,17 +495,39 @@ class MTMountCsc(salobj.ConfigurableCsc):
             desired_position = rot_data.demandPosition
             desired_velocity = rot_data.demandVelocity
 
-        max_velocity = limits.LimitsDict[System.CAMERA_CABLE_WRAP].max_velocity
+        # List of warning strings about truncated position and velocity
+        # (in that order).
+        truncation_warnings = []
 
-        if abs(desired_velocity) > max_velocity:
-            excessive_desired_velocity = desired_velocity
-            desired_velocity = math.copysign(max_velocity, desired_velocity)
+        ccw_settings_data = self.evt_cameraCableWrapControllerSettings.data
+        desired_velocity, warning_message = truncate_value(
+            value=desired_velocity,
+            min_value=-ccw_settings_data.maxCmdVelocity + self.limits_margin,
+            max_value=ccw_settings_data.maxCmdVelocity - self.limits_margin,
+            descr="velocity",
+        )
+        if warning_message:
+            truncation_warnings.append(warning_message)
+
+        # Adjust the desired position for the time offset,
+        # then truncate it to be in bounds.
+        adjusted_desired_position = desired_position + desired_velocity * dt
+
+        adjusted_desired_position, warning_message = truncate_value(
+            value=adjusted_desired_position,
+            min_value=ccw_settings_data.minCmdPosition + self.limits_margin,
+            max_value=ccw_settings_data.maxCmdPosition - self.limits_margin,
+            descr="position",
+        )
+        if warning_message:
+            truncation_warnings.insert(0, warning_message)
+
+        if truncation_warnings:
             self.log.warning(
-                f"Limiting desired velocity from {excessive_desired_velocity:0.2f} "
-                f"to {desired_velocity:0.2f}"
+                "Limiting camera cable wrap commanded "
+                + " and ".join(truncation_warnings)
             )
 
-        adjusted_desired_position = desired_position + desired_velocity * dt
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
@@ -932,6 +960,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         self.log.info("Camera cable wrap following begins")
         self.rotator_position_error_excessive = False
+        if not self.evt_cameraCableWrapControllerSettings.has_data:
+            raise RuntimeError(
+                "cameraCableWrapControllerSettings event has not been published; "
+                "camera cable wrap command limits unknown"
+            )
         paused = False
         try:
             while self.camera_cable_wrap_following_enabled:

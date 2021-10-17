@@ -48,6 +48,9 @@ MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
 # timeout for reading telemetry that should not appear (sec)
 NOTELEMETRY_TIMEOUT = 2
 
+# timeout for constructing several remotes and controllers (sec)
+LONG_TIMEOUT = 60
+
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
 SAFETY_INTERLOCKS_FIELDS = (
@@ -1271,3 +1274,138 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             assert tel_az_data.actualVelocity == pytest.approx(az_actual.velocity)
 
             previous_tai = tai
+
+    async def test_camera_cable_wrap_truncation_min(self):
+        """Test that camera cable wrap following code truncates position
+        and velocity as needed.
+        """
+        await asyncio.wait_for(
+            self.check_camera_cable_wrap_truncation(do_max_limit=False),
+            timeout=LONG_TIMEOUT,
+        )
+
+    async def test_camera_cable_wrap_truncation_max(self):
+        """Test that camera cable wrap following code truncates position
+        and velocity as needed.
+        """
+        await asyncio.wait_for(
+            self.check_camera_cable_wrap_truncation(do_max_limit=True),
+            timeout=LONG_TIMEOUT,
+        )
+
+    async def check_camera_cable_wrap_truncation(self, do_max_limit):
+        """Test that camera cable wrap following code truncates position
+        and velocity as needed.
+
+        Parameters
+        ----------
+        do_max_limit : `bool`
+            If True then run into the max limit at max velocity,
+            else run into the min limit at max negative velocity.
+        """
+        # Start the CSC in DISABLED state
+        # so we can get the rotator remote running
+        # before the camera cable wrap loop needs data from the rotator.
+        async with self.make_csc(initial_state=salobj.State.DISABLED):
+            await self.assert_next_sample(
+                self.remote.evt_cameraCableWrapFollowing, enabled=False
+            )
+            ccw_controller_settings_data = (
+                await self.remote.evt_cameraCableWrapControllerSettings.next(
+                    flush=False, timeout=STD_TIMEOUT
+                )
+            )
+            ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
+            assert not ccw_device.power_on
+            assert not ccw_device.enabled
+
+            async with salobj.Controller(name="MTRotator") as rotator:
+                await self.remote.cmd_enable.start(timeout=STD_TIMEOUT)
+                assert ccw_device.power_on
+                assert ccw_device.enabled
+
+                await self.assert_next_sample(
+                    self.remote.evt_cameraCableWrapFollowing, enabled=True
+                )
+                assert ccw_device.tracking_enabled
+                self.mock_controller.set_command_queue(maxsize=0)
+
+                assert self.mock_controller.command_queue.empty()
+
+                # Test regular tracking mode. CCW and MTRotator start in sync.
+                ccw_limits = mtmount.LimitsDict[System.CAMERA_CABLE_WRAP]
+                # seconds until the CCW demand hits the position limit;
+                # make it large enough that we get a few target events
+                # before we reach the position limit.
+                trunc_time = 0.5
+                if do_max_limit:
+                    position_limit = (
+                        ccw_controller_settings_data.maxCmdPosition
+                        - self.csc.limits_margin
+                    )
+                    velocity_limit = (
+                        ccw_controller_settings_data.maxCmdVelocity
+                        - self.csc.limits_margin
+                    )
+                else:
+                    position_limit = (
+                        ccw_controller_settings_data.minCmdPosition
+                        + self.csc.limits_margin
+                    )
+                    velocity_limit = (
+                        -ccw_controller_settings_data.maxCmdVelocity
+                        + self.csc.limits_margin
+                    )
+                velocity = velocity_limit * 1.1
+                position0 = position_limit - (velocity * trunc_time)
+                print(
+                    f"Position limit={position_limit}, velocity limit={velocity_limit}"
+                )
+
+                tai0 = utils.current_tai()
+                previous_tai = 0
+                while True:
+                    tai = utils.current_tai()
+                    # Work around non-monotonic clocks, which are
+                    # sometimes seen when running Docker on macOS.
+                    if tai < previous_tai:
+                        tai = previous_tai + 0.001
+                    dt = tai - tai0
+                    position = position0 + velocity * dt
+                    rotator.tel_rotation.set_put(
+                        demandPosition=position,
+                        demandVelocity=velocity,
+                        demandAcceleration=0,
+                        actualPosition=position,
+                        actualVelocity=velocity,
+                        timestamp=tai,
+                    )
+                    command = await self.next_lowlevel_command()
+                    delay = utils.current_tai() - tai
+                    assert (
+                        command.command_code
+                        == mtmount.CommandCode.CAMERA_CABLE_WRAP_TRACK
+                    )
+                    desired_command_tai = (
+                        tai + self.csc.config.camera_cable_wrap_advance_time
+                    )
+                    assert command.tai - desired_command_tai <= delay
+
+                    # Check camera cable wrap command
+                    ccw_target = await self.remote.evt_cameraCableWrapTarget.next(
+                        flush=True, timeout=STD_TIMEOUT
+                    )
+                    if do_max_limit:
+                        assert ccw_target.velocity <= ccw_limits.max_velocity
+                        assert ccw_target.position <= position_limit
+                    else:
+                        assert ccw_target.velocity >= -ccw_limits.max_velocity
+                        assert ccw_target.position >= position_limit
+                    print(
+                        f"CCW target position={ccw_target.position}, velocity={ccw_target.velocity}"
+                    )
+                    if ccw_target.position == pytest.approx(position_limit):
+                        break
+
+                    await asyncio.sleep(0.1)
+                    previous_tai = tai
