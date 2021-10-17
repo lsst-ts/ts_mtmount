@@ -45,12 +45,11 @@ class Limits:
         self.max_velocity = max_velocity
         self.max_acceleration = max_acceleration
 
-    def scaled(self, factor=1.01):
+    def scaled(self, factor=1.1):
         """Return a copy scaled by the specified factor.
 
         Intended for use in mock axis controllers, because the actuator
-        soft limits should be slighly larger than the limits
-        allowed by the CSC.
+        soft limits should be larger than the command limits.
         """
         return Limits(
             min_position=self.min_position * factor,
@@ -60,6 +59,8 @@ class Limits:
         )
 
 
+# Command limits for the mock axis controllers.
+# Scaled up versions are used for computing slews.
 LimitsDict = {
     # From LTS-103.
     System.ELEVATION: Limits(
