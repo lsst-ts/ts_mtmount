@@ -116,6 +116,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
     valid_simulation_modes = (0, 1)
     version = __version__
 
+    # For the rotator following loop: commanded position and velocity
+    # must be within this margin of the command limits.
+    # The value is based on the fact that the low-level controller
+    # reports all limits rounded to 2 decimal places.
+    limits_margin = 0.01
+
     def __init__(
         self,
         config_dir=None,
@@ -354,8 +360,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         desired_velocity, warning_message = truncate_value(
             value=desired_velocity,
-            min_value=-ccw_limits.max_velocity,
-            max_value=ccw_limits.max_velocity,
+            min_value=-ccw_limits.max_velocity + self.limits_margin,
+            max_value=ccw_limits.max_velocity - self.limits_margin,
             descr="velocity",
         )
         if warning_message:
@@ -367,8 +373,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         adjusted_desired_position, warning_message = truncate_value(
             value=adjusted_desired_position,
-            min_value=ccw_limits.min_position,
-            max_value=ccw_limits.max_position,
+            min_value=ccw_limits.min_position + self.limits_margin,
+            max_value=ccw_limits.max_position - self.limits_margin,
             descr="position",
         )
         if warning_message:

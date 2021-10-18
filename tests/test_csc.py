@@ -401,11 +401,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 # before we reach the position limit.
                 trunc_time = 0.5
                 if do_max_limit:
-                    position_limit = ccw_limits.max_position
-                    velocity_limit = ccw_limits.max_velocity
+                    position_limit = ccw_limits.max_position - self.csc.limits_margin
+                    velocity_limit = ccw_limits.max_velocity - self.csc.limits_margin
                 else:
-                    position_limit = ccw_limits.min_position
-                    velocity_limit = -ccw_limits.max_velocity
+                    position_limit = ccw_limits.min_position + self.csc.limits_margin
+                    velocity_limit = -ccw_limits.max_velocity + self.csc.limits_margin
                 velocity = velocity_limit * 1.1
                 position0 = position_limit - (velocity * trunc_time)
                 print(
