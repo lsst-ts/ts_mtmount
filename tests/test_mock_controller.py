@@ -27,6 +27,8 @@ import time
 import unittest
 import unittest.mock
 
+import pytest
+
 from lsst.ts import salobj
 from lsst.ts import mtmount
 from lsst.ts import utils
@@ -226,11 +228,11 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 nonack_replies.append(reply)
             reply = await asyncio.wait_for(self.read_one_reply(), timeout=STD_TIMEOUT)
         if should_fail:
-            self.assertIsInstance(reply, mtmount.replies.NoAckReply)
-            self.assertEqual(reply.sequence_id, command.sequence_id)
+            assert isinstance(reply, mtmount.replies.NoAckReply)
+            assert reply.sequence_id == command.sequence_id
         else:
-            self.assertIsInstance(reply, mtmount.replies.AckReply)
-            self.assertEqual(reply.sequence_id, command.sequence_id)
+            assert isinstance(reply, mtmount.replies.AckReply)
+            assert reply.sequence_id == command.sequence_id
             if read_done:
                 reply = None
                 while reply is None or type(reply) not in ack_reply_types:
@@ -244,17 +246,17 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     reply = await asyncio.wait_for(
                         self.read_one_reply(), timeout=timeout
                     )
-                self.assertIsInstance(reply, mtmount.replies.DoneReply)
-                self.assertEqual(reply.sequence_id, command.sequence_id)
+                assert isinstance(reply, mtmount.replies.DoneReply)
+                assert reply.sequence_id == command.sequence_id
         if reply_types_remaining:
             nonack_replies += await asyncio.wait_for(
                 self.read_replies(reply_types_remaining, return_others=True),
                 timeout=timeout,
             )
         if return_others:
-            self.assertGreaterEqual(len(nonack_replies), len(noack_reply_types))
+            assert len(nonack_replies) >= len(noack_reply_types)
         else:
-            self.assertEqual(len(nonack_replies), len(noack_reply_types))
+            assert len(nonack_replies) == len(noack_reply_types)
         return nonack_replies
 
     async def telemetry_read_loop(self):
@@ -319,39 +321,39 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             device = self.controller.device_dict[mtmount.DeviceId.MIRROR_COVER_LOCKS]
 
             # Issue a synchronous command
-            self.assertFalse(device.power_on)
+            assert not device.power_on
             on_command = mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True)
             await self.run_command(on_command, use_read_loop=use_read_loop)
-            self.assertTrue(device.power_on)
+            assert device.power_on
 
             # Issue a background command
-            self.assertAlmostEqual(
-                device.actuator.position(), device.actuator.min_position
+            assert device.actuator.position() == pytest.approx(
+                device.actuator.min_position
             )
             deploy_command = mtmount.commands.MirrorCoverLocksMoveAll(
                 drive=-1, deploy=True
             )
             await self.run_command(deploy_command, use_read_loop=use_read_loop)
-            self.assertAlmostEqual(
-                device.actuator.position(), device.actuator.max_position
+            assert device.actuator.position() == pytest.approx(
+                device.actuator.max_position
             )
 
             # Issue a command (AzimuthAxisTrack) that gets no Done reply
             # but first enable the device and tracking
             device = self.controller.device_dict[mtmount.DeviceId.AZIMUTH_AXIS]
-            self.assertFalse(device.power_on)
-            self.assertFalse(device.enabled)
-            self.assertFalse(device.tracking_enabled)
+            assert not device.power_on
+            assert not device.enabled
+            assert not device.tracking_enabled
             power_on_command = mtmount.commands.AzimuthAxisPower(on=True)
             await self.run_command(power_on_command, use_read_loop=use_read_loop)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
             enable_tracking_command = mtmount.commands.AzimuthAxisEnableTracking()
             await self.run_command(enable_tracking_command, use_read_loop=use_read_loop)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertTrue(device.tracking_enabled)
+            assert device.power_on
+            assert device.enabled
+            assert device.tracking_enabled
             track_command = mtmount.commands.AzimuthAxisTrack(
                 position=45, velocity=0, tai=utils.current_tai()
             )
@@ -362,9 +364,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # a Done reply for the previous command
             stop_tracking_command = mtmount.commands.AzimuthAxisStop()
             await self.run_command(stop_tracking_command, use_read_loop=use_read_loop)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
 
             # Try a command that will fail
             # (tracking while tracking not enabled)
@@ -376,9 +378,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Add it to mtmount.commands.CommandDict so the mock controller
             # can parse it as a command.
             unsupported_command = UnsupportedCommand()
-            self.assertNotIn(
-                unsupported_command.command_code, mtmount.commands.CommandDict
-            )
+            assert unsupported_command.command_code not in mtmount.commands.CommandDict
             new_command_dict = mtmount.commands.CommandDict.copy()
             new_command_dict[unsupported_command.command_code] = UnsupportedCommand
             with unittest.mock.patch(
@@ -405,44 +405,44 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_command_queue(self):
         async with self.make_controller():
-            self.assertIsNone(self.controller.command_queue)
+            assert self.controller.command_queue is None
 
             # Create the command queue with specified maxsize.
             maxsize = 47
             self.controller.set_command_queue(maxsize=maxsize)
-            self.assertIsInstance(self.controller.command_queue, asyncio.Queue)
-            self.assertEqual(self.controller.command_queue.maxsize, maxsize)
+            assert isinstance(self.controller.command_queue, asyncio.Queue)
+            assert self.controller.command_queue.maxsize == maxsize
 
             # Replace the command queue with default maxsize (unlimited).
             self.controller.set_command_queue()
-            self.assertIsInstance(self.controller.command_queue, asyncio.Queue)
-            self.assertEqual(self.controller.command_queue.maxsize, 0)
+            assert isinstance(self.controller.command_queue, asyncio.Queue)
+            assert self.controller.command_queue.maxsize == 0
 
             # Run two commands.
             device = self.controller.device_dict[mtmount.DeviceId.MIRROR_COVER_LOCKS]
-            self.assertFalse(device.power_on)
+            assert not device.power_on
             on_command = mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True)
             await self.run_command(on_command, use_read_loop=True)
-            self.assertTrue(device.power_on)
+            assert device.power_on
             off_command = mtmount.commands.MirrorCoverLocksPower(drive=-1, on=False)
             await self.run_command(off_command, use_read_loop=True)
-            self.assertFalse(device.power_on)
+            assert not device.power_on
 
             # Check the two commands on the command queue.
             queued_on_command = await asyncio.wait_for(
                 self.controller.command_queue.get(), timeout=STD_TIMEOUT
             )
-            self.assertEqual(queued_on_command, on_command)
+            assert queued_on_command == on_command
             queued_off_command = await asyncio.wait_for(
                 self.controller.command_queue.get(), timeout=STD_TIMEOUT
             )
-            self.assertEqual(queued_off_command, off_command)
-            self.assertNotEqual(on_command, off_command)
-            self.assertTrue(self.controller.command_queue.empty())
+            assert queued_off_command == off_command
+            assert on_command != off_command
+            assert self.controller.command_queue.empty()
 
             # Delete the command queue.
             self.controller.delete_command_queue()
-            self.assertIsNone(self.controller.command_queue)
+            assert self.controller.command_queue is None
 
     async def test_initial_telemetry(self):
         async with self.make_controller():
@@ -472,8 +472,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         desired_value = device.actuator.path.at(tai0).position
                     else:
                         desired_value = 0
-                    self.assertAlmostEqual(axis_telem[name], desired_value, msg=name)
-                self.assertGreater(axis_telem["timestamp"], tai0)
+                    assert axis_telem[name] == pytest.approx(desired_value)
+                assert axis_telem["timestamp"] > tai0
 
             # Work around Docker time issues on macOS with an offset
             tai0 = utils.current_tai() - 0.1
@@ -485,8 +485,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 "speed",
                 "acceleration",
             ):
-                self.assertEqual(ccw_telem[name], 0, msg=name)
-            self.assertGreater(ccw_telem["timestamp"], tai0)
+                assert ccw_telem[name] == 0
+            assert ccw_telem["timestamp"] > tai0
 
     async def test_tracking(self):
         """Test the <axis>AxisTrack command and InPosition replies."""
@@ -499,20 +499,20 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 timeout=START_TIMEOUT,
             )
             for reply in replies:
-                self.assertFalse(reply.in_position)
-                self.assertIn(reply.what, (0, 1))
+                assert not reply.in_position
+                assert reply.what in (0, 1)
 
             device = self.controller.device_dict[mtmount.DeviceId.AZIMUTH_AXIS]
             power_on_command = mtmount.commands.AzimuthAxisPower(on=True)
             await self.run_command(power_on_command, use_read_loop=True)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
             enable_tracking_command = mtmount.commands.AzimuthAxisEnableTracking()
             await self.run_command(enable_tracking_command, use_read_loop=True)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertTrue(device.tracking_enabled)
+            assert device.power_on
+            assert device.enabled
+            assert device.tracking_enabled
 
             start_position = device.actuator.path.at(utils.current_tai()).position
             end_position = start_position + 3
@@ -534,14 +534,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     return_others=True,
                 )
                 if nonack_replies:
-                    self.assertGreaterEqual(len(nonack_replies), 1)
+                    assert len(nonack_replies) >= 1
                     num_in_position_replies = 0
                     for reply in nonack_replies:
                         if isinstance(reply, mtmount.replies.InPositionReply):
-                            self.assertEqual(reply.what, 0)
-                            self.assertTrue(reply.in_position)
+                            assert reply.what == 0
+                            assert reply.in_position
                             num_in_position_replies += 1
-                    self.assertEqual(num_in_position_replies, 1)
+                    assert num_in_position_replies == 1
                     break
                 previous_tai = tai
                 await asyncio.sleep(0.1)
@@ -553,14 +553,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 noack_reply_types=[mtmount.replies.InPositionReply],
                 return_others=False,
             )
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
-            self.assertEqual(len(nonack_replies), 1)
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
+            assert len(nonack_replies) == 1
             reply = nonack_replies[0]
-            self.assertIsInstance(reply, mtmount.replies.InPositionReply)
-            self.assertFalse(reply.in_position)
-            self.assertEqual(reply.what, 0)
+            assert isinstance(reply, mtmount.replies.InPositionReply)
+            assert not reply.in_position
+            assert reply.what == 0
 
     async def test_move(self):
         """Test the <axis>AxisMove command and InPosition replies."""
@@ -573,17 +573,17 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 timeout=START_TIMEOUT,
             )
 
-            self.assertEqual(len(replies), 2)
+            assert len(replies) == 2
             for reply in replies:
-                self.assertFalse(reply.in_position)
-                self.assertIn(reply.what, (0, 1))
+                assert not reply.in_position
+                assert reply.what in (0, 1)
 
             device = self.controller.device_dict[mtmount.DeviceId.ELEVATION_AXIS]
             power_on_command = mtmount.commands.ElevationAxisPower(on=True)
             await self.run_command(power_on_command, use_read_loop=True)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
 
             start_position = device.actuator.path.at(utils.current_tai()).position
             end_position = start_position + 1
@@ -599,13 +599,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             )
             dt = time.monotonic() - t0
             print(f"Move duration={dt:0.2f} second")
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertFalse(device.tracking_enabled)
-            self.assertEqual(len(nonack_replies), 1)
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
+            assert len(nonack_replies) == 1
             reply = nonack_replies[0]
-            self.assertTrue(reply.in_position)
-            self.assertEqual(reply.what, 1)
+            assert reply.in_position
+            assert reply.what == 1
 
             # Test telemetry after move
             axis_telem = await self.next_telemetry(mtmount.TelemetryTopicId.ELEVATION)
@@ -621,7 +621,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     desired_value = end_position
                 else:
                     desired_value = 0
-                self.assertAlmostEqual(axis_telem[name], desired_value, msg=name)
+                assert axis_telem[name] == pytest.approx(desired_value)
 
 
 if __name__ == "__main__":

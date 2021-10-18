@@ -22,6 +22,7 @@
 import unittest
 
 import jsonschema
+import pytest
 
 from lsst.ts import salobj
 from lsst.ts import mtmount
@@ -53,7 +54,7 @@ class ValidationTestCase(unittest.TestCase):
     def test_default(self):
         result = self.validator.validate(None)
         for field, expected_value in self.default.items():
-            self.assertEqual(result[field], expected_value)
+            assert result[field] == expected_value
 
     def test_some_specified(self):
         for field, value in self.nondefault.items():
@@ -62,14 +63,14 @@ class ValidationTestCase(unittest.TestCase):
                 result = self.validator.validate(one_field_data)
                 for field, default_value in self.default.items():
                     if field in one_field_data:
-                        self.assertEqual(result[field], one_field_data[field])
+                        assert result[field] == one_field_data[field]
                     else:
-                        self.assertEqual(result[field], default_value)
+                        assert result[field] == default_value
 
     def test_all_specified(self):
         result = self.validator.validate(self.nondefault)
         for field, value in self.nondefault.items():
-            self.assertEqual(result[field], value)
+            assert result[field] == value
 
     def test_invalid_configs(self):
         for name, badval in (
@@ -85,7 +86,7 @@ class ValidationTestCase(unittest.TestCase):
         ):
             bad_data = {name: badval}
             with self.subTest(bad_data=bad_data):
-                with self.assertRaises(jsonschema.exceptions.ValidationError):
+                with pytest.raises(jsonschema.exceptions.ValidationError):
                     self.validator.validate(bad_data)
 
 

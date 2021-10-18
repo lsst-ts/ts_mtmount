@@ -35,7 +35,7 @@ class MessageTestCase(unittest.TestCase):
     def check_round_trip(self, message):
         str_fields = message.str_fields()
         message_round_trip = type(message).from_str_fields(str_fields)
-        self.assertEqual(message, message_round_trip)
+        assert message == message_round_trip
 
     def check_message_type(self, message_type):
         for i in range(10):

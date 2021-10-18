@@ -23,6 +23,8 @@ import asyncio
 import logging
 import unittest
 
+import pytest
+
 from lsst.ts import utils
 from lsst.ts import mtmount
 
@@ -82,15 +84,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         if timeout_task is None:
             timeout = None
             task = None
-            self.assertIsNone(
-                min_timeout, f"min_timeout={min_timeout} but no timeout seen"
-            )
+            assert min_timeout is None, f"min_timeout={min_timeout} but no timeout seen"
             return
 
         timeout, task = timeout_task
         if min_timeout is None:
             self.fail(f"min_timeout=None but timeout={timeout}")
-        self.assertGreaterEqual(timeout, min_timeout)
+        assert timeout >= min_timeout
 
         try:
             await task
@@ -148,26 +148,26 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         device = self.device_dict[mtmount.DeviceId.OIL_SUPPLY_SYSTEM]
 
         # Test the OilSupplySystemPower command
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.cooling_on)
-        self.assertFalse(device.oil_on)
-        self.assertFalse(device.main_pump_on)
+        assert not device.power_on
+        assert not device.cooling_on
+        assert not device.oil_on
+        assert not device.main_pump_on
 
         await self.run_command(
             command=mtmount.commands.OilSupplySystemPower(on=True), min_timeout=900
         )
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.cooling_on)
-        self.assertTrue(device.oil_on)
-        self.assertTrue(device.main_pump_on)
+        assert device.power_on
+        assert device.cooling_on
+        assert device.oil_on
+        assert device.main_pump_on
 
         await self.run_command(
             command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0
         )
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.cooling_on)
-        self.assertFalse(device.oil_on)
-        self.assertFalse(device.main_pump_on)
+        assert not device.power_on
+        assert not device.cooling_on
+        assert not device.oil_on
+        assert not device.main_pump_on
 
         # Test the subsystem power commands.
         subsystem_command_dict = {
@@ -198,7 +198,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             )
             await self.run_command(command_class(on=True), min_timeout=min_timeout)
             values = get_value_dict()
-            self.assertEqual(values, expected_values)
+            assert values == expected_values
 
             # Turn this subsystem off
             expected_values[name] = False
@@ -209,7 +209,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             )
             await self.run_command(command_class(on=False), min_timeout=min_timeout)
             values = get_value_dict()
-            self.assertEqual(values, expected_values)
+            assert values == expected_values
 
     async def test_top_end_chiller(self):
         device = self.device_dict[mtmount.DeviceId.TOP_END_CHILLER]
@@ -219,37 +219,37 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # track_ambient should fail if power is off
         # and the state should remain unchanged.
-        self.assertFalse(device.power_on)
-        self.assertNotEqual(device.temperature, temperature1)
-        with self.assertRaises(RuntimeError):
+        assert not device.power_on
+        assert device.temperature != temperature1
+        with pytest.raises(RuntimeError):
             await self.run_command(
                 mtmount.commands.TopEndChillerTrackAmbient(
                     on=True, temperature=temperature1
                 )
             )
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             await self.run_command(
                 mtmount.commands.TopEndChillerTrackAmbient(
                     on=False, temperature=temperature1
                 )
             )
-        self.assertFalse(device.power_on)
-        self.assertEqual(device.track_ambient, initial_track_ambient)
-        self.assertEqual(device.temperature, initial_temperature)
+        assert not device.power_on
+        assert device.track_ambient == initial_track_ambient
+        assert device.temperature == initial_temperature
 
         await self.run_command(mtmount.commands.TopEndChillerPower(on=True))
-        self.assertTrue(device.power_on)
-        self.assertEqual(device.track_ambient, initial_track_ambient)
-        self.assertEqual(device.temperature, initial_temperature)
+        assert device.power_on
+        assert device.track_ambient == initial_track_ambient
+        assert device.temperature == initial_temperature
 
         await self.run_command(
             mtmount.commands.TopEndChillerTrackAmbient(
                 on=True, temperature=temperature1
             )
         )
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.track_ambient)
-        self.assertAlmostEqual(device.temperature, temperature1)
+        assert device.power_on
+        assert device.track_ambient
+        assert device.temperature == pytest.approx(temperature1)
 
         temperature2 = 0.12  # A different arbitrary value
         await self.run_command(
@@ -257,9 +257,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 on=False, temperature=temperature2
             )
         )
-        self.assertTrue(device.power_on)
-        self.assertFalse(device.track_ambient)
-        self.assertAlmostEqual(device.temperature, temperature2)
+        assert device.power_on
+        assert not device.track_ambient
+        assert device.temperature == pytest.approx(temperature2)
 
     async def test_axis_devices(self):
         for device_id in (
@@ -277,9 +277,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             mtmount.DeviceId.ELEVATION_AXIS,
         )
 
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.enabled)
-        self.assertFalse(device.has_target)
+        assert not device.power_on
+        assert not device.enabled
+        assert not device.has_target
 
         short_command_names = [
             "drive_enable",
@@ -325,28 +325,28 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         stop_command = command_classes["stop"]()
 
         # drive_reset fails if off
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        with self.assertRaises(RuntimeError):
+        assert not device.power_on
+        assert not device.enabled
+        assert not device.tracking_enabled
+        with pytest.raises(RuntimeError):
             await self.run_command(drive_reset_command)
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.enabled)
-        self.assertFalse(device.tracking_enabled)
+        assert not device.power_on
+        assert not device.enabled
+        assert not device.tracking_enabled
 
         # Power on the device; this should not enable the drive.
         await self.run_command(power_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert not device.tracking_enabled
+        assert not device.has_target
 
         # Disable the drive
         await self.run_command(drive_enable_off_command)
-        self.assertTrue(device.power_on)
-        self.assertFalse(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert not device.enabled
+        assert not device.tracking_enabled
+        assert not device.has_target
 
         # Most commands should fail if drive not enabled.
         fail_if_not_enabled_commands = [
@@ -369,40 +369,40 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 continue
             with self.subTest(command=str(command)):
                 min_timeout = 0 if command.command_code in slow_command_codes else None
-                with self.assertRaises(RuntimeError):
+                with pytest.raises(RuntimeError):
                     await self.run_command(command, min_timeout=min_timeout)
-                self.assertTrue(device.power_on)
-                self.assertFalse(device.enabled)
-                self.assertFalse(device.tracking_enabled)
-                self.assertFalse(device.has_target)
+                assert device.power_on
+                assert not device.enabled
+                assert not device.tracking_enabled
+                assert not device.has_target
 
         # Enable the drives
         await self.run_command(drive_enable_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert not device.tracking_enabled
+        assert not device.has_target
 
         # Do a point to point move
         start_segment = device.actuator.path.at(utils.current_tai())
-        self.assertEqual(start_segment.velocity, 0)
+        assert start_segment.velocity == 0
         start_position = start_segment.position
         end_position = start_position + 2
         move_command = command_classes["move"](position=end_position)
         task = asyncio.create_task(self.run_command(move_command, min_timeout=0.5))
 
         await asyncio.sleep(0.1)  # give command time to start
-        self.assertAlmostEqual(device.actuator.target.position, end_position)
-        self.assertEqual(device.actuator.target.velocity, 0)
+        assert device.actuator.target.position == pytest.approx(end_position)
+        assert device.actuator.target.velocity == 0
         segment = device.actuator.path.at(utils.current_tai())
-        self.assertGreater(abs(segment.velocity), 0.01)
-        self.assertTrue(device.has_target)
+        assert abs(segment.velocity) > 0.01
+        assert device.has_target
 
         await task
         end_segment = device.actuator.path.at(utils.current_tai())
-        self.assertAlmostEqual(end_segment.velocity, 0)
-        self.assertAlmostEqual(end_segment.position, end_position)
-        self.assertTrue(device.has_target)
+        assert end_segment.velocity == pytest.approx(0)
+        assert end_segment.position == pytest.approx(end_position)
+        assert device.has_target
 
         # Start homing or a big point to point move, then stop the axes
         # (Homing is a point to point move, and it's slow).
@@ -422,7 +422,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         await task
         stop_duration = device.actuator.path[-1].tai - utils.current_tai()
         await asyncio.sleep(stop_duration)
-        self.assertFalse(device.has_target)
+        assert not device.has_target
 
         # The tracking command should fail when not in tracking mode.
         track_command = command_classes["track"](
@@ -430,20 +430,20 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             velocity=0,
             tai=utils.current_tai(),
         )
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             await self.run_command(track_command)
 
         # Turn on tracking mode and confirm that non-tracking mode
         # commands are rejected.
-        self.assertFalse(device.tracking_enabled)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
+        assert not device.tracking_enabled
+        assert device.power_on
+        assert device.enabled
         await self.run_command(enable_tracking_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertTrue(device.tracking_enabled)
-        self.assertFalse(device.tracking_paused)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert device.tracking_enabled
+        assert not device.tracking_paused
+        assert not device.has_target
 
         non_tracking_mode_commands = [
             home_command,
@@ -452,7 +452,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         for command in non_tracking_mode_commands:
             if command is None:
                 continue
-            with self.assertRaises(RuntimeError):
+            with pytest.raises(RuntimeError):
                 await self.run_command(command, min_timeout=0)
 
         # Issue a few tracking commands; confirm that the actuator path
@@ -472,89 +472,89 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 position=position, velocity=velocity, tai=tai
             )
             await self.run_command(track_command)
-            self.assertAlmostEqual(device.actuator.target.position, position)
-            self.assertAlmostEqual(device.actuator.target.velocity, velocity)
-            self.assertAlmostEqual(device.actuator.target.tai, tai, delta=1e-5)
-            self.assertTrue(device.has_target)
+            assert device.actuator.target.position == pytest.approx(position)
+            assert device.actuator.target.velocity == pytest.approx(velocity)
+            assert device.actuator.target.tai == pytest.approx(tai, abs=1e-5)
+            assert device.has_target
             await asyncio.sleep(0.1)
 
         # If camera cable wrap, pause tracking and check state
         if not is_elaz:
             # Pause tracking
             await self.run_command(pause_tracking_command)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertTrue(device.tracking_enabled)
-            self.assertTrue(device.tracking_paused)
-            self.assertFalse(device.has_target)
+            assert device.power_on
+            assert device.enabled
+            assert device.tracking_enabled
+            assert device.tracking_paused
+            assert not device.has_target
 
             # Un-pause tracking
             await self.run_command(enable_tracking_on_command)
-            self.assertTrue(device.power_on)
-            self.assertTrue(device.enabled)
-            self.assertTrue(device.tracking_enabled)
-            self.assertFalse(device.tracking_paused)
-            self.assertFalse(device.has_target)
+            assert device.power_on
+            assert device.enabled
+            assert device.tracking_enabled
+            assert not device.tracking_paused
+            assert not device.has_target
 
         # Check that stop disable tracking (after r
         await self.run_command(stop_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.tracking_paused)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert not device.tracking_enabled
+        assert not device.tracking_paused
+        assert not device.has_target
 
         # Check that drive_disable disables tracking
         # but does not turn off power.
         await self.run_command(enable_tracking_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertTrue(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert device.tracking_enabled
+        assert not device.has_target
 
         await self.run_command(drive_enable_off_command)
-        self.assertTrue(device.power_on)
-        self.assertFalse(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert not device.enabled
+        assert not device.tracking_enabled
+        assert not device.has_target
 
         # Check that drive_reset disables the drive and tracking
         await self.run_command(drive_enable_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert not device.tracking_enabled
+        assert not device.has_target
 
         await self.run_command(enable_tracking_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertTrue(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert device.tracking_enabled
+        assert not device.has_target
 
         await self.run_command(drive_reset_command)
-        self.assertTrue(device.power_on)
-        self.assertFalse(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert not device.enabled
+        assert not device.tracking_enabled
+        assert not device.has_target
 
         # Check that power off disables everything
         await self.run_command(power_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert not device.tracking_enabled
+        assert not device.has_target
 
         await self.run_command(enable_tracking_on_command)
-        self.assertTrue(device.power_on)
-        self.assertTrue(device.enabled)
-        self.assertTrue(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert device.power_on
+        assert device.enabled
+        assert device.tracking_enabled
+        assert not device.has_target
 
         await self.run_command(power_off_command)
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.enabled)
-        self.assertFalse(device.tracking_enabled)
-        self.assertFalse(device.has_target)
+        assert not device.power_on
+        assert not device.enabled
+        assert not device.tracking_enabled
+        assert not device.has_target
 
     async def check_base_commands(self, device, drive=None):
         """Test the power and reset_alarm commands common to all devices.
@@ -567,8 +567,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             Value for ``drive`` argument of power commands.
             If `None` then the ``drive`` argument is not provided.
         """
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.alarm_on)
+        assert not device.power_on
+        assert not device.alarm_on
 
         device_prefix = device.device_id.name
         power_command_class = self.get_command_class(f"{device_prefix}_POWER")
@@ -593,17 +593,17 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         }.get(device.device_id, None)
 
         await self.run_command(power_command_on, min_timeout=min_on_timeout)
-        self.assertTrue(device.power_on)
-        self.assertFalse(device.alarm_on)
+        assert device.power_on
+        assert not device.alarm_on
 
         device.alarm_on = False
         await self.run_command(reset_alarm_command)
-        self.assertTrue(device.power_on)
-        self.assertFalse(device.alarm_on)
+        assert device.power_on
+        assert not device.alarm_on
 
         await self.run_command(power_command_off, min_timeout=min_off_timeout)
-        self.assertFalse(device.power_on)
-        self.assertFalse(device.alarm_on)
+        assert not device.power_on
+        assert not device.alarm_on
 
     async def check_point_to_point_device(
         self,
@@ -619,31 +619,31 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         def assert_at_end(at_min):
             """Assert the device is its min or max position."""
             if at_min:
-                self.assertAlmostEqual(
-                    device.actuator.position(), device.actuator.min_position
+                assert device.actuator.position() == pytest.approx(
+                    device.actuator.min_position
                 )
-                self.assertAlmostEqual(
-                    device.actuator.end_position, device.actuator.min_position
+                assert device.actuator.end_position == pytest.approx(
+                    device.actuator.min_position
                 )
             else:
-                self.assertAlmostEqual(
-                    device.actuator.position(), device.actuator.max_position
+                assert device.actuator.position() == pytest.approx(
+                    device.actuator.max_position
                 )
-                self.assertAlmostEqual(
-                    device.actuator.end_position, device.actuator.max_position
+                assert device.actuator.end_position == pytest.approx(
+                    device.actuator.max_position
                 )
-            self.assertFalse(device.actuator.moving())
+            assert not device.actuator.moving()
 
         assert_at_end(at_min=start_at_min)
 
         # Test that moves fail if not powered on
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             await self.run_command(
                 command=goto_min_command,
                 min_timeout=move_min_timeout,
                 should_noack=True,
             )
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             await self.run_command(
                 command=goto_max_command, min_timeout=move_min_timeout
             )
@@ -668,13 +668,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             self.run_command(command=goto_max_command, min_timeout=move_min_timeout)
         )
         await asyncio.sleep(0.1)  # Let the move begin
-        self.assertGreaterEqual(
-            device.actuator.position(), device.actuator.min_position
+        assert device.actuator.position() >= device.actuator.min_position
+        assert device.actuator.end_position == pytest.approx(
+            device.actuator.max_position
         )
-        self.assertAlmostEqual(
-            device.actuator.end_position, device.actuator.max_position
-        )
-        self.assertTrue(device.actuator.moving())
+        assert device.actuator.moving()
 
         await task
         assert_at_end(at_min=False)
@@ -688,14 +686,14 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             )
         )
         await asyncio.sleep(0.1)  # Let the move begin
-        self.assertLess(device.actuator.position(), device.actuator.max_position)
-        self.assertAlmostEqual(
-            device.actuator.end_position, device.actuator.min_position
+        assert device.actuator.position() < device.actuator.max_position
+        assert device.actuator.end_position == pytest.approx(
+            device.actuator.min_position
         )
-        self.assertTrue(device.actuator.moving())
+        assert device.actuator.moving()
         await self.run_command(command=stop_command, min_timeout=None)
-        self.assertLess(device.actuator.position(), device.actuator.max_position)
-        self.assertFalse(device.actuator.moving())
+        assert device.actuator.position() < device.actuator.max_position
+        assert not device.actuator.moving()
 
         await task
 
