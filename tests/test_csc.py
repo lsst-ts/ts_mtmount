@@ -23,7 +23,6 @@ import asyncio
 import contextlib
 import pathlib
 import logging
-import time
 import unittest
 
 from lsst.ts import salobj
@@ -112,8 +111,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         )
 
     def test_class_attributes(self):
-        self.assertEqual(tuple(mtmount.MTMountCsc.valid_simulation_modes), (0, 1))
-        self.assertEqual(mtmount.MTMountCsc.version, mtmount.__version__)
+        assert tuple(mtmount.MTMountCsc.valid_simulation_modes) == (0, 1)
+        assert mtmount.MTMountCsc.version == mtmount.__version__
 
     async def test_disconnect(self):
         """Test that the CSC goes to FAULT state if it loses connection
@@ -165,8 +164,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 .scaled()
                 .min_position
             )
-            self.assertAlmostEqual(data.demandPosition, min_elevation)
-            self.assertAlmostEqual(data.actualPosition, min_elevation)
+            assert data.demandPosition == pytest.approx(min_elevation)
+            assert data.actualPosition == pytest.approx(min_elevation)
 
             await self.assert_next_sample(
                 topic=self.remote.tel_cameraCableWrap,
@@ -238,21 +237,21 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 mtmount.DeviceId.CAMERA_CABLE_WRAP
             ]
             ccw_actuator = ccw_device.actuator
-            self.assertFalse(ccw_device.power_on)
-            self.assertFalse(ccw_device.enabled)
+            assert not ccw_device.power_on
+            assert not ccw_device.enabled
 
             async with salobj.Controller(name="MTRotator") as rotator:
                 await self.remote.cmd_enable.start(timeout=STD_TIMEOUT)
-                self.assertTrue(ccw_device.power_on)
-                self.assertTrue(ccw_device.enabled)
+                assert ccw_device.power_on
+                assert ccw_device.enabled
 
                 await self.assert_next_sample(
                     self.remote.evt_cameraCableWrapFollowing, enabled=True
                 )
-                self.assertTrue(ccw_device.tracking_enabled)
+                assert ccw_device.tracking_enabled
                 self.mock_controller.set_command_queue(maxsize=0)
 
-                self.assertTrue(self.mock_controller.command_queue.empty())
+                assert self.mock_controller.command_queue.empty()
 
                 # Test regular tracking mode. CCW and MTRotator start in sync.
                 position0 = 0.0
@@ -278,14 +277,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     )
                     command = await self.next_lowlevel_command()
                     delay = utils.current_tai() - tai
-                    self.assertEqual(
-                        command.command_code,
-                        mtmount.CommandCode.CAMERA_CABLE_WRAP_TRACK,
+                    assert (
+                        command.command_code
+                        == mtmount.CommandCode.CAMERA_CABLE_WRAP_TRACK
                     )
                     desired_command_tai = (
                         tai + self.csc.config.camera_cable_wrap_advance_time
                     )
-                    self.assertLessEqual(command.tai - desired_command_tai, delay)
+                    assert command.tai - desired_command_tai <= delay
 
                     # Check camera cable wrap telemetry;
                     # use a crude comparison because a new CCW tracking
@@ -294,16 +293,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         flush=True, timeout=STD_TIMEOUT
                     )
                     actual_segment = ccw_actuator.path.at(tel_ccw_data.timestamp)
-                    self.assertAlmostEqual(
-                        tel_ccw_data.actualPosition, actual_segment.position, delta=0.1
+                    assert tel_ccw_data.actualPosition == pytest.approx(
+                        actual_segment.position, abs=0.1
                     )
-                    self.assertAlmostEqual(
-                        tel_ccw_data.actualVelocity, actual_segment.velocity, delta=0.1
+                    assert tel_ccw_data.actualVelocity == pytest.approx(
+                        actual_segment.velocity, abs=0.1
                     )
-                    self.assertAlmostEqual(
-                        tel_ccw_data.actualAcceleration,
-                        actual_segment.acceleration,
-                        delta=0.1,
+                    assert tel_ccw_data.actualAcceleration == pytest.approx(
+                        actual_segment.acceleration, abs=0.1
                     )
 
                     await asyncio.sleep(0.1)
@@ -314,12 +311,12 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     timeout=STD_TIMEOUT
                 )
                 command = await self.next_lowlevel_command()
-                self.assertEqual(
-                    command.command_code, mtmount.CommandCode.CAMERA_CABLE_WRAP_STOP
+                assert (
+                    command.command_code == mtmount.CommandCode.CAMERA_CABLE_WRAP_STOP
                 )
-                self.assertTrue(ccw_device.enabled)
-                self.assertFalse(ccw_device.tracking_enabled)
-                self.assertTrue(self.mock_controller.command_queue.empty())
+                assert ccw_device.enabled
+                assert not ccw_device.tracking_enabled
+                assert self.mock_controller.command_queue.empty()
 
                 # Check that rotator targets are ignored after
                 # tracking is disabled.
@@ -333,210 +330,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         timestamp=utils.current_tai(),
                     )
                     await asyncio.sleep(0.1)
-                self.assertTrue(self.mock_controller.command_queue.empty())
+                assert self.mock_controller.command_queue.empty()
 
                 # Restart the camera cable wrap following the rotator.
                 await self.remote.cmd_enableCameraCableWrapFollowing.start(
                     timeout=STD_TIMEOUT
                 )
-                self.assertTrue(ccw_device.tracking_enabled)
-
-    @unittest.skip("Not available in this camera-cable-wrap-only version")
-    async def test_mirror_covers(self):
-        async with self.make_csc(initial_state=salobj.State.ENABLED):
-            self.mock_controller.set_command_queue(maxsize=0)
-
-            mock_device = self.mock_controller.device_dict[
-                mtmount.DeviceId.MIRROR_COVERS
-            ]
-            actuator = mock_device.actuator
-
-            self.assertAlmostEqual(actuator.position(), 0)
-            self.assertFalse(actuator.moving())
-
-            # Open the mirror covers.
-            # Instead of waiting for the command to finish,
-            # check the intermediate state and obtain the expected duration,
-            # then wait for the command to finish.
-            t0 = time.monotonic()
-            await self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
-            dt = time.monotonic() - t0
-            print(f"opening the mirror covers took {dt:0.2f} sec")
-
-            # Open the mirror covers again; this should be quick.
-            t0 = time.monotonic()
-            await self.remote.cmd_openMirrorCovers.start(timeout=STD_TIMEOUT)
-            dt = time.monotonic() - t0
-            print(f"opening the mirror covers again took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.position(), 100)
-            self.assertFalse(actuator.moving())
-
-            # Close the mirror covers.
-            t0 = time.monotonic()
-            await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
-            dt = time.monotonic() - t0
-            print(f"closing the mirror covers took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.position(), 0)
-            self.assertFalse(actuator.moving())
-
-            # Close the mirror covers again;
-            # the locks are retracted and engaged so it takes some time.
-            t0 = time.monotonic()
-            await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
-            dt = time.monotonic() - t0
-            print(f"closing the mirror covers again took {dt:0.2f} sec")
-            self.assertAlmostEqual(actuator.position(), 0)
-            self.assertFalse(actuator.moving())
-
-    @unittest.skip("Not available in this camera-cable-wrap-only version")
-    async def test_move_to_target(self):
-        async with self.make_csc(initial_state=salobj.State.ENABLED):
-            await self.assert_next_sample(
-                topic=self.remote.evt_azimuthInPosition, inPosition=False
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_elevationInPosition, inPosition=False
-            )
-
-            mock_azimuth = self.mock_controller.device_dict[
-                mtmount.DeviceId.AZIMUTH_AXIS
-            ]
-            mock_elevation = self.mock_controller.device_dict[
-                mtmount.DeviceId.ELEVATION_AXIS
-            ]
-
-            tai = utils.current_tai()
-            azimuth_pvt = mock_azimuth.actuator.path.at(tai)
-            elevation_pvt = mock_elevation.actuator.path.at(tai)
-            self.assertAlmostEqual(elevation_pvt.velocity, 0)
-            self.assertAlmostEqual(azimuth_pvt.velocity, 0)
-
-            # Move the axes to a specified position.
-            # Use a short move to speed up the test,
-            # but make the azimuth move significantly shorter
-            # so it finishes first.
-            # Instead of waiting for the command to finish,
-            # check the intermediate state and obtain the expected duration,
-            # then wait for the command to finish.
-            target_azimuth = azimuth_pvt.position + 1
-            target_elevation = elevation_pvt.position + 2
-            estimated_move_time = 2  # seconds
-            print(
-                f"start test_moveToTarget(azimuth={target_azimuth:0.2f}, "
-                f"elevation={target_elevation:0.2f})"
-            )
-            task = asyncio.create_task(
-                self.remote.cmd_moveToTarget.set_start(
-                    azimuth=target_azimuth,
-                    elevation=target_elevation,
-                    timeout=estimated_move_time + STD_TIMEOUT,
-                )
-            )
-            await asyncio.sleep(0.1)  # Give the command a chance to start
-            # Print move duration; the elevation move will take longer
-            duration = mock_elevation.end_tai - utils.current_tai()
-            print(f"axis move duration={duration:0.2f} sec")
-            await self.assert_next_sample(
-                topic=self.remote.evt_azimuthInPosition, inPosition=True
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_elevationInPosition, inPosition=True
-            )
-            await task
-            tai = utils.current_tai()
-            elevation_pvt = mock_elevation.actuator.path.at(tai)
-            azimuth_pvt = mock_azimuth.actuator.path.at(tai)
-            self.assertAlmostEqual(azimuth_pvt.position, target_azimuth)
-            self.assertGreaterEqual(tai, mock_elevation.actuator.path[-1].tai)
-            self.assertAlmostEqual(elevation_pvt.position, target_elevation)
-            self.assertAlmostEqual(azimuth_pvt.velocity, 0)
-            self.assertAlmostEqual(elevation_pvt.velocity, 0)
-
-            # Check that putting the CSC into STANDBY state sends the axes
-            # out of position.
-            await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
-            await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
-            await self.assert_next_sample(
-                topic=self.remote.evt_azimuthInPosition, inPosition=False
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_elevationInPosition, inPosition=False
-            )
-
-    @unittest.skip("Not available in this camera-cable-wrap-only version")
-    async def test_tracking(self):
-        async with self.make_csc(initial_state=salobj.State.ENABLED):
-            await self.assert_next_sample(
-                topic=self.remote.evt_azimuthInPosition, inPosition=False
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_elevationInPosition, inPosition=False
-            )
-
-            mock_azimuth = self.mock_controller.device_dict[
-                mtmount.DeviceId.AZIMUTH_AXIS
-            ]
-            mock_elevation = self.mock_controller.device_dict[
-                mtmount.DeviceId.ELEVATION_AXIS
-            ]
-            self.assertFalse(mock_azimuth.tracking_enabled)
-            self.assertFalse(mock_elevation.tracking_enabled)
-
-            tai = utils.current_tai()
-            initial_azimuth = mock_azimuth.actuator.path.at(tai).position
-            initial_elevation = mock_elevation.actuator.path.at(tai).position
-
-            # Check that tracking is rejected if not enabled
-            kwargs = self.make_track_target_kwargs(
-                azimuth=initial_azimuth, elevation=initial_elevation, taiTime=tai
-            )
-            with salobj.assertRaisesAckError():
-                await self.remote.cmd_trackTarget.set_start(
-                    **kwargs, timeout=STD_TIMEOUT
-                )
-
-            # Enable tracking and check mock axis controllers
-            await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
-            self.assertTrue(mock_azimuth.tracking_enabled)
-            self.assertTrue(mock_elevation.tracking_enabled)
-
-            # Slew and track until both axes are in position.
-            t0 = time.monotonic()
-            estimated_slew_time = 2  # seconds
-            tracking_task = asyncio.create_task(
-                self.track_target_loop(
-                    azimuth=initial_azimuth + 3,
-                    elevation=initial_elevation + 1,
-                    azimuth_velocity=0.003,
-                    elevation_velocity=0.003,
-                )
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_elevationInPosition,
-                inPosition=True,
-                timeout=estimated_slew_time + STD_TIMEOUT,
-            )
-            await self.assert_next_sample(
-                self.remote.evt_azimuthInPosition,
-                inPosition=True,
-                timeout=estimated_slew_time + STD_TIMEOUT,
-            )
-            dt = time.monotonic() - t0
-            tracking_task.cancel()
-            print(f"Time to finish slew={dt:0.2f} seconds")
-
-            # Disable tracking and check axis controllers
-            await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
-            self.assertFalse(mock_azimuth.tracking_enabled)
-            self.assertFalse(mock_elevation.tracking_enabled)
-
-            # Check that both axes are no longer in position.
-            await self.assert_next_sample(
-                topic=self.remote.evt_azimuthInPosition, inPosition=False
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_elevationInPosition, inPosition=False
-            )
+                assert ccw_device.tracking_enabled
 
     async def track_target_loop(
         self, azimuth, elevation, azimuth_velocity, elevation_velocity
@@ -547,8 +347,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         mock_elevation = self.mock_controller.device_dict[
             mtmount.DeviceId.ELEVATION_AXIS
         ]
-        self.assertTrue(mock_azimuth.tracking_enabled)
-        self.assertTrue(mock_elevation.tracking_enabled)
+        assert mock_azimuth.tracking_enabled
+        assert mock_elevation.tracking_enabled
         azimuth_actuator = mock_azimuth.actuator
         elevation_actuator = mock_elevation.actuator
 
@@ -572,20 +372,20 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 taiTime=tai,
             )
             await self.remote.cmd_trackTarget.set_start(**kwargs, timeout=STD_TIMEOUT)
-            self.assertAlmostEqual(
-                mock_azimuth.actuator.target.position, current_azimuth
+            assert mock_azimuth.actuator.target.position == pytest.approx(
+                current_azimuth
             )
-            self.assertAlmostEqual(
-                mock_azimuth.actuator.target.velocity, azimuth_velocity
+            assert mock_azimuth.actuator.target.velocity == pytest.approx(
+                azimuth_velocity
             )
-            self.assertAlmostEqual(mock_azimuth.actuator.target.tai, tai, delta=0.001)
-            self.assertAlmostEqual(
-                mock_elevation.actuator.target.position, current_elevation
+            assert mock_azimuth.actuator.target.tai == pytest.approx(tai, abs=0.001)
+            assert mock_elevation.actuator.target.position == pytest.approx(
+                current_elevation
             )
-            self.assertAlmostEqual(
-                mock_elevation.actuator.target.velocity, elevation_velocity
+            assert mock_elevation.actuator.target.velocity == pytest.approx(
+                elevation_velocity
             )
-            self.assertAlmostEqual(mock_elevation.actuator.target.tai, tai, delta=0.001)
+            assert mock_elevation.actuator.target.tai == pytest.approx(tai, abs=0.001)
             await self.assert_next_sample(topic=self.remote.evt_target, **kwargs)
 
             # Check elevation and azimuth telemetry
@@ -594,19 +394,19 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             el_actual = elevation_actuator.path.at(tel_el_data.timestamp)
             el_target = elevation_actuator.target.at(tel_el_data.timestamp)
-            self.assertAlmostEqual(tel_el_data.demandPosition, el_target.position)
-            self.assertAlmostEqual(tel_el_data.demandVelocity, el_target.velocity)
-            self.assertAlmostEqual(tel_el_data.actualPosition, el_actual.position)
-            self.assertAlmostEqual(tel_el_data.actualVelocity, el_actual.velocity)
+            assert tel_el_data.demandPosition == pytest.approx(el_target.position)
+            assert tel_el_data.demandVelocity == pytest.approx(el_target.velocity)
+            assert tel_el_data.actualPosition == pytest.approx(el_actual.position)
+            assert tel_el_data.actualVelocity == pytest.approx(el_actual.velocity)
 
             tel_az_data = await self.remote.tel_azimuth.next(
                 flush=True, timeout=STD_TIMEOUT
             )
             az_actual = azimuth_actuator.path.at(tel_az_data.timestamp)
             az_target = azimuth_actuator.target.at(tel_az_data.timestamp)
-            self.assertAlmostEqual(tel_az_data.demandPosition, az_target.position)
-            self.assertAlmostEqual(tel_az_data.demandVelocity, az_target.velocity)
-            self.assertAlmostEqual(tel_az_data.actualPosition, az_actual.position)
-            self.assertAlmostEqual(tel_az_data.actualVelocity, az_actual.velocity)
+            assert tel_az_data.demandPosition == pytest.approx(az_target.position)
+            assert tel_az_data.demandVelocity == pytest.approx(az_target.velocity)
+            assert tel_az_data.actualPosition == pytest.approx(az_actual.position)
+            assert tel_az_data.actualVelocity == pytest.approx(az_actual.velocity)
 
             previous_tai = tai

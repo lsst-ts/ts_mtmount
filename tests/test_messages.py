@@ -35,7 +35,7 @@ class MessageTestCase(unittest.TestCase):
     def check_round_trip(self, message):
         str_fields = message.str_fields()
         message_round_trip = type(message).from_str_fields(str_fields)
-        self.assertEqual(message, message_round_trip)
+        assert message == message_round_trip
 
     def check_message_type(self, message_type):
         for i in range(10):
@@ -54,7 +54,3 @@ class MessageTestCase(unittest.TestCase):
         for reply_type in mtmount.replies.Replies:
             with self.subTest(reply_type=reply_type.__name__):
                 self.check_message_type(reply_type)
-
-
-if __name__ == "__main__":
-    unittest.main()
