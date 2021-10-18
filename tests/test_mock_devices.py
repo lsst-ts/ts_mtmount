@@ -44,7 +44,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.controller = TrivialMockController()
         axis_devices = [
             mtmount.mock.AxisDevice(controller=self.controller, device_id=device_id)
-            for device_id in mtmount.LimitsDict
+            for device_id in mtmount.CmdLimitsDict
         ]
         devices = axis_devices + [
             mtmount.mock.MainPowerSupplyDevice(controller=self.controller),

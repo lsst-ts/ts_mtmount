@@ -352,7 +352,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             desired_position = rot_data.demandPosition
             desired_velocity = rot_data.demandVelocity
 
-        ccw_limits = limits.LimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP]
+        ccw_limits = limits.CmdLimitsDict[enums.DeviceId.CAMERA_CABLE_WRAP]
 
         # List of warning strings about truncated position and velocity
         # (in that order).

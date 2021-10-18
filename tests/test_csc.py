@@ -165,7 +165,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 demandVelocity=0,
             )
             min_elevation = (
-                mtmount.LimitsDict[mtmount.DeviceId.ELEVATION_AXIS]
+                mtmount.CmdLimitsDict[mtmount.DeviceId.ELEVATION_AXIS]
                 .scaled()
                 .min_position
             )
@@ -395,7 +395,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 assert self.mock_controller.command_queue.empty()
 
                 # Test regular tracking mode. CCW and MTRotator start in sync.
-                ccw_limits = mtmount.LimitsDict[mtmount.DeviceId.CAMERA_CABLE_WRAP]
+                ccw_limits = mtmount.CmdLimitsDict[mtmount.DeviceId.CAMERA_CABLE_WRAP]
                 # seconds until the CCW demand hits the position limit;
                 # make it large enough that we get a few target events
                 # before we reach the position limit.
