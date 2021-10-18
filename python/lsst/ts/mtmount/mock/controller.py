@@ -43,9 +43,11 @@ from ..exceptions import CommandSupersededException
 from .. import commands
 from .. import constants
 from .. import enums
+from . import limits
 
 # from . import device
 from .axis_device import AxisDevice
+from .detailed_settings import detailed_settings
 from .main_power_supply_device import MainAxesPowerSupplyDevice
 from .mirror_covers_device import MirrorCoversDevice
 from .mirror_cover_locks_device import MirrorCoverLocksDevice
@@ -259,6 +261,33 @@ class Controller:
             enums.CommandCode.STATE_INFO: self.do_state_info,
         }
         self.command_dict.update(extra_commands)
+
+        # Update detailed settings with the actual values used in the
+        # azimuth, elevation, and camera cable wrap actuators.
+        self.detailed_settings = detailed_settings
+        for axis_name in ("Azimuth", "Elevation"):
+            system_id = getattr(System, axis_name.upper())
+            axis_actuator = self.device_dict[system_id].actuator
+            axis_limits = limits.CmdLimitsDict[system_id]
+            axis_settings = self.detailed_settings["MainAxis"][axis_name]
+            axis_settings["LimitsMinPositionValue"] = axis_limits.min_position
+            axis_settings["LimitsMaxPositionValue"] = axis_limits.max_position
+            axis_settings["TcsMaxSpeed"] = axis_limits.max_velocity
+            axis_settings["TcsMaxAcceleration"] = axis_limits.max_acceleration
+            axis_settings["SoftmotionTrackingMaxSpeed"] = axis_actuator.max_velocity
+            axis_settings[
+                "SoftmotionTrackingMaxAcceleration"
+            ] = axis_actuator.max_acceleration
+
+        ccw_actuator = self.device_dict[System.CAMERA_CABLE_WRAP].actuator
+        ccw_limits = limits.CmdLimitsDict[System.CAMERA_CABLE_WRAP]
+        ccw_settings = self.detailed_settings["CW"]["CCW"]
+        ccw_settings["MinPosition"] = ccw_limits.min_position
+        ccw_settings["MaxPosition"] = ccw_limits.max_position
+        ccw_settings["MaxSpeed"] = ccw_limits.max_velocity
+        ccw_settings["MaxAcceleration"] = ccw_limits.max_acceleration
+        ccw_settings["TrackingSpeed"] = ccw_actuator.max_velocity
+        ccw_settings["TrackingAcceleration"] = ccw_actuator.max_acceleration
 
         self.read_loop_task = asyncio.Future()
 
@@ -1252,6 +1281,13 @@ class Controller:
             make_reply_dict(
                 id=enums.ReplyId.AVAILABLE_SETTINGS,
                 sets=available_settings_formatted,
+            )
+        )
+
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.DETAILED_SETTINGS_APPLIED,
+                **self.detailed_settings,
             )
         )
 

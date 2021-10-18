@@ -26,7 +26,7 @@ import asyncio
 from lsst.ts import utils
 from lsst.ts import simactuators
 from lsst.ts.idl.enums.MTMount import AxisMotionState, System
-from .. import limits
+from . import limits
 from ..exceptions import CommandSupersededException
 from .base_device import BaseDevice
 
@@ -66,7 +66,7 @@ class AxisDevice(BaseDevice):
 
     def __init__(self, controller, system_id, start_position=0):
         system_id = System(system_id)
-        device_limits = limits.LimitsDict[system_id].scaled()
+        device_limits = limits.CmdLimitsDict[system_id].scaled()
         self.enabled = False
         self.tracking_enabled = False
         self.tracking_paused = False

@@ -6,6 +6,26 @@
 Version History
 ###############
 
+v0.20.0
+-------
+
+Changes:
+
+* Publish new events based on DETAILED_SETTINGS_APPLIED event from the low-level controller.
+* Limit the camera cable wrap commanded position to be within acceptable limits,
+  using data from the DETAILED_SETTINGS_APPLIED event from the low-level controller.
+* Update the hard-coded command limits for the camera cable wrap to match the current values.
+* Modernize the unit tests to use bare assert and a few pytest functions.
+* Renamed LimitsDict to mock.CmdLimitsDict.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 10.1
+
 v0.19.1
 -------
 

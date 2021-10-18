@@ -284,7 +284,3 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         data_json = json.dumps(llv_data)
         self.server.writer.write(data_json.encode() + mtmount.LINE_TERMINATOR)
         await self.server.writer.drain()
-
-
-if __name__ == "__main__":
-    unittest.main()

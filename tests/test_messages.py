@@ -41,7 +41,7 @@ class MessageTestCase(unittest.TestCase):
         """
         str_fields = message.str_fields()
         message_round_trip = type(message).from_str_fields(str_fields)
-        self.assertEqual(message, message_round_trip)
+        assert message == message_round_trip
 
     def check_message_type(self, message_type):
         """For a given message type: make several random messages and call
@@ -58,7 +58,3 @@ class MessageTestCase(unittest.TestCase):
         for command_type in mtmount.commands.Commands:
             with self.subTest(command_type=command_type.__name__):
                 self.check_message_type(command_type)
-
-
-if __name__ == "__main__":
-    unittest.main()
