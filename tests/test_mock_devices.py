@@ -49,7 +49,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 system_id=system_id,
                 start_position=mtmount.mock.INITIAL_POSITION[system_id],
             )
-            for system_id in mtmount.LimitsDict
+            for system_id in mtmount.mock.CmdLimitsDict
         ]
         devices = axis_devices + [
             mtmount.mock.MainAxesPowerSupplyDevice(controller=self.controller),

@@ -243,7 +243,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 axis_settings = self.mock_controller.detailed_settings["MainAxis"][
                     axis_name
                 ]
-                axis_limits = mtmount.LimitsDict[system_id]
+                axis_limits = mtmount.mock.CmdLimitsDict[system_id]
                 if axis_name == "Elevation":
                     extra_elevation_fields = dict(
                         minOperationalL2LimitEnabled=True,
@@ -281,7 +281,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             ccw_actuator = self.mock_controller.device_dict[
                 System.CAMERA_CABLE_WRAP
             ].actuator
-            ccw_limits = mtmount.LimitsDict[System.CAMERA_CABLE_WRAP]
+            ccw_limits = mtmount.mock.CmdLimitsDict[System.CAMERA_CABLE_WRAP]
             ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]
             await self.assert_next_sample(
                 topic=self.remote.evt_cameraCableWrapControllerSettings,
@@ -1333,7 +1333,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 assert self.mock_controller.command_queue.empty()
 
                 # Test regular tracking mode. CCW and MTRotator start in sync.
-                ccw_limits = mtmount.LimitsDict[System.CAMERA_CABLE_WRAP]
+                ccw_limits = mtmount.mock.CmdLimitsDict[System.CAMERA_CABLE_WRAP]
                 # seconds until the CCW demand hits the position limit;
                 # make it large enough that we get a few target events
                 # before we reach the position limit.

@@ -527,7 +527,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     ccw_actuator = self.controller.device_dict[
                         System.CAMERA_CABLE_WRAP
                     ].actuator
-                    ccw_limits = mtmount.LimitsDict[System.CAMERA_CABLE_WRAP]
+                    ccw_limits = mtmount.mock.CmdLimitsDict[System.CAMERA_CABLE_WRAP]
                     ccw_settings = reply.CW["CCW"]
                     assert ccw_settings["MinPosition"] == ccw_limits.min_position
                     assert ccw_settings["MaxPosition"] == ccw_limits.max_position
@@ -545,7 +545,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         ("Azimuth", System.AZIMUTH),
                         ("Elevation", System.ELEVATION),
                     ):
-                        axis_limits = mtmount.LimitsDict[system_id]
+                        axis_limits = mtmount.mock.CmdLimitsDict[system_id]
                         axis_actuator = self.controller.device_dict[system_id].actuator
                         axis_settings = reply.MainAxis[axis_name]
                         for limit_enable_name in (

@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["Limits", "LimitsDict"]
+__all__ = ["Limits", "CmdLimitsDict"]
 
 from lsst.ts.idl.enums.MTMount import System
 
@@ -61,7 +61,7 @@ class Limits:
 
 # Command limits for the mock axis controllers.
 # Scaled up versions are used for computing slews.
-LimitsDict = {
+CmdLimitsDict = {
     # From LTS-103.
     System.ELEVATION: Limits(
         min_position=20, max_position=86.5, max_velocity=3.5, max_acceleration=3.5
