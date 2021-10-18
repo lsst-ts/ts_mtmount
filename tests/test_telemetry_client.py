@@ -265,8 +265,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             DDS telemetry data, as field name: value.
         """
         return dict(
-            current=[n * 0.1 for n in range(1, naxes + 1)],
-            timestamp=time.time(),
+            current=[n * 0.1 for n in range(1, naxes + 1)], timestamp=time.time(),
         )
 
     async def publish_data(self, llv_data):
@@ -280,7 +279,3 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         data_json = json.dumps(llv_data)
         self.server.writer.write(data_json.encode() + mtmount.LINE_TERMINATOR)
         await self.server.writer.drain()
-
-
-if __name__ == "__main__":
-    unittest.main()

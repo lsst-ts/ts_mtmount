@@ -54,7 +54,3 @@ class MessageTestCase(unittest.TestCase):
         for reply_type in mtmount.replies.Replies:
             with self.subTest(reply_type=reply_type.__name__):
                 self.check_message_type(reply_type)
-
-
-if __name__ == "__main__":
-    unittest.main()

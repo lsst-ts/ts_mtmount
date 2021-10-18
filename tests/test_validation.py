@@ -88,7 +88,3 @@ class ValidationTestCase(unittest.TestCase):
             with self.subTest(bad_data=bad_data):
                 with pytest.raises(jsonschema.exceptions.ValidationError):
                     self.validator.validate(bad_data)
-
-
-if __name__ == "__main__":
-    unittest.main()

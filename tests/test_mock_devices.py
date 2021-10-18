@@ -696,7 +696,3 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.actuator.moving()
 
         await task
-
-
-if __name__ == "__main__":
-    unittest.main()

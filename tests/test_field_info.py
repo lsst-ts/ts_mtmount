@@ -214,7 +214,3 @@ class FieldInfoTestCase(unittest.TestCase):
             assert what in field_info.doc
             assert isinstance(field_info, mtmount.field_info.EnumFieldInfo)
             assert field_info.dtype is mtmount.Source
-
-
-if __name__ == "__main__":
-    unittest.main()

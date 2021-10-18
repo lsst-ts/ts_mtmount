@@ -622,7 +622,3 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 else:
                     desired_value = 0
                 assert axis_telem[name] == pytest.approx(desired_value)
-
-
-if __name__ == "__main__":
-    unittest.main()
