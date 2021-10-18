@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["Limits", "LimitsDict"]
+__all__ = ["Limits", "CmdLimitsDict"]
 
 from . import enums
 
@@ -61,7 +61,7 @@ class Limits:
 
 # Command limits (the CSC does not actually command velocity or acceleration,
 # but in theory it could).
-LimitsDict = {
+CmdLimitsDict = {
     # From LTS-103.
     enums.DeviceId.ELEVATION_AXIS: Limits(
         min_position=20, max_position=86.5, max_velocity=3.5, max_acceleration=3.5
