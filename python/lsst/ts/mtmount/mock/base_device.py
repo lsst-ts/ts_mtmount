@@ -125,3 +125,6 @@ class BaseDevice:
 
     def do_reset_alarm(self, command):
         self.alarm_on = False
+
+    def __repr__(self):
+        return f"{type(self).__name__}(system_id={self.system_id!r})"

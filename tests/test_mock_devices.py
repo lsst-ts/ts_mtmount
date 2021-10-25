@@ -127,6 +127,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_mirror_cover_locks(self):
         device = self.device_dict[System.MIRROR_COVER_LOCKS]
+        self.check_device_repr(device)
 
         await self.check_deployable_device(
             device=device,
@@ -145,6 +146,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_mirror_covers(self):
         device = self.device_dict[System.MIRROR_COVERS]
+        self.check_device_repr(device)
 
         await self.check_deployable_device(
             device=device,
@@ -159,6 +161,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_oil_supply_system(self):
         device = self.device_dict[System.OIL_SUPPLY_SYSTEM]
+        self.check_device_repr(device)
 
         # Test the OilSupplySystemPower command
         assert not device.power_on
@@ -226,6 +229,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_top_end_chiller(self):
         device = self.device_dict[System.TOP_END_CHILLER]
+        self.check_device_repr(device)
+
         initial_track_ambient = device.track_ambient
         initial_temperature = device.temperature
         temperature1 = 5.1  # An arbitrary value
@@ -296,6 +301,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def check_axis_device(self, device):
+        self.check_device_repr(device)
+
         is_elaz = device.system_id in (
             System.AZIMUTH,
             System.ELEVATION,
@@ -819,3 +826,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert_motion_state(DeployableMotionState.LOST)
 
         await task
+
+    def check_device_repr(self, device):
+        """Check the string representation of a mock device."""
+        repr_str = repr(device)
+        assert type(device).__name__ in repr_str
+        assert device.system_id.name in repr_str
