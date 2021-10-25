@@ -917,6 +917,45 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 previous_tai = tai
                 await asyncio.sleep(0.1)
 
+            # Test that out-of-range tracking updates are rejected,
+            # leaving the device enabled and in tracking mode.
+            for bad_position in (
+                device.cmd_limits.min_position - 0.001,
+                device.cmd_limits.max_position + 0.001,
+            ):
+                tai = previous_tai + 0.001
+                previous_tai = tai
+                bad_track_command = mtmount.commands.AzimuthTrack(
+                    position=bad_position,
+                    velocity=0,
+                    tai=previous_tai + 0.001,
+                )
+                await self.run_command(
+                    bad_track_command,
+                    use_read_loop=True,
+                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                )
+
+            for bad_velocity in (
+                -device.cmd_limits.max_velocity - 0.001,
+                device.cmd_limits.max_velocity + 0.001,
+            ):
+                tai = previous_tai + 0.001
+                previous_tai = tai
+                bad_track_command = mtmount.commands.AzimuthTrack(
+                    position=end_position,
+                    velocity=bad_velocity,
+                    tai=previous_tai + 0.001,
+                )
+                await self.run_command(
+                    bad_track_command,
+                    use_read_loop=True,
+                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                )
+            assert device.power_on
+            assert device.enabled
+            assert device.tracking_enabled
+
             stop_tracking_command = mtmount.commands.AzimuthStop()
             non_cmd_replies = await self.run_command(
                 command=stop_tracking_command,
@@ -1036,3 +1075,18 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 else:
                     desired_value = 0
                 assert axis_telem[name] == pytest.approx(desired_value)
+
+            # Test that out-of-range positions are rejected.
+            for bad_position in (
+                device.cmd_limits.min_position - 0.001,
+                device.cmd_limits.max_position + 0.001,
+            ):
+                move_command = mtmount.commands.ElevationMove(position=bad_position)
+                await self.run_command(
+                    command=move_command,
+                    use_read_loop=True,
+                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                )
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled

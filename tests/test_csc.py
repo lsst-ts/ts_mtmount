@@ -21,6 +21,7 @@
 
 import asyncio
 import contextlib
+import itertools
 import pathlib
 import logging
 import math
@@ -1103,6 +1104,36 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             data = self.remote.evt_cameraCableWrapFollowing.get()
             assert data.enabled
 
+            # Check that out-of-bounds moves are rejected,
+            # while leaving the mock devices enabled.
+            for (azimuth, az_ok), (elevation, el_ok) in itertools.product(
+                (
+                    (mock_azimuth.cmd_limits.min_position - 0.001, False),
+                    (0, True),
+                    (mock_azimuth.cmd_limits.max_position + 0.001, False),
+                ),
+                (
+                    (mock_elevation.cmd_limits.min_position - 0.001, False),
+                    (45, True),
+                    (mock_elevation.cmd_limits.max_position + 0.001, False),
+                ),
+            ):
+                if az_ok and el_ok:
+                    continue
+                with salobj.assertRaisesAckError():
+                    await self.remote.cmd_moveToTarget.set_start(
+                        azimuth=azimuth,
+                        elevation=elevation,
+                        timeout=STD_TIMEOUT,
+                    )
+            for device in mock_azimuth, mock_elevation:
+                assert device.power_on
+                assert device.enabled
+
+            # Check that the CCW is still following the rotator.
+            data = self.remote.evt_cameraCableWrapFollowing.get()
+            assert data.enabled
+
             # Check that putting the CSC into STANDBY state sends the axes
             # out of position (possibly one axis at a time)
             await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
@@ -1191,6 +1222,62 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             dt_slew = time.monotonic() - t0
             tracking_task.cancel()
             print(f"Time to finish slew={dt_slew:0.2f} seconds")
+
+            # Tracking should still be enabled
+            for device in mock_azimuth, mock_elevation:
+                assert device.power_on
+                assert device.enabled
+                assert device.tracking_enabled
+
+            # Test that out-of-range tracking commands are rejected,
+            # while leaving the mock devices enabled and tracking.
+            for (
+                (azimuth, az_ok),
+                (elevation, el_ok),
+                (azimuth_velocity, az_vel_ok),
+                (elevation_velocity, el_vel_ok),
+            ) in itertools.product(
+                (
+                    (mock_azimuth.cmd_limits.min_position - 0.001, False),
+                    (0, True),
+                    (mock_azimuth.cmd_limits.max_position + 0.001, False),
+                ),
+                (
+                    (mock_elevation.cmd_limits.min_position - 0.001, False),
+                    (45, True),
+                    (mock_elevation.cmd_limits.max_position + 0.001, False),
+                ),
+                (
+                    (-mock_azimuth.cmd_limits.max_velocity - 0.001, False),
+                    (0, True),
+                    (mock_azimuth.cmd_limits.max_velocity + 0.001, False),
+                ),
+                (
+                    (-mock_elevation.cmd_limits.max_velocity - 0.001, False),
+                    (0, True),
+                    (mock_elevation.cmd_limits.max_velocity + 0.001, False),
+                ),
+            ):
+                if az_ok and el_ok and az_vel_ok and el_vel_ok:
+                    continue
+                bad_kwargs = self.make_track_target_kwargs(
+                    azimuth=azimuth,
+                    elevation=elevation,
+                    azimuthVelocity=azimuth_velocity,
+                    elevationVelocity=elevation_velocity,
+                )
+                with salobj.assertRaisesAckError():
+                    await self.remote.cmd_trackTarget.set_start(
+                        **bad_kwargs, timeout=STD_TIMEOUT
+                    )
+            for device in mock_azimuth, mock_elevation:
+                assert device.power_on
+                assert device.enabled
+                assert device.tracking_enabled
+
+            # Check that the CCW is still following the rotator.
+            data = self.remote.evt_cameraCableWrapFollowing.get()
+            assert data.enabled
 
             # Disable tracking and check axis controllers
             await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
