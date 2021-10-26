@@ -240,11 +240,12 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 topic = getattr(
                     self.remote, f"evt_{axis_name.lower()}ControllerSettings"
                 )
-                axis_actuator = self.mock_controller.device_dict[system_id].actuator
+                axis_device = self.mock_controller.device_dict[system_id]
+                axis_actuator = axis_device.actuator
+                axis_cmd_limits = axis_device.cmd_limits
                 axis_settings = self.mock_controller.detailed_settings["MainAxis"][
                     axis_name
                 ]
-                axis_limits = mtmount.mock.CmdLimitsDict[system_id]
                 if axis_name == "Elevation":
                     extra_elevation_fields = dict(
                         minOperationalL2LimitEnabled=True,
@@ -262,15 +263,15 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     maxOperationalL1LimitEnabled=True,
                     minL2LimitEnabled=True,
                     maxL2LimitEnabled=True,
-                    minCmdPosition=axis_limits.min_position,
-                    maxCmdPosition=axis_limits.max_position,
+                    minCmdPosition=axis_cmd_limits.min_position,
+                    maxCmdPosition=axis_cmd_limits.max_position,
                     minL1Limit=axis_settings[
                         "LimitsNegativeAdjustableSoftwareLimitValue"
                     ],
                     maxL1Limit=axis_settings[
                         "LimitsPositiveAdjustableSoftwareLimitValue"
                     ],
-                    maxCmdVelocity=axis_limits.max_velocity,
+                    maxCmdVelocity=axis_cmd_limits.max_velocity,
                     maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
                     maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
                     maxMoveJerk=axis_settings["TcsDefaultJerk"],
@@ -279,20 +280,19 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     maxTrackingJerk=axis_settings["SoftmotionTrackingMaxJerk"],
                     **extra_elevation_fields,
                 )
-            ccw_actuator = self.mock_controller.device_dict[
-                System.CAMERA_CABLE_WRAP
-            ].actuator
-            ccw_limits = mtmount.mock.CmdLimitsDict[System.CAMERA_CABLE_WRAP]
+            ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
+            ccw_actuator = ccw_device.actuator
+            ccw_cmd_limits = ccw_device.cmd_limits
             ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]
             await self.assert_next_sample(
                 topic=self.remote.evt_cameraCableWrapControllerSettings,
                 l1LimitsEnabled=True,
                 l2LimitsEnabled=True,
-                minCmdPosition=ccw_limits.min_position,
-                maxCmdPosition=ccw_limits.max_position,
+                minCmdPosition=ccw_cmd_limits.min_position,
+                maxCmdPosition=ccw_cmd_limits.max_position,
                 minL1Limit=ccw_settings["MinSoftwareLimit"],
                 maxL1Limit=ccw_settings["MaxSoftwareLimit"],
-                maxCmdVelocity=ccw_limits.max_velocity,
+                maxCmdVelocity=ccw_cmd_limits.max_velocity,
                 maxMoveVelocity=ccw_settings["DefaultSpeed"],
                 maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
                 maxMoveJerk=ccw_settings["DefaultJerk"],
@@ -1403,6 +1403,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 )
             )
             ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
+            ccw_cmd_limits = ccw_device.cmd_limits
             assert not ccw_device.power_on
             assert not ccw_device.enabled
 
@@ -1420,7 +1421,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 assert self.mock_controller.command_queue.empty()
 
                 # Test regular tracking mode. CCW and MTRotator start in sync.
-                ccw_limits = mtmount.mock.CmdLimitsDict[System.CAMERA_CABLE_WRAP]
+
                 # seconds until the CCW demand hits the position limit;
                 # make it large enough that we get a few target events
                 # before we reach the position limit.
@@ -1483,10 +1484,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         flush=True, timeout=STD_TIMEOUT
                     )
                     if do_max_limit:
-                        assert ccw_target.velocity <= ccw_limits.max_velocity
+                        assert ccw_target.velocity <= ccw_cmd_limits.max_velocity
                         assert ccw_target.position <= position_limit
                     else:
-                        assert ccw_target.velocity >= -ccw_limits.max_velocity
+                        assert ccw_target.velocity >= -ccw_cmd_limits.max_velocity
                         assert ccw_target.position >= position_limit
                     print(
                         f"CCW target position={ccw_target.position}, velocity={ccw_target.velocity}"

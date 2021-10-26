@@ -524,16 +524,16 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     del reply_dict["timestamp"]
                     assert reply_dict == self.controller.detailed_settings
 
-                    ccw_actuator = self.controller.device_dict[
-                        System.CAMERA_CABLE_WRAP
-                    ].actuator
-                    ccw_limits = mtmount.mock.CmdLimitsDict[System.CAMERA_CABLE_WRAP]
+                    ccw_device = self.controller.device_dict[System.CAMERA_CABLE_WRAP]
+                    ccw_actuator = ccw_device.actuator
+                    ccw_cmd_limits = ccw_device.cmd_limits
                     ccw_settings = reply.CW["CCW"]
-                    assert ccw_settings["MinPosition"] == ccw_limits.min_position
-                    assert ccw_settings["MaxPosition"] == ccw_limits.max_position
-                    assert ccw_settings["MaxSpeed"] == ccw_limits.max_velocity
+                    assert ccw_settings["MinPosition"] == ccw_cmd_limits.min_position
+                    assert ccw_settings["MaxPosition"] == ccw_cmd_limits.max_position
+                    assert ccw_settings["MaxSpeed"] == ccw_cmd_limits.max_velocity
                     assert (
-                        ccw_settings["MaxAcceleration"] == ccw_limits.max_acceleration
+                        ccw_settings["MaxAcceleration"]
+                        == ccw_cmd_limits.max_acceleration
                     )
                     assert ccw_settings["TrackingSpeed"] == ccw_actuator.max_velocity
                     assert (
@@ -545,8 +545,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         ("Azimuth", System.AZIMUTH),
                         ("Elevation", System.ELEVATION),
                     ):
-                        axis_limits = mtmount.mock.CmdLimitsDict[system_id]
-                        axis_actuator = self.controller.device_dict[system_id].actuator
+                        axis_device = self.controller.device_dict[system_id]
+                        axis_actuator = axis_device.actuator
+                        axis_cmd_limits = axis_device.cmd_limits
                         axis_settings = reply.MainAxis[axis_name]
                         for limit_enable_name in (
                             "LimitsMinPositionEnable",
@@ -571,16 +572,18 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                                 assert axis_settings[limit_enable_name]
                         assert (
                             axis_settings["LimitsMinPositionValue"]
-                            == axis_limits.min_position
+                            == axis_cmd_limits.min_position
                         )
                         assert (
                             axis_settings["LimitsMaxPositionValue"]
-                            == axis_limits.max_position
+                            == axis_cmd_limits.max_position
                         )
-                        assert axis_settings["TcsMaxSpeed"] == axis_limits.max_velocity
+                        assert (
+                            axis_settings["TcsMaxSpeed"] == axis_cmd_limits.max_velocity
+                        )
                         assert (
                             axis_settings["TcsMaxAcceleration"]
-                            == axis_limits.max_acceleration
+                            == axis_cmd_limits.max_acceleration
                         )
                         assert (
                             axis_settings["SoftmotionTrackingMaxSpeed"]
