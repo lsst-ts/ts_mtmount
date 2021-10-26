@@ -34,7 +34,8 @@ from .base_device import BaseDevice
 # Maximum time (seconds) after the end time of one track command
 # before another must arrive. In other words, the maximum amount
 # of time the axis is willing to extrapolate a track command.
-MAX_TRACKING_DELAY = 1
+# The low-level controller uses 5 seconds.
+MAX_TRACKING_DELAY = 5
 
 
 class AxisDevice(BaseDevice):
