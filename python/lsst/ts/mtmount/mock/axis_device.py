@@ -34,7 +34,8 @@ from .base_device import BaseDevice
 # Maximum time (seconds) after the end time of one track command
 # before another must arrive. In other words, the maximum amount
 # of time the axis is willing to extrapolate a track command.
-MAX_TRACKING_DELAY = 1
+# The low-level controller uses 5 seconds.
+MAX_TRACKING_DELAY = 5
 
 
 class AxisDevice(BaseDevice):
@@ -66,7 +67,8 @@ class AxisDevice(BaseDevice):
 
     def __init__(self, controller, system_id, start_position=0):
         system_id = System(system_id)
-        device_limits = limits.CmdLimitsDict[system_id].scaled()
+        self.cmd_limits = limits.CmdLimitsDict[system_id]
+        device_limits = self.cmd_limits.scaled()
         self.enabled = False
         self.tracking_enabled = False
         self.tracking_paused = False
@@ -87,6 +89,7 @@ class AxisDevice(BaseDevice):
 
         # The actuator cannot tell the difference between tracking and
         # moving point to point, so keep track of that with this flag.
+        # The value is only relevant when the actuator is moving.
         self.moving_point_to_point = False
         self.point_to_point_target = 0
         self._monitor_move_task = asyncio.Future()
@@ -255,9 +258,27 @@ class AxisDevice(BaseDevice):
         """Specify a tracking target position, velocity, and time.
 
         The drive must be enabled and tracking must be enabled.
+
+        Raises
+        ------
+        ValueError
+            If command.position or command.velocity exceeds command limits.
         """
         self.assert_enabled()
         self.assert_tracking_enabled(True)
+        if (
+            not self.cmd_limits.min_position
+            <= command.position
+            <= self.cmd_limits.max_position
+        ):
+            raise ValueError(
+                f"position={command.position} not in range [{self.cmd_limits.min_position}, "
+                f"{self.cmd_limits.min_position}]"
+            )
+        if abs(command.velocity) > self.cmd_limits.max_velocity:
+            raise ValueError(
+                f"abs(velocity)=abs({command.velocity}) > {self.cmd_limits.max_velocity}"
+            )
         self.supersede_move_command(command)
         if self.tracking_paused:
             self._tracking_timeout_task.cancel()
@@ -292,7 +313,7 @@ class AxisDevice(BaseDevice):
             self.actuator.Kind.Tracking: AxisMotionState.TRACKING,
         }.get(kind)
         # The actuator cannot tell the difference between tracking
-        # and moving point to point, hence the moving_point_to_point flag
+        # and moving point to point, hence the moving_point_to_point flag.
         if self.moving_point_to_point and motion_state == AxisMotionState.TRACKING:
             if tai >= self.actuator.path[-1].tai:
                 motion_state = AxisMotionState.STOPPED
@@ -314,7 +335,8 @@ class AxisDevice(BaseDevice):
         Parameters
         ----------
         position : `float`
-            Desired position, in degrees.
+            Desired position, in degrees. This is a separate argument
+            than ``command`` so that it can be called by `do_home`.
         command : `Command`
             Command to monitor and report done.
 
@@ -322,9 +344,19 @@ class AxisDevice(BaseDevice):
         -------
         duration : `float`
            Minimum duration of move (sec)
+
+        Raises
+        ------
+        ValueError
+            If position exceeds command limits.
         """
         self.assert_enabled()
         self.assert_tracking_enabled(False)
+        if not self.cmd_limits.min_position <= position <= self.cmd_limits.max_position:
+            raise ValueError(
+                f"position={position} not in range [{self.cmd_limits.min_position}, "
+                f"{self.cmd_limits.min_position}]"
+            )
         self.supersede_move_command(command)
         self.moving_point_to_point = True
         self.point_to_point_target = position

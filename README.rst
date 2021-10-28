@@ -16,7 +16,6 @@ Assuming you have the basic Vera C. Rubin LSST DM stack installed you can do the
   This requires ``documenteer``; see `building single package docs <https://developer.lsst.io/stack/building-single-package-docs.html>`_ for installation instructions.
 
 This code uses ``pre-commit`` to maintain ``black`` formatting and ``flake8`` compliance.
-To enable this, run the following commands once (the first removes the previous pre-commit hook)::
+To enable this, run the following command once::
 
-    git config --unset-all core.hooksPath
     pre-commit install

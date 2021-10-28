@@ -127,6 +127,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_mirror_cover_locks(self):
         device = self.device_dict[System.MIRROR_COVER_LOCKS]
+        self.check_device_repr(device)
 
         await self.check_deployable_device(
             device=device,
@@ -145,6 +146,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_mirror_covers(self):
         device = self.device_dict[System.MIRROR_COVERS]
+        self.check_device_repr(device)
 
         await self.check_deployable_device(
             device=device,
@@ -159,6 +161,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_oil_supply_system(self):
         device = self.device_dict[System.OIL_SUPPLY_SYSTEM]
+        self.check_device_repr(device)
 
         # Test the OilSupplySystemPower command
         assert not device.power_on
@@ -226,6 +229,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_top_end_chiller(self):
         device = self.device_dict[System.TOP_END_CHILLER]
+        self.check_device_repr(device)
+
         initial_track_ambient = device.track_ambient
         initial_temperature = device.temperature
         temperature1 = 5.1  # An arbitrary value
@@ -296,6 +301,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def check_axis_device(self, device):
+        self.check_device_repr(device)
+
         is_elaz = device.system_id in (
             System.AZIMUTH,
             System.ELEVATION,
@@ -305,6 +312,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.enabled
         assert not device.has_target
         assert not device.moving_point_to_point
+
+        assert device.cmd_limits == mtmount.mock.CmdLimitsDict[device.system_id]
 
         short_command_names = [
             "drive_enable",
@@ -382,9 +391,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             enable_tracking_on_command,
             stop_command,
             home_command,
-            move_command_class(position=device.actuator.min_position + 1),
+            move_command_class(position=device.cmd_limits.min_position + 0.1),
             track_command_class(
-                position=device.actuator.min_position + 1,
+                position=device.cmd_limits.min_position + 0.1,
                 velocity=0,
                 tai=utils.current_tai(),
             ),
@@ -438,6 +447,21 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert end_segment.position == pytest.approx(end_position)
         assert device.has_target
         assert device.point_to_point_target == pytest.approx(end_position)
+        assert not device.tracking_enabled
+
+        # Test that out-of-range point to point moves are rejected,
+        # leaving the device enabled.
+        for bad_position in (
+            device.cmd_limits.min_position - 0.001,
+            device.cmd_limits.max_position + 0.001,
+        ):
+            move_command = move_command_class(position=bad_position)
+            with pytest.raises(ValueError):
+                await self.run_command(move_command, min_timeout=0.5)
+        assert device.power_on
+        assert device.enabled
+        assert device.has_target
+        assert not device.tracking_enabled
 
         # Start homing or a big point to point move, then stop the axes
         # (Homing is a point to point move, and it's slow).
@@ -472,7 +496,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # The tracking command should fail when not in tracking mode.
         track_command = track_command_class(
-            position=device.actuator.min_position + 1,
+            position=device.cmd_limits.min_position + 0.1,
             velocity=0,
             tai=utils.current_tai(),
         )
@@ -528,6 +552,39 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             assert device.has_target
             assert device.motion_state(tai) == AxisMotionState.TRACKING
             await asyncio.sleep(0.1)
+
+        # Check that out-of-range tracking commands are rejected,
+        # leaving the device enabled and in tracking mode.
+        for bad_position in (
+            device.cmd_limits.min_position - 0.001,
+            device.cmd_limits.max_position + 0.001,
+        ):
+            tai = previous_tai + 0.001
+            previous_tai = tai
+            with pytest.raises(ValueError):
+                track_command = track_command_class(
+                    position=bad_position,
+                    velocity=velocity,
+                    tai=tai,
+                )
+                await self.run_command(track_command)
+        for bad_velocity in (
+            -device.cmd_limits.max_velocity - 0.001,
+            device.cmd_limits.max_velocity + 0.001,
+        ):
+            tai = previous_tai + 0.001
+            previous_tai = tai
+            track_command = track_command_class(
+                position=position,
+                velocity=bad_velocity,
+                tai=tai,
+            )
+            with pytest.raises(ValueError):
+                await self.run_command(track_command)
+        assert not device.alarm_on
+        assert device.power_on
+        assert device.enabled
+        assert device.motion_state(tai) == AxisMotionState.TRACKING
 
         # Wait for tracking to time out; add some time to deal with
         # clock errors in macOS Docker.
@@ -819,3 +876,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert_motion_state(DeployableMotionState.LOST)
 
         await task
+
+    def check_device_repr(self, device):
+        """Check the string representation of a mock device."""
+        repr_str = repr(device)
+        assert type(device).__name__ in repr_str
+        assert device.system_id.name in repr_str

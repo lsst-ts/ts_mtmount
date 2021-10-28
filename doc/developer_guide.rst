@@ -40,8 +40,8 @@ This is a pure python package. There is nothing to build except the documentatio
     pytest -v  # to run tests
     package-docs clean; package-docs build  # to build the documentation
 
-Tekniker Info
-=============
+Interface with the Telescope Mount Assembly
+===========================================
 
 .. toctree::
     tma_interface
