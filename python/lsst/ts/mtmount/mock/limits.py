@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["Limits", "LimitsDict"]
+__all__ = ["Limits", "CmdLimitsDict"]
 
 from lsst.ts.idl.enums.MTMount import System
 
@@ -45,12 +45,11 @@ class Limits:
         self.max_velocity = max_velocity
         self.max_acceleration = max_acceleration
 
-    def scaled(self, factor=1.01):
+    def scaled(self, factor=1.1):
         """Return a copy scaled by the specified factor.
 
         Intended for use in mock axis controllers, because the actuator
-        soft limits should be slighly larger than the limits
-        allowed by the CSC.
+        soft limits should be larger than the command limits.
         """
         return Limits(
             min_position=self.min_position * factor,
@@ -60,7 +59,9 @@ class Limits:
         )
 
 
-LimitsDict = {
+# Command limits for the mock axis controllers.
+# Scaled up versions are used for computing slews.
+CmdLimitsDict = {
     # From LTS-103.
     System.ELEVATION: Limits(
         min_position=20, max_position=86.5, max_velocity=3.5, max_acceleration=3.5

@@ -19,7 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import itertools
 import unittest
+
+import pytest
 
 from lsst.ts import mtmount
 from lsst.ts.mtmount.utils import MAX_DOC_LENGTH
@@ -37,9 +40,35 @@ class UtilsTestCase(unittest.TestCase):
         wrapped_text = mtmount.wrap_parameter_doc(long_text)
         lines = wrapped_text.split("\n")
         for line in lines:
-            self.assertTrue(line.startswith("    "))
-            self.assertLessEqual(len(line), MAX_DOC_LENGTH)
+            assert line.startswith("    ")
+            assert len(line) <= MAX_DOC_LENGTH
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_truncate_value(self):
+        descr = "an arbitrary description"
+        limits = [-5, -3.2, -0.001, 0, 0.001, 42]
+        for min_value, max_value in itertools.product(limits, limits):
+            if min_value >= max_value:
+                with pytest.raises(ValueError):
+                    mtmount.truncate_value(
+                        value=0, min_value=min_value, max_value=max_value, descr=descr
+                    )
+            else:
+                for diff, core_value in itertools.product(
+                    (-0.001, 0, 0.001), (min_value, max_value)
+                ):
+                    value = core_value + diff
+                    truncated_value, message = mtmount.truncate_value(
+                        value=value,
+                        min_value=min_value,
+                        max_value=max_value,
+                        descr=descr,
+                    )
+                    if min_value <= value <= max_value:
+                        assert truncated_value == value
+                        assert message == ""
+                    else:
+                        if value < min_value:
+                            assert truncated_value == min_value
+                        else:
+                            assert truncated_value == max_value
+                        assert descr in message

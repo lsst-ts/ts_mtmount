@@ -6,6 +6,29 @@
 Version History
 ###############
 
+v0.20.0
+-------
+
+Changes:
+
+* Publish new events based on DETAILED_SETTINGS_APPLIED event from the low-level controller.
+* Limit the camera cable wrap commanded position to be within acceptable limits,
+  using data from the DETAILED_SETTINGS_APPLIED event from the low-level controller.
+* Renamed ``LimitsDict`` to `mock.CmdLimitsDict` and update the values to match the current values.
+* `mock.AxisDevice`: add ``cmd_limits`` attribute and enforce those limits for point-to-point moves and tracking commands.
+* `mock.BaseDevice`: add ``__repr__`` method.
+* Modernize the unit tests to use bare assert and a few pytest functions.
+* Increase the tracking timeout interval in the mock axis controllers to 5 seconds (from 1 second), to match the real low-level controller.
+* Document some of the data in the DETAILED_SETTINGS_APPLIED event from the low-level controller in tma_interface.rst.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 10.1
+
 v0.19.1
 -------
 

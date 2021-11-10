@@ -34,11 +34,11 @@ from lsst.ts import utils
 from lsst.ts import salobj
 from lsst.ts.idl.enums.MTMount import AxisMotionState, PowerState, System
 from .config_schema import CONFIG_SCHEMA
+from .utils import truncate_value
 from . import constants
 from . import command_futures
 from . import commands
 from . import enums
-from . import limits
 from . import __version__
 
 # Extra time to wait for commands to be done (sec)
@@ -139,7 +139,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     initial_state : `salobj.State` or `int`, optional
         The initial state of the CSC. This is provided for unit testing,
         as real CSCs should start up in `lsst.ts.salobj.StateSTANDBY`,
-        the default.
+        the maxMove.
     simulation_mode : `int`, optional
         Simulation mode.
     run_mock_controller : `bool`, optional
@@ -180,6 +180,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     valid_simulation_modes = (0, 1)
     version = __version__
+
+    # For the rotator following loop: commanded position and velocity
+    # must be within this margin of the command limits.
+    # The value is based on the fact that the low-level controller
+    # reports all limits rounded to 2 decimal places.
+    limits_margin = 0.01
 
     def __init__(
         self,
@@ -326,6 +332,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.handle_deployable_motion_state,
                 topic=self.evt_deployablePlatformsMotionState,
             ),
+            enums.ReplyId.DETAILED_SETTINGS_APPLIED: self.handle_detailed_settings_applied,
             enums.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE: self.handle_elevation_locking_pin_motion_state,
             enums.ReplyId.ERROR: self.handle_error,
             enums.ReplyId.IN_POSITION: self.handle_in_position,
@@ -488,17 +495,39 @@ class MTMountCsc(salobj.ConfigurableCsc):
             desired_position = rot_data.demandPosition
             desired_velocity = rot_data.demandVelocity
 
-        max_velocity = limits.LimitsDict[System.CAMERA_CABLE_WRAP].max_velocity
+        # List of warning strings about truncated position and velocity
+        # (in that order).
+        truncation_warnings = []
 
-        if abs(desired_velocity) > max_velocity:
-            excessive_desired_velocity = desired_velocity
-            desired_velocity = math.copysign(max_velocity, desired_velocity)
+        ccw_settings_data = self.evt_cameraCableWrapControllerSettings.data
+        desired_velocity, warning_message = truncate_value(
+            value=desired_velocity,
+            min_value=-ccw_settings_data.maxCmdVelocity + self.limits_margin,
+            max_value=ccw_settings_data.maxCmdVelocity - self.limits_margin,
+            descr="velocity",
+        )
+        if warning_message:
+            truncation_warnings.append(warning_message)
+
+        # Adjust the desired position for the time offset,
+        # then truncate it to be in bounds.
+        adjusted_desired_position = desired_position + desired_velocity * dt
+
+        adjusted_desired_position, warning_message = truncate_value(
+            value=adjusted_desired_position,
+            min_value=ccw_settings_data.minCmdPosition + self.limits_margin,
+            max_value=ccw_settings_data.maxCmdPosition - self.limits_margin,
+            descr="position",
+        )
+        if warning_message:
+            truncation_warnings.insert(0, warning_message)
+
+        if truncation_warnings:
             self.log.warning(
-                f"Limiting desired velocity from {excessive_desired_velocity:0.2f} "
-                f"to {desired_velocity:0.2f}"
+                "Limiting camera cable wrap commanded "
+                + " and ".join(truncation_warnings)
             )
 
-        adjusted_desired_position = desired_position + desired_velocity * dt
         return (adjusted_desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
@@ -931,6 +960,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         self.log.info("Camera cable wrap following begins")
         self.rotator_position_error_excessive = False
+        if not self.evt_cameraCableWrapControllerSettings.has_data:
+            raise RuntimeError(
+                "cameraCableWrapControllerSettings event has not been published; "
+                "camera cable wrap command limits unknown"
+            )
         paused = False
         try:
             while self.camera_cable_wrap_following_enabled:
@@ -1225,6 +1259,87 @@ class MTMountCsc(salobj.ConfigurableCsc):
         * `ReplyId.MIRROR_COVERS_MOTION_STATE`
         """
         topic.set_put(state=reply.state, elementState=reply.elementState)
+
+    def handle_detailed_settings_applied(self, reply):
+        """Handle a `ReplyId.DETAILED_SETTINGS_APPLIED` reply."""
+        self.evt_appliedSettingsMatchStart.set_put(
+            appliedSettingsMatchStartIsTrue=reply.allSettingsMatchSet
+        )
+        for axis_name, event in (
+            ("Azimuth", self.evt_azimuthControllerSettings),
+            ("Elevation", self.evt_elevationControllerSettings),
+        ):
+            axis_settings = reply.MainAxis[axis_name]
+            min_operational_l1_limit_enabled = axis_settings[
+                "LimitsNegativeAdjustableSoftwareLimitEnable"
+            ]
+            if min_operational_l1_limit_enabled:
+                min_l1_limit = axis_settings[
+                    "LimitsNegativeAdjustableSoftwareLimitValue"
+                ]
+            else:
+                min_l1_limit = axis_settings["LimitsNegativeSoftwareLimitValue"]
+            max_operational_l1_limit_enabled = axis_settings[
+                "LimitsPositiveAdjustableSoftwareLimitEnable"
+            ]
+            if max_operational_l1_limit_enabled:
+                max_l1_limit = axis_settings[
+                    "LimitsPositiveAdjustableSoftwareLimitValue"
+                ]
+            else:
+                max_l1_limit = axis_settings["LimitsPositiveSoftwareLimitValue"]
+
+            if axis_name == "Elevation":
+                op_l2_limit_enabled_kwargs = dict(
+                    minOperationalL2LimitEnabled=axis_settings[
+                        "LimitsNegativeOperationalLimitSwitchEnable"
+                    ],
+                    maxOperationalL2LimitEnabled=axis_settings[
+                        "LimitsPositiveOperationalLimitSwitchEnable"
+                    ],
+                )
+            else:
+                op_l2_limit_enabled_kwargs = {}
+            event.set_put(
+                minCmdPositionEnabled=axis_settings["LimitsMinPositionEnable"],
+                maxCmdPositionEnabled=axis_settings["LimitsMaxPositionEnable"],
+                minL1LimitEnabled=axis_settings["LimitsNegativeSoftwareLimitEnable"],
+                maxL1LimitEnabled=axis_settings["LimitsPositiveSoftwareLimitEnable"],
+                minOperationalL1LimitEnabled=min_operational_l1_limit_enabled,
+                maxOperationalL1LimitEnabled=max_operational_l1_limit_enabled,
+                minL2LimitEnabled=axis_settings["LimitsNegativeLimitSwitchEnable"],
+                maxL2LimitEnabled=axis_settings["LimitsPositiveLimitSwitchEnable"],
+                minCmdPosition=axis_settings["LimitsMinPositionValue"],
+                maxCmdPosition=axis_settings["LimitsMaxPositionValue"],
+                minL1Limit=min_l1_limit,
+                maxL1Limit=max_l1_limit,
+                maxCmdVelocity=axis_settings["TcsMaxSpeed"],
+                maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
+                maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
+                maxMoveJerk=axis_settings["TcsDefaultJerk"],
+                maxTrackingVelocity=axis_settings["SoftmotionTrackingMaxSpeed"],
+                maxTrackingAcceleration=axis_settings[
+                    "SoftmotionTrackingMaxAcceleration"
+                ],
+                maxTrackingJerk=axis_settings["SoftmotionTrackingMaxJerk"],
+                **op_l2_limit_enabled_kwargs,
+            )
+        ccw_settings = reply.CW["CCW"]
+        self.evt_cameraCableWrapControllerSettings.set_put(
+            l1LimitsEnabled=ccw_settings["SoftwareLimitEnable"],
+            l2LimitsEnabled=ccw_settings["LimitSwitchEnable"],
+            minCmdPosition=ccw_settings["MinPosition"],
+            maxCmdPosition=ccw_settings["MaxPosition"],
+            minL1Limit=ccw_settings["MinSoftwareLimit"],
+            maxL1Limit=ccw_settings["MaxSoftwareLimit"],
+            maxCmdVelocity=ccw_settings["MaxSpeed"],
+            maxMoveVelocity=ccw_settings["DefaultSpeed"],
+            maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
+            maxMoveJerk=ccw_settings["DefaultJerk"],
+            maxTrackingVelocity=ccw_settings["TrackingSpeed"],
+            maxTrackingAcceleration=ccw_settings["TrackingAcceleration"],
+            maxTrackingJerk=ccw_settings["TrackingJerk"],
+        )
 
     def handle_elevation_locking_pin_motion_state(self, reply):
         """Handle a `ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE` reply."""
