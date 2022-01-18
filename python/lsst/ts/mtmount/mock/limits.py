@@ -62,9 +62,10 @@ class Limits:
 # Command limits for the mock axis controllers.
 # Scaled up versions are used for computing slews.
 CmdLimitsDict = {
-    # From LTS-103.
+    # From LTS-103. Note that LTS-103 also specifies that the performance
+    # requirements need only be met between 15 and 86.5 degrees.
     System.ELEVATION: Limits(
-        min_position=20, max_position=86.5, max_velocity=3.5, max_acceleration=3.5
+        min_position=0, max_position=90.0, max_velocity=3.5, max_acceleration=3.5
     ),
     # From LTS-103.
     System.AZIMUTH: Limits(
