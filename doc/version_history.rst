@@ -6,6 +6,23 @@
 Version History
 ###############
 
+v0.20.1
+-------
+
+Changes:
+
+* Expand the elevation limits back to 0, 90, to match LTS-103.
+* `mock.AxisDevice`: fix the "out of range" error message.
+  It was printing the minimum value as the upper limit, instead of the maximum value.
+
+Requires:
+
+* ts_salobj 6.3
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 10.1
+
 v0.20.0
 -------
 

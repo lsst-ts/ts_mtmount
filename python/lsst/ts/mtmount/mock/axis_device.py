@@ -273,7 +273,7 @@ class AxisDevice(BaseDevice):
         ):
             raise ValueError(
                 f"position={command.position} not in range [{self.cmd_limits.min_position}, "
-                f"{self.cmd_limits.min_position}]"
+                f"{self.cmd_limits.max_position}]"
             )
         if abs(command.velocity) > self.cmd_limits.max_velocity:
             raise ValueError(
