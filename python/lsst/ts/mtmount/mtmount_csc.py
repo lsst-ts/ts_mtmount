@@ -23,6 +23,7 @@ __all__ = ["MTMountCsc"]
 
 import asyncio
 import functools
+import inspect
 import json
 import math
 import re
@@ -350,6 +351,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
             enums.ReplyId.SAFETY_INTERLOCKS: self.handle_safety_interlocks,
             enums.ReplyId.WARNING: self.handle_warning,
         }
+        # Make sure all the dispatchers are coroutines, to catch future
+        # code errors. The check for an instance of partial is needed with
+        # Python 3.8 and older, based on https://stackoverflow.com/a/52422903.
+        for key, value in self.reply_dispatch.items():
+            if isinstance(value, functools.partial):
+                coro = value.func
+            else:
+                coro = value
+            if not inspect.iscoroutinefunction(coro):
+                raise RuntimeError(
+                    f"Bug: the dispatch function for ReplyId={key!r} is not a coroutine"
+                )
 
         self.rotator = salobj.Remote(
             domain=self.domain, name="MTRotator", include=["rotation"]
@@ -365,7 +378,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         # Needed so `start` sees it. The value has been checked at this point,
         # but the simulation_mode attribute is usually set by super().start().
-        self.evt_simulationMode.set_put(mode=simulation_mode)
+        self.evt_simulationMode.set(mode=simulation_mode)
 
     async def begin_enable(self, data):
         """Take control of the mount and initialize devices.
@@ -573,7 +586,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             err_msg = "Could not connect to the low-level controller: "
             f"host={command_host}, port={self.command_port}"
             self.log.exception(err_msg)
-            self.fault(
+            await self.fault(
                 code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e!r}"
             )
             return
@@ -592,7 +605,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             cmdstr = " ".join(args)
             err_msg = f"Could not start MTMount telemetry client with {cmdstr!r}"
             self.log.exception(err_msg)
-            self.fault(
+            await self.fault(
                 code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR,
                 report=f"{err_msg}: {e!r}",
             )
@@ -604,7 +617,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except asyncio.TimeoutError:
             err_msg = "The telemetry client is not producing telemetry"
             self.log.error(err_msg)
-            self.fault(code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg)
+            await self.fault(
+                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg
+            )
         self.monitor_telemetry_client_task = asyncio.create_task(
             self.monitor_telemetry_client()
         )
@@ -660,7 +675,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     "Timed out waiting for the writer to close; continuing"
                 )
 
-        self.clear_target()
+        await self.clear_target()
 
         # Kill the telemetry process
         if (
@@ -738,8 +753,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
-        self.evt_elevationInPosition.set_put(inPosition=False)
-        self.evt_azimuthInPosition.set_put(inPosition=False)
+        await self.evt_elevationInPosition.set_write(inPosition=False)
+        await self.evt_azimuthInPosition.set_write(inPosition=False)
 
         try:
             self.log.info("Give up command of the mount.")
@@ -932,10 +947,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.camera_cable_wrap_follow_loop_task = asyncio.create_task(
                 self._camera_cable_wrap_follow_loop()
             )
-            self.evt_cameraCableWrapFollowing.set_put(enabled=True, force_output=True)
+            await self.evt_cameraCableWrapFollowing.set_write(
+                enabled=True, force_output=True
+            )
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following canceled before it starts")
-            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
             # Try to stop the camera cable wrap on a best-effort basis.
             await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
             raise
@@ -945,7 +962,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.error(f"{err_msg}: {e!r}")
             else:
                 self.log.exception(err_msg)
-            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
             # Try to stop the camera cable wrap on a best-effort basis.
             # This should succeed if things are working, but they
             # may not be in this exception branch.
@@ -998,7 +1015,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     tai=tai,
                 )
                 await self.send_command(command, do_lock=False)
-                self.evt_cameraCableWrapTarget.set_put(
+                await self.evt_cameraCableWrapTarget.set_write(
                     position=position, velocity=velocity, taiTime=tai
                 )
                 if self.camera_cable_wrap_following_enabled:
@@ -1011,16 +1028,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except Exception:
             self.log.exception("Camera cable wrap following failed")
         finally:
-            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
 
     @property
     def camera_cable_wrap_following_enabled(self):
         """Return True if camera cable wrap following rotator is enabled."""
         return self.evt_cameraCableWrapFollowing.data.enabled
 
-    def clear_target(self):
+    async def clear_target(self):
         """Clear the target event."""
-        self.evt_target.set_put(
+        await self.evt_target.set_write(
             elevation=math.nan,
             azimuth=math.nan,
             elevationVelocity=math.nan,
@@ -1042,7 +1059,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_closeMirrorCovers(self, data):
         """Handle the closeMirrorCovers command."""
         self.assert_enabled()
-        self.cmd_openMirrorCovers.ack_in_progress(
+        await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
         # Deploy the mirror cover locks/guides.
@@ -1077,7 +1094,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_openMirrorCovers(self, data):
         """Handle the openMirrorCovers command."""
         self.assert_enabled()
-        self.cmd_openMirrorCovers.ack_in_progress(
+        await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
         # Retract the mirror covers.
@@ -1103,7 +1120,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             do_lock=True,
         )
         timeout = cmd_futures.timeout + TIMEOUT_BUFFER
-        self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
+        await self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
         await cmd_futures.done
 
     async def do_trackTarget(self, data):
@@ -1121,7 +1138,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             ),
             do_lock=False,
         )
-        self.evt_target.set_put(
+        await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
             azimuthVelocity=data.azimuthVelocity,
@@ -1158,24 +1175,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.assert_enabled()
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
-    def handle_available_settings(self, reply):
+    async def handle_available_settings(self, reply):
         """Handle a `ReplyId.AVAILABLE_SETTINGS` reply."""
-        self.evt_availableSettings.set_put(
+        await self.evt_availableSettings.set_write(
             names=", ".join(item["name"] for item in reply.sets),
             descriptions=json.dumps([item["description"] for item in reply.sets]),
             createdDates=", ".join(item["createdDate"] for item in reply.sets),
             modifiedDates=", ".join(item["modifiedDate"] for item in reply.sets),
         )
 
-    def handle_axis_motion_state(self, reply):
+    async def handle_axis_motion_state(self, reply):
         """Handle a `ReplyId.AXIS_MOTION_STATE` reply."""
         axis = reply.axis
         state = reply.motionState
         was_tracking = self.is_tracking()
         if axis == System.ELEVATION:
-            self.evt_elevationMotionState.set_put(state=state)
+            await self.evt_elevationMotionState.set_write(state=state)
             if state == AxisMotionState.MOVING_POINT_TO_POINT:
-                self.evt_target.set_put(
+                await self.evt_target.set_write(
                     elevation=reply.position,
                     elevationVelocity=0,
                     taiTime=utils.current_tai(),
@@ -1184,9 +1201,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     radesys="",
                 )
         elif axis == System.AZIMUTH:
-            self.evt_azimuthMotionState.set_put(state=state)
+            await self.evt_azimuthMotionState.set_write(state=state)
             if state == AxisMotionState.MOVING_POINT_TO_POINT:
-                self.evt_target.set_put(
+                await self.evt_target.set_write(
                     azimuth=reply.position,
                     azimuthVelocity=0,
                     taiTime=utils.current_tai(),
@@ -1195,28 +1212,28 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     radesys="",
                 )
         elif axis == System.CAMERA_CABLE_WRAP:
-            self.evt_cameraCableWrapMotionState.set_put(state=state)
+            await self.evt_cameraCableWrapMotionState.set_write(state=state)
         else:
             self.log.warning(f"Unrecognized axis={axis} in handle_axis_motion_state")
         if was_tracking and not self.is_tracking():
-            self.clear_target()
+            await self.clear_target()
 
-    def handle_azimuth_topple_block(self, reply):
+    async def handle_azimuth_topple_block(self, reply):
         """Handle a `ReplyId.AZIMUTH_TOPPLE_BLOCK` reply."""
-        self.evt_azimuthToppleBlock.set_put(
+        await self.evt_azimuthToppleBlock.set_write(
             forward=reply.forward,
             reverse=reply.reverse,
         )
 
-    def handle_chiller_state(self, reply):
+    async def handle_chiller_state(self, reply):
         """Andle a `ReplyId.CHILLER_STATE` reply."""
         topic_info = self.system_state_dict[reply.system]
-        topic_info.topic.set_put(
+        await topic_info.topic.set_write(
             trackAmbient=reply.trackAmbient,
             setTemperature=reply.temperature,
         )
 
-    def handle_command_reply(self, reply):
+    async def handle_command_reply(self, reply):
         """Handle a ReplyId.CMD_x reply."""
         reply_id = reply.id
         sequence_id = reply.sequenceId
@@ -1245,11 +1262,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
 
-    def handle_commander(self, reply):
+    async def handle_commander(self, reply):
         """Handle a `ReplyId.COMMANDER` reply."""
-        self.evt_commander.set_put(commander=reply.actualCommander)
+        await self.evt_commander.set_write(commander=reply.actualCommander)
 
-    def handle_deployable_motion_state(self, reply, topic):
+    async def handle_deployable_motion_state(self, reply, topic):
         """Handle a generic position event.
 
         Including:
@@ -1258,11 +1275,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         * `ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE`
         * `ReplyId.MIRROR_COVERS_MOTION_STATE`
         """
-        topic.set_put(state=reply.state, elementState=reply.elementState)
+        await topic.set_write(state=reply.state, elementState=reply.elementState)
 
-    def handle_detailed_settings_applied(self, reply):
+    async def handle_detailed_settings_applied(self, reply):
         """Handle a `ReplyId.DETAILED_SETTINGS_APPLIED` reply."""
-        self.evt_appliedSettingsMatchStart.set_put(
+        await self.evt_appliedSettingsMatchStart.set_write(
             appliedSettingsMatchStartIsTrue=reply.allSettingsMatchSet
         )
         for axis_name, event in (
@@ -1300,7 +1317,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
             else:
                 op_l2_limit_enabled_kwargs = {}
-            event.set_put(
+            await event.set_write(
                 minCmdPositionEnabled=axis_settings["LimitsMinPositionEnable"],
                 maxCmdPositionEnabled=axis_settings["LimitsMaxPositionEnable"],
                 minL1LimitEnabled=axis_settings["LimitsNegativeSoftwareLimitEnable"],
@@ -1325,7 +1342,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 **op_l2_limit_enabled_kwargs,
             )
         ccw_settings = reply.CW["CCW"]
-        self.evt_cameraCableWrapControllerSettings.set_put(
+        await self.evt_cameraCableWrapControllerSettings.set_write(
             l1LimitsEnabled=ccw_settings["SoftwareLimitEnable"],
             l2LimitsEnabled=ccw_settings["LimitSwitchEnable"],
             minCmdPosition=ccw_settings["MinPosition"],
@@ -1341,15 +1358,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
             maxTrackingJerk=ccw_settings["TrackingJerk"],
         )
 
-    def handle_elevation_locking_pin_motion_state(self, reply):
+    async def handle_elevation_locking_pin_motion_state(self, reply):
         """Handle a `ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE` reply."""
-        self.evt_elevationLockingPinMotionState.set_put(
+        await self.evt_elevationLockingPinMotionState.set_write(
             state=reply.state, elementState=reply.elementState
         )
 
-    def handle_error(self, reply):
+    async def handle_error(self, reply):
         """Handle a `ReplyId.ERROR` reply."""
-        self.evt_error.set_put(
+        await self.evt_error.set_write(
             code=reply.code,
             latched=reply.on,
             active=reply.active,
@@ -1357,7 +1374,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             force_output=True,
         )
 
-    def handle_in_position(self, reply):
+    async def handle_in_position(self, reply):
         """Handle a `ReplyId.IN_POSITION` reply."""
         topic = {
             System.ELEVATION: self.evt_elevationInPosition,
@@ -1367,9 +1384,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if topic is None:
             self.log.warning(f"Unrecognized axis={reply.system} in handle_in_position")
         else:
-            topic.set_put(inPosition=reply.inPosition)
+            await topic.set_write(inPosition=reply.inPosition)
 
-    def handle_limits(self, reply):
+    async def handle_limits(self, reply):
         """Handle a `ReplyId.LIMITS` reply."""
         topic = {
             System.ELEVATION: self.evt_elevationLimits,
@@ -1379,35 +1396,35 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if topic is None:
             self.log.warning(f"Unrecognized system={reply.system} in handle_limits")
         else:
-            topic.set_put(limits=reply.limits)
+            await topic.set_write(limits=reply.limits)
 
-    def handle_motion_controller_state(self, reply):
+    async def handle_motion_controller_state(self, reply):
         """Handle a `ReplyId.MOTION_CONTROLLER_STATE` reply."""
         topic_info = self.system_state_dict[reply.system]
-        topic_info.topic.set_put(
+        await topic_info.topic.set_write(
             motionControllerState=reply.motionControllerState,
         )
 
-    def handle_power_state(self, reply):
+    async def handle_power_state(self, reply):
         """Handle a `ReplyId.POWER_STATE` reply."""
         topic_info = self.system_state_dict[reply.system]
         if topic_info.num_elements_power_state > 0:
-            topic_info.topic.set_put(
+            await topic_info.topic.set_write(
                 powerState=reply.powerState, elementsPowerState=reply.elementPowerState
             )
         else:
-            topic_info.topic.set_put(powerState=reply.powerState)
+            await topic_info.topic.set_write(powerState=reply.powerState)
 
-    def handle_safety_interlocks(self, reply):
+    async def handle_safety_interlocks(self, reply):
         """Handle a `ReplyId.SAFETY_INTERLOCKS` reply."""
         data_dict = vars(reply)
         del data_dict["id"]
         del data_dict["timestamp"]
-        self.evt_safetyInterlocks.set_put(**data_dict)
+        await self.evt_safetyInterlocks.set_write(**data_dict)
 
-    def handle_warning(self, reply):
+    async def handle_warning(self, reply):
         """Handle a `ReplyId.WARNING` reply."""
-        self.evt_warning.set_put(
+        await self.evt_warning.set_write(
             code=reply.code,
             active=reply.active,
             text="\n".join(reply.description),
@@ -1451,7 +1468,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 handler = self.reply_dispatch.get(reply.id, None)
                 if handler:
                     try:
-                        handler(reply)
+                        await handler(reply)
                     except Exception as e:
                         self.log.error(f"Failed to handle reply: {reply}: {e!r}")
                 else:
@@ -1463,12 +1480,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     if self.connected:
                         err_msg = "Read loop failed; possibly a bug"
                         self.log.exception(err_msg)
-                        self.fault(
+                        await self.fault(
                             code=enums.CscErrorCode.INTERNAL_ERROR,
                             report=f"{err_msg}: {e!r}",
                         )
                     else:
-                        self.fault(
+                        await self.fault(
                             code=enums.CscErrorCode.CONNECTION_LOST,
                             report="Connection lost to low-level controller (noticed in read_loop)",
                         )
@@ -1497,7 +1514,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 cmdstr = " ".join(args)
                 err_msg = f"Mock controller process command {cmdstr!r} failed"
                 self.log.exception(err_msg)
-                self.fault(
+                await self.fault(
                     code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR,
                     report=f"{err_msg}: {e!r}",
                 )
@@ -1516,13 +1533,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
-        self.evt_cameraCableWrapFollowing.set_put(enabled=False)
-        self.clear_target()
+        await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
+        await self.clear_target()
         await super().start()
 
     async def stop_camera_cable_wrap_following(self):
         """Stop the camera cable wrap from following the rotator."""
-        self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+        await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
         self.camera_cable_wrap_follow_start_task.cancel()
         if self.camera_cable_wrap_follow_loop_task.done():
             return
