@@ -355,7 +355,7 @@ class AxisDevice(BaseDevice):
         if not self.cmd_limits.min_position <= position <= self.cmd_limits.max_position:
             raise ValueError(
                 f"position={position} not in range [{self.cmd_limits.min_position}, "
-                f"{self.cmd_limits.min_position}]"
+                f"{self.cmd_limits.max_position}]"
             )
         self.supersede_move_command(command)
         self.moving_point_to_point = True
