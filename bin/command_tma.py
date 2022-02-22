@@ -29,9 +29,9 @@ but Tekniker plans to make an additional port available for our CSC.
 
 Warning: this should not be used while the CSC is running.
 
-For more information:
+For more information::
 
-tma_commander.py --help
+    command_tma.py --help
 """
 
 import asyncio
