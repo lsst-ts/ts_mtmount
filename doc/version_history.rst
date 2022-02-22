@@ -6,6 +6,24 @@
 Version History
 ###############
 
+v0.21.0
+-------
+
+Changes:
+
+* Update for ts_salobj v7, which is required.
+  This also requires ts_xml 11.
+* Added bin/monitor_mtmount_telemetry.py.
+* `mock.AxisDevice`: fix another instance of incorrect text in an out-of-range error message.
+
+Requires:
+
+* ts_salobj 7
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 11
+
 v0.20.1
 -------
 
