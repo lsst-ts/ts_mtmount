@@ -81,7 +81,7 @@ __all__ = [
     "parse_command",
 ]
 
-from lsst.ts import salobj
+from lsst.ts import utils
 from . import base_message
 from . import enums
 from . import field_info
@@ -112,7 +112,7 @@ class Command(base_message.BaseMessage):
     wraps around), by default.
     """
 
-    sequence_id_generator = salobj.index_generator(imax=MAX_SEQUENCE_ID)
+    sequence_id_generator = utils.index_generator(imax=MAX_SEQUENCE_ID)
 
     def __init__(self, **kwargs):
         if kwargs.get("sequence_id") is None:

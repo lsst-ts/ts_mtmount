@@ -28,7 +28,7 @@ CONFIG_SCHEMA = yaml.safe_load(
 $schema: http://json-schema.org/draft-07/schema#
 $id: https://github.com/lsst-ts/ts_mtmount/blob/master/python/lsst/ts/mtmount/config_schema.py
 # title must end with one or more spaces followed by the schema version, which must begin with "v"
-title: MTMount v1
+title: MTMount v2
 description: Schema for MTMount configuration files
 type: object
 properties:
