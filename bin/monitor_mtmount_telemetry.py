@@ -20,23 +20,37 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""A simple command-line script that sends commands to
-the low-level controller (Operation Manager).
+"""A trivial command-line script that checks if MTMount telemetry is output.
 
-Must be connected to a low-level port on the Operation Manger.
-At this time the only available port is for the hand-held device,
-but Tekniker plans to make an additional port available for our CSC.
+To run it::
 
-Warning: this should not be used while the CSC is running.
-
-For more information::
-
-    command_tma.py --help
+    monitor_mtmount_telemetry.py
 """
 
 import asyncio
 
-from lsst.ts import mtmount
+from lsst.ts import salobj
+
+num_messages = 0
 
 
-asyncio.run(mtmount.TmaCommander.amain())
+def topic_callback(data):
+    global num_messages
+    num_messages += 1
+    if num_messages % 10 == 0:
+        print(f"Read {num_messages} messages")
+
+
+async def main():
+    async with salobj.Domain() as domain, salobj.Remote(
+        domain=domain,
+        name="MTMount",
+        include=["azimuth"],
+    ) as remote:
+        print("monitor_mtmount_telemetry monitoring the azimuth topic")
+        remote.tel_azimuth.callback = topic_callback
+        await asyncio.sleep(10 * 60)
+
+
+asyncio.run(main())
+print("monitor_mtmount_telemetry done")
