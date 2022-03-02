@@ -96,7 +96,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def make_csc(
         self,
         initial_state,
-        config_dir=None,
+        config_dir=TEST_CONFIG_DIR,
         simulation_mode=1,
         internal_mock_controller=False,
     ):
@@ -607,7 +607,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         async def _implement_loop(rotator, position, velocity, interval):
             while True:
                 print("put fake rotation")
-                self.put_fake_rotation(
+                await self.put_fake_rotation(
                     rotator=rotator, position=position, velocity=velocity
                 )
                 await asyncio.sleep(interval)
@@ -622,7 +622,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         finally:
             loop_task.cancel()
 
-    def put_fake_rotation(self, rotator, position=0, velocity=0, tai=None):
+    async def put_fake_rotation(self, rotator, position=0, velocity=0, tai=None):
         """Publish one MTRotator rotation telemetry message.
 
         Parameters
@@ -638,7 +638,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         """
         if tai is None:
             tai = utils.current_tai()
-        rotator.tel_rotation.set_put(
+        await rotator.tel_rotation.set_write(
             demandPosition=0,
             demandVelocity=0,
             demandAcceleration=0,
@@ -690,7 +690,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         tai = previous_tai + 0.001
                     dt = tai - tai0
                     position = position0 + velocity * dt
-                    self.put_fake_rotation(
+                    await self.put_fake_rotation(
                         rotator=rotator, position=position, velocity=velocity, tai=tai
                     )
                     command = await self.next_lowlevel_command()
@@ -739,7 +739,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 # Check that rotator targets are ignored after
                 # tracking is disabled.
                 for i in range(2):
-                    rotator.tel_rotation.set_put(
+                    await rotator.tel_rotation.set_write(
                         demandPosition=45,
                         demandVelocity=1,
                         demandAcceleration=0,
@@ -1460,7 +1460,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         tai = previous_tai + 0.001
                     dt = tai - tai0
                     position = position0 + velocity * dt
-                    rotator.tel_rotation.set_put(
+                    await rotator.tel_rotation.set_write(
                         demandPosition=position,
                         demandVelocity=velocity,
                         demandAcceleration=0,

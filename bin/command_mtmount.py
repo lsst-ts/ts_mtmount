@@ -25,9 +25,9 @@ the low-level controller (Operation Manager).
 
 Warning: this should not be used while the CSC is running.
 
-For more information:
+For more information::
 
-tma_commander.py --help
+    command_mtmount.py --help
 """
 
 import asyncio
