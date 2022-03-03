@@ -231,10 +231,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 cscVersion=mtmount.__version__,
                 subsystemVersions="",
             )
-            await self.assert_next_sample(
-                topic=self.remote.evt_appliedSettingsMatchStart,
-                appliedSettingsMatchStartIsTrue=True,
-            )
             for axis_name in ("Azimuth", "Elevation"):
                 system_id = getattr(System, axis_name.upper())
                 topic = getattr(
