@@ -36,6 +36,7 @@ class ValidationTestCase(unittest.TestCase):
         self.validator = salobj.StandardValidator(schema=self.schema)
         self.default = dict(
             host="ccw-mgmt.cp.lsst.org",
+            telemetry_host="ccw-mgmt.cp.lsst.org",
             connection_timeout=10,
             ack_timeout=10,
             camera_cable_wrap_advance_time=0.02,
@@ -44,6 +45,7 @@ class ValidationTestCase(unittest.TestCase):
         )
         self.nondefault = dict(
             host="1.2.3.4",
+            telemetry_host="5.6.7.8",
             connection_timeout=3.4,
             ack_timeout=4.5,
             camera_cable_wrap_advance_time=0.13,
