@@ -6,6 +6,22 @@
 Version History
 ###############
 
+v0.21.1
+-------
+
+Changes:
+
+* `MTMountCsc`: stop writing the appliedSettingsMatchStart event.
+* `CONFIG_SCHEMA`: delete default values.
+
+Requires:
+
+* ts_salobj 7
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 11
+
 v0.21.0
 -------
 
