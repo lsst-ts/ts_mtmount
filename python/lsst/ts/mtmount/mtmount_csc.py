@@ -1279,9 +1279,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def handle_detailed_settings_applied(self, reply):
         """Handle a `ReplyId.DETAILED_SETTINGS_APPLIED` reply."""
-        await self.evt_appliedSettingsMatchStart.set_write(
-            appliedSettingsMatchStartIsTrue=reply.allSettingsMatchSet
-        )
         for axis_name, event in (
             ("Azimuth", self.evt_azimuthControllerSettings),
             ("Elevation", self.evt_elevationControllerSettings),
