@@ -28,7 +28,7 @@ CONFIG_SCHEMA = yaml.safe_load(
 $schema: http://json-schema.org/draft-07/schema#
 $id: https://github.com/lsst-ts/ts_mtmount/blob/master/python/lsst/ts/mtmount/config_schema.py
 # title must end with one or more spaces followed by the schema version, which must begin with "v"
-title: MTMount v1
+title: MTMount v2
 description: Schema for MTMount configuration files
 type: object
 properties:
@@ -36,22 +36,18 @@ properties:
     description: IP address of the Operation Manager.
     type: string
     format: hostname
-    default: ccw-mgmt.cp.lsst.org
   telemetry_host:
     description: IP address of the telemetry server.
     type: string
     format: hostname
-    default: ccw-mgmt.cp.lsst.org
   connection_timeout:
     description: Time limit for connecting to the TCP/IP command interface (sec)
     type: number
     exclusiveMinimum: 0
-    default: 10
   ack_timeout:
     description: Time limit for reading a command acknowledgement from the TCP/IP interface (sec)
     type: number
     exclusiveMinimum: 0
-    default: 10
   camera_cable_wrap_advance_time:
     description: >-
       How far in advance of the current time to make the tai time field of camera cable wrap
@@ -63,7 +59,6 @@ properties:
       of the camera cable wrap, which can cause too large an error between the camera rotator
       and the camera cable wrap when the rotator is offset or slewed to a new field.
     type: number
-    default: 0.02
   camera_cable_wrap_interval:
     description: >-
       Interval between camera cable wrap tracking commands (seconds).
@@ -71,7 +66,6 @@ properties:
       plus the time it takes to compute and issue the tracking command.
     type: number
     minimum: 0
-    default: 0.1
   max_rotator_position_error:
     description: >-
       The maximum difference (in degrees) between camera rotator actual position and demand position
@@ -79,7 +73,6 @@ properties:
       rather than the usual demand position and velocity.
     type: number
     exclusiveMinimum: 0
-    default: 0.1
 required:
   - host
   - telemetry_host

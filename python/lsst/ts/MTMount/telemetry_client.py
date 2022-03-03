@@ -54,7 +54,7 @@ class TelemetryTopicHandler:
         self.field_dict = field_dict
         self.preprocessor = preprocessor
 
-    def __call__(self, llv_data):
+    async def __call__(self, llv_data):
         """Process one low-level message.
 
         Parameters
@@ -69,7 +69,7 @@ class TelemetryTopicHandler:
             sal_name: llv_data[llv_name]
             for sal_name, llv_name in self.field_dict.items()
         }
-        self.topic.set_put(**sal_data)
+        await self.topic.set_write(**sal_data)
 
     def __repr__(self):
         return (
@@ -231,7 +231,7 @@ class TelemetryClient:
                         self.unsupported_topic_ids.add(topic_id)
                         self.log.debug(f"Ignoring unsupported topic ID {topic_id}")
                     continue
-                topic_handler(llv_data)
+                await topic_handler(llv_data)
             except Exception:
                 self.log.exception(f"read_loop could not handle {data}; continuing.")
 
