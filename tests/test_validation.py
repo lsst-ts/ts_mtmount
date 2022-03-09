@@ -33,9 +33,10 @@ class ValidationTestCase(unittest.TestCase):
 
     def setUp(self):
         self.schema = mtmount.CONFIG_SCHEMA
-        self.validator = salobj.DefaultingValidator(schema=self.schema)
+        self.validator = salobj.StandardValidator(schema=self.schema)
         self.default = dict(
             host="ccw-mgmt.cp.lsst.org",
+            telemetry_host="ccw-mgmt.cp.lsst.org",
             connection_timeout=10,
             ack_timeout=10,
             camera_cable_wrap_advance_time=0.02,
@@ -44,6 +45,7 @@ class ValidationTestCase(unittest.TestCase):
         )
         self.nondefault = dict(
             host="1.2.3.4",
+            telemetry_host="5.6.7.8",
             connection_timeout=3.4,
             ack_timeout=4.5,
             camera_cable_wrap_advance_time=0.13,
@@ -51,26 +53,9 @@ class ValidationTestCase(unittest.TestCase):
             max_rotator_position_error=1.5,
         )
 
-    def test_default(self):
-        result = self.validator.validate(None)
-        for field, expected_value in self.default.items():
-            assert result[field] == expected_value
-
-    def test_some_specified(self):
-        for field, value in self.nondefault.items():
-            one_field_data = {field: value}
-            with self.subTest(one_field_data=one_field_data):
-                result = self.validator.validate(one_field_data)
-                for field, default_value in self.default.items():
-                    if field in one_field_data:
-                        assert result[field] == one_field_data[field]
-                    else:
-                        assert result[field] == default_value
-
     def test_all_specified(self):
-        result = self.validator.validate(self.nondefault)
-        for field, value in self.nondefault.items():
-            assert result[field] == value
+        self.validator.validate(self.default)
+        self.validator.validate(self.nondefault)
 
     def test_invalid_configs(self):
         for name, badval in (

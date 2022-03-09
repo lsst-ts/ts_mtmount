@@ -39,7 +39,7 @@ TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config
 # timeout for constructing several remotes and controllers (sec)
 LONG_TIMEOUT = 60
 
-port_generator = salobj.index_generator(imin=3200)
+port_generator = utils.index_generator(imin=3200)
 
 logging.basicConfig()
 
@@ -70,7 +70,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def make_csc(
         self,
         initial_state,
-        config_dir=None,
+        config_dir=TEST_CONFIG_DIR,
         simulation_mode=1,
         internal_mock_controller=False,
     ):
@@ -269,7 +269,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         tai = previous_tai + 0.001
                     dt = tai - tai0
                     position = position0 + velocity * dt
-                    rotator.tel_rotation.set_put(
+                    await rotator.tel_rotation.set_write(
                         demandPosition=position,
                         demandVelocity=velocity,
                         demandAcceleration=0,
@@ -323,7 +323,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 # Check that rotator targets are ignored after
                 # tracking is disabled.
                 for i in range(2):
-                    rotator.tel_rotation.set_put(
+                    await rotator.tel_rotation.set_write(
                         demandPosition=45,
                         demandVelocity=1,
                         demandAcceleration=0,
@@ -422,7 +422,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         tai = previous_tai + 0.001
                     dt = tai - tai0
                     position = position0 + velocity * dt
-                    rotator.tel_rotation.set_put(
+                    await rotator.tel_rotation.set_write(
                         demandPosition=position,
                         demandVelocity=velocity,
                         demandAcceleration=0,

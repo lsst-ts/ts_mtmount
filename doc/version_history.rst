@@ -6,6 +6,13 @@
 Version History
 ###############
 
+ccw_only 7
+----------
+
+Changes:
+
+* Update for ts_salobj 7.
+
 ccw_only 6
 ----------
 

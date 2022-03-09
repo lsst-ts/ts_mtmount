@@ -227,10 +227,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self.signal_handler)
 
-        # Needed so `start` sees it. The value has been checked at this point,
-        # but the simulation_mode attribute is usually set by super().start().
-        self.evt_simulationMode.set_put(mode=simulation_mode)
-
     async def begin_enable(self, data):
         """Take control of the mount and initialize devices.
 
@@ -427,7 +423,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             err_msg = "Could not connect to the low-level controller: "
             f"host={command_host}, port={self.command_port}"
             self.log.exception(err_msg)
-            self.fault(
+            await self.fault(
                 code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e!r}"
             )
             return
@@ -446,7 +442,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             cmdstr = " ".join(args)
             err_msg = f"Could not start MTMount telemetry client with {cmdstr!r}"
             self.log.exception(err_msg)
-            self.fault(
+            await self.fault(
                 code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR,
                 report=f"{err_msg}: {e!r}",
             )
@@ -458,7 +454,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except asyncio.TimeoutError:
             err_msg = "The telemetry client is not producing telemetry"
             self.log.error(err_msg)
-            self.fault(code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg)
+            await self.fault(
+                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg
+            )
         self.monitor_telemetry_client_task = asyncio.create_task(
             self.monitor_telemetry_client()
         )
@@ -576,8 +574,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
-        self.evt_azimuthInPosition.set_put(inPosition=False)
-        self.evt_elevationInPosition.set_put(inPosition=False)
+        await self.evt_azimuthInPosition.set_write(inPosition=False)
+        await self.evt_elevationInPosition.set_write(inPosition=False)
 
         try:
             self.log.info("Give up command of the mount.")
@@ -741,10 +739,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.camera_cable_wrap_follow_loop_task = asyncio.create_task(
                 self._camera_cable_wrap_follow_loop()
             )
-            self.evt_cameraCableWrapFollowing.set_put(enabled=True, force_output=True)
+            await self.evt_cameraCableWrapFollowing.set_write(
+                enabled=True, force_output=True
+            )
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following canceled before it starts")
-            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
             # Try to stop the camera cable wrap on a best-effort basis.
             # This will fail if the CameraCableWrapEnableTracking
             # was interrupted at the wrong time, and that will cause the CCW
@@ -757,7 +757,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.error(f"{err_msg}: {e!r}")
             else:
                 self.log.exception(err_msg)
-            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
             # Try to stop the camera cable wrap on a best-effort basis.
             # This should succeed if things are working, but they
             # may not be in this exception branch.
@@ -801,7 +801,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     position=position, velocity=velocity, tai=tai
                 )
                 await self.send_command(command)
-                self.evt_cameraCableWrapTarget.set_put(
+                await self.evt_cameraCableWrapTarget.set_write(
                     position=position, velocity=velocity, taiTime=tai
                 )
                 if self.camera_cable_wrap_following_enabled:
@@ -814,7 +814,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except Exception:
             self.log.exception("Camera cable wrap following failed")
         finally:
-            self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+            await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
 
     @property
     def camera_cable_wrap_following_enabled(self):
@@ -868,14 +868,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         continue
                     futures.setdone()
                 elif isinstance(reply, replies.WarningReply):
-                    self.evt_warning.set_put(
+                    await self.evt_warning.set_write(
                         code=reply.code,
                         active=reply.active,
                         text="\n".join(reply.extra_data),
                         force_output=True,
                     )
                 elif isinstance(reply, replies.ErrorReply):
-                    self.evt_error.set_put(
+                    await self.evt_error.set_write(
                         code=reply.code,
                         latched=reply.on,
                         active=reply.active,
@@ -886,9 +886,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     self.log.debug(f"Ignoring OnStateInfo reply: {reply}")
                 elif isinstance(reply, replies.InPositionReply):
                     if reply.what == 0:
-                        self.evt_azimuthInPosition.set_put(inPosition=reply.in_position)
+                        await self.evt_azimuthInPosition.set_write(
+                            inPosition=reply.in_position
+                        )
                     elif reply.what == 1:
-                        self.evt_elevationInPosition.set_put(
+                        await self.evt_elevationInPosition.set_write(
                             inPosition=reply.in_position
                         )
                     else:
@@ -904,12 +906,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     if self.connected:
                         err_msg = "Read loop failed; possibly a bug"
                         self.log.exception(err_msg)
-                        self.fault(
+                        await self.fault(
                             code=enums.CscErrorCode.INTERNAL_ERROR,
                             report=f"{err_msg}: {e!r}",
                         )
                     else:
-                        self.fault(
+                        await self.fault(
                             code=enums.CscErrorCode.CONNECTION_LOST,
                             report="Connection lost to low-level controller (noticed in read_loop)",
                         )
@@ -942,7 +944,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 cmdstr = " ".join(args)
                 err_msg = f"Mock controller process command {cmdstr!r} failed"
                 self.log.exception(err_msg)
-                self.fault(
+                await self.fault(
                     code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR,
                     report=f"{err_msg}: {e!r}",
                 )
@@ -960,7 +962,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
-        self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+        await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
         await super().start()
 
     async def do_clearError(self, data):
@@ -1000,7 +1002,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
     async def stop_camera_cable_wrap_following(self):
-        self.evt_cameraCableWrapFollowing.set_put(enabled=False)
+        await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
         self.camera_cable_wrap_follow_start_task.cancel()
         if self.camera_cable_wrap_follow_loop_task.done():
             return
@@ -1045,7 +1047,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 tai=data.taiTime,
             ),
         )
-        self.evt_target.set_put(
+        await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
             azimuthVelocity=data.azimuthVelocity,
