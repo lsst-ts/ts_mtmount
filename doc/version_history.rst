@@ -6,6 +6,25 @@
 Version History
 ###############
 
+v0.22.0
+-------
+
+Changes:
+
+* `MTMountCsc`: call ``super().start()`` at the beginning of the start method.
+  This requires ts_salobj 7.1.
+* ``setup.cfg``: set asyncio_mode = auto.
+* git ignore .hypothesis.
+* Modernize ``Jenkinsfile``.
+
+Requires:
+
+* ts_salobj 7.1
+* ts_simactuators 2
+* ts_tcpip 0.1
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 11
+
 v0.21.1
 -------
 
