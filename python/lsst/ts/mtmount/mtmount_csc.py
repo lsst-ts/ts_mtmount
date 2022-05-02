@@ -1494,6 +1494,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         asyncio.create_task(self.close())
 
     async def start(self):
+        await super().start()
         if self.simulation_mode == 1 and self.run_mock_controller:
             # Run the mock controller using random ports;
             # read the ports to set command_port and telemetry_port.
@@ -1532,7 +1533,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
         await self.clear_target()
-        await super().start()
 
     async def stop_camera_cable_wrap_following(self):
         """Stop the camera cable wrap from following the rotator."""
