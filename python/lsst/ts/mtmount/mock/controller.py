@@ -298,7 +298,6 @@ class Controller:
         self._wait_telemetry_task = asyncio.Future()
         self.telemetry_loop_task = asyncio.Future()
         self.telemetry_loop_task.set_result(None)
-        self.telemetry_monitor_task = asyncio.Future()
         self.start_task = asyncio.create_task(self.start())
         self.done_task = asyncio.Future()
 
@@ -702,10 +701,8 @@ class Controller:
             Telemetry server.
         """
         self.telemetry_loop_task.cancel()
-        self.telemetry_monitor_task.cancel()
         if server.connected:
             self.log.info("Telemetry server connected; start telemetry loop")
-            self.telemetry_monitor_task = asyncio.create_task(self.telemetry_monitor())
             self.telemetry_loop_task = asyncio.create_task(self.telemetry_loop())
         else:
             self.log.info("Telemetry server disconnected; stop telemetry loop")
@@ -762,29 +759,6 @@ class Controller:
             self.log.exception("Telemetry loop failed")
             await self.telemetry_server.close_client()
             raise
-
-    async def telemetry_monitor(self):
-        """Monitor the telemetry reader for disconnection."""
-        try:
-            while self.telemetry_server.connected:
-                read_bytes = await self.telemetry_server.reader.read(1000)
-                if len(read_bytes) > 0:
-                    self.log.warning(
-                        f"Ignoring unexpected data from the telemetry port: {read_bytes}"
-                    )
-        except asyncio.CancelledError:
-            pass
-        except (ConnectionResetError, asyncio.IncompleteReadError):
-            self.log.warning("Telemetry connection lost")
-            await self.telemetry_server.close_client()
-        except Exception:
-            self.log.exception("Telemetry monitoring read failed")
-            await self.telemetry_server.close_client()
-        finally:
-            # Make sure telemetry stops, even if telemetry_connect_callback
-            # is not called.
-            self.telemetry_loop_task.cancel()
-        self.log.debug("Telemetry monitor read ends")
 
     def add_all_devices(self):
         """Add all mock devices.
@@ -871,7 +845,6 @@ class Controller:
             self.closing = True
             self.read_loop_task.cancel()
             self.telemetry_loop_task.cancel()
-            self.telemetry_monitor_task.cancel()
             self.start_task.cancel()
             for device in self.device_dict.values():
                 await device.close()
