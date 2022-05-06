@@ -836,6 +836,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Futures that monitor the command.
         """
         if not self.connected:
+            if self.should_be_connected:
+                await self.fault(
+                    enums.CscErrorCode.CONNECTION_LOST,
+                    report="Connection lost to low-level controller (noticed in _basic_send_command)",
+                )
             raise salobj.ExpectedError("Not connected to the low-level controller.")
         if command.sequence_id in self.command_dict:
             raise RuntimeError(
