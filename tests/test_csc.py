@@ -276,26 +276,27 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     maxTrackingJerk=axis_settings["SoftmotionTrackingMaxJerk"],
                     **extra_elevation_fields,
                 )
-            ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
-            ccw_actuator = ccw_device.actuator
-            ccw_cmd_limits = ccw_device.cmd_limits
-            ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]
-            await self.assert_next_sample(
-                topic=self.remote.evt_cameraCableWrapControllerSettings,
-                l1LimitsEnabled=True,
-                l2LimitsEnabled=True,
-                minCmdPosition=ccw_cmd_limits.min_position,
-                maxCmdPosition=ccw_cmd_limits.max_position,
-                minL1Limit=ccw_settings["MinSoftwareLimit"],
-                maxL1Limit=ccw_settings["MaxSoftwareLimit"],
-                maxCmdVelocity=ccw_cmd_limits.max_velocity,
-                maxMoveVelocity=ccw_settings["DefaultSpeed"],
-                maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
-                maxMoveJerk=ccw_settings["DefaultJerk"],
-                maxTrackingVelocity=ccw_actuator.max_velocity,
-                maxTrackingAcceleration=ccw_actuator.max_acceleration,
-                maxTrackingJerk=ccw_settings["TrackingJerk"],
-            )
+            # Disabled for 2022-06 commissioning
+            # ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]  # noqa
+            # ccw_actuator = ccw_device.actuator
+            # ccw_cmd_limits = ccw_device.cmd_limits
+            # ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]  # noqa
+            # await self.assert_next_sample(
+            #     topic=self.remote.evt_cameraCableWrapControllerSettings,
+            #     l1LimitsEnabled=True,
+            #     l2LimitsEnabled=True,
+            #     minCmdPosition=ccw_cmd_limits.min_position,
+            #     maxCmdPosition=ccw_cmd_limits.max_position,
+            #     minL1Limit=ccw_settings["MinSoftwareLimit"],
+            #     maxL1Limit=ccw_settings["MaxSoftwareLimit"],
+            #     maxCmdVelocity=ccw_cmd_limits.max_velocity,
+            #     maxMoveVelocity=ccw_settings["DefaultSpeed"],
+            #     maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
+            #     maxMoveJerk=ccw_settings["DefaultJerk"],
+            #     maxTrackingVelocity=ccw_actuator.max_velocity,
+            #     maxTrackingAcceleration=ccw_actuator.max_acceleration,
+            #     maxTrackingJerk=ccw_settings["TrackingJerk"],
+            # )
 
             available_settings = self.mock_controller.available_settings
             await self.assert_next_sample(
@@ -643,6 +644,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             timestamp=tai,
         )
 
+    @unittest.skip("Disabled for 2022-06 commissioning")
     async def test_camera_cable_wrap_tracking(self):
         # Start the CSC in DISABLED state
         # so we can get the rotator remote running
@@ -1001,9 +1003,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
-            await self.assert_next_sample(
-                self.remote.evt_cameraCableWrapFollowing, enabled=True
-            )
+            # Disabled for 2022-06 commissioning
+            # await self.assert_next_sample(
+            #     self.remote.evt_cameraCableWrapFollowing, enabled=True
+            # )
             await self.assert_axes_in_position(elevation=False, azimuth=False)
             await self.assert_target_cleared()
             await self.assert_next_sample(
@@ -1097,8 +1100,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
 
             # Check that the CCW is still following the rotator.
-            data = self.remote.evt_cameraCableWrapFollowing.get()
-            assert data.enabled
+            # Disabled for 2022-06 commissioning
+            # data = self.remote.evt_cameraCableWrapFollowing.get()
+            # assert data.enabled
 
             # Check that out-of-bounds moves are rejected,
             # while leaving the mock devices enabled.
@@ -1127,8 +1131,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 assert device.enabled
 
             # Check that the CCW is still following the rotator.
-            data = self.remote.evt_cameraCableWrapFollowing.get()
-            assert data.enabled
+            # Disabled for 2022-06 commissioning
+            # data = self.remote.evt_cameraCableWrapFollowing.get()
+            # assert data.enabled
 
             # Check that putting the CSC into STANDBY state sends the axes
             # out of position (possibly one axis at a time)
@@ -1166,9 +1171,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
-            await self.assert_next_sample(
-                self.remote.evt_cameraCableWrapFollowing, enabled=True
-            )
+            # Disabled for 2022-06 commissioning
+            # await self.assert_next_sample(
+            #     self.remote.evt_cameraCableWrapFollowing, enabled=True
+            # )
             await self.assert_axes_in_position(elevation=False, azimuth=False)
             await self.assert_target_cleared()
 
@@ -1272,8 +1278,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 assert device.tracking_enabled
 
             # Check that the CCW is still following the rotator.
-            data = self.remote.evt_cameraCableWrapFollowing.get()
-            assert data.enabled
+            # Disabled for 2022-06 commissioning
+            # data = self.remote.evt_cameraCableWrapFollowing.get()
+            # assert data.enabled
 
             # Disable tracking and check axis controllers
             await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
@@ -1284,8 +1291,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_axes_in_position(elevation=False, azimuth=False)
 
             # Check that the CCW is still following the rotator.
-            data = self.remote.evt_cameraCableWrapFollowing.get()
-            assert data.enabled
+            # Disabled for 2022-06 commissioning
+            # data = self.remote.evt_cameraCableWrapFollowing.get()
+            # assert data.enabled
 
     async def track_target_loop(
         self, azimuth, elevation, azimuth_velocity, elevation_velocity
@@ -1376,6 +1384,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             timeout=LONG_TIMEOUT,
         )
 
+    @unittest.skip("Disabled for 2022-06 commissioning")
     async def check_camera_cable_wrap_truncation(self, do_max_limit):
         """Test that camera cable wrap following code truncates position
         and velocity as needed.
