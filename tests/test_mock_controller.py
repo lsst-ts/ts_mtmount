@@ -504,12 +504,12 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         desired_temperature = [
                             self.controller.ambient_temperature
                         ] * nelts
-                    reply.trackAmbient == desired_trackAmbient
+                    assert reply.trackAmbient == desired_trackAmbient
                     numpy.testing.assert_allclose(
                         reply.temperature, desired_temperature
                     )
                 elif reply.id == mtmount.ReplyId.COMMANDER:
-                    reply.actualCommander == mtmount.Source.HHD
+                    assert reply.actualCommander == mtmount.Source.HHD
                 elif reply.id == mtmount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE:
                     assert reply.state == DeployableMotionState.RETRACTED
                     assert (
