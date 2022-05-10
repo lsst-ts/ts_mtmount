@@ -11,9 +11,18 @@ v0.22.0
 
 Changes:
 
-* `MTMountCsc`: call ``super().start()`` at the beginning of the start method.
+* `MTMountCsc`:
+
+  * Call ``super().start()`` at the beginning of the start method.
+    This requires ts_salobj 7.1.
+  * Make going to fault more robust when the connection to the low-level controller is lost.
+
+* `TelemetryClient`: make the controller write-only.
   This requires ts_salobj 7.1.
+* `mock.Controller`: eliminate the code that detects if the telemetry client drops the connection.
+  This requires ts_tcpip 0.4.
 * ``setup.cfg``: set asyncio_mode = auto.
+* Modified a unit test to work with the kafka version of ts_salobj.
 * git ignore .hypothesis.
 * Modernize ``Jenkinsfile``.
 
@@ -21,7 +30,7 @@ Requires:
 
 * ts_salobj 7.1
 * ts_simactuators 2
-* ts_tcpip 0.1
+* ts_tcpip 0.3.7
 * ts_idl 3.2
 * IDL files for MTMount and MTRotator from ts_xml 11
 

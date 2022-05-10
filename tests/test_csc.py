@@ -351,8 +351,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             # Test xSystemState events
             # Set of topic name prefixes for systems that are initially on
-            expected_on_topic_name = {
-                f"{prefix}SystemState"
+            expected_on_topic_attr_name = {
+                f"evt_{prefix}SystemState"
                 for prefix in (
                     "azimuthDrivesThermal",
                     "elevationDrivesThermal",
@@ -362,46 +362,46 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     "mainAxesPowerSupply",
                 )
             }
-            for topic_info in self.csc.system_state_dict.values():
-                # The topic in topic_info is a ControllerEvent;
+            for state_info in self.csc.system_state_dict.values():
+                # The topic in state_info is a ControllerEvent;
                 # we want the associated event in the remote
                 system_state_kwargs = dict()
-                topic = getattr(self.remote, topic_info.topic.attr_name)
-                if topic.name in expected_on_topic_name:
+                topic = getattr(self.remote, state_info.topic.attr_name)
+                if state_info.topic.attr_name in expected_on_topic_attr_name:
                     expected_power_state = PowerState.ON
                 else:
                     expected_power_state = PowerState.OFF
                 nskip = 0
                 system_state_kwargs["powerState"] = expected_power_state
-                if topic_info.num_elements_power_state > 1:
+                if state_info.num_elements_power_state > 1:
                     system_state_kwargs["elementsPowerState"] = [
                         expected_power_state
-                    ] * topic_info.num_elements_power_state
-                if topic_info.num_motion_controller_state > 1:
+                    ] * state_info.num_elements_power_state
+                if state_info.num_motion_controller_state > 1:
                     nskip += 1
                     system_state_kwargs["motionControllerState"] = [
                         expected_power_state
-                    ] * topic_info.num_motion_controller_state
-                if topic_info.num_thermal > 0:
+                    ] * state_info.num_motion_controller_state
+                if state_info.num_thermal > 0:
                     nskip += 1
-                    if topic_info.num_thermal == 1:
+                    if state_info.num_thermal == 1:
                         system_state_kwargs["trackAmbient"] = True
                     else:
                         system_state_kwargs["trackAmbient"] = [
                             True
-                        ] * topic_info.num_thermal
+                        ] * state_info.num_thermal
                 for i in range(nskip):
                     await topic.next(flush=False, timeout=STD_TIMEOUT)
                 data = await self.assert_next_sample(topic, **system_state_kwargs)
-                if topic_info.num_thermal == 1:
+                if state_info.num_thermal == 1:
                     assert data.setTemperature == pytest.approx(
                         self.mock_controller.ambient_temperature
                     )
-                elif topic_info.num_thermal > 1:
+                elif state_info.num_thermal > 1:
                     numpy.testing.assert_allclose(
                         data.setTemperature,
                         [self.mock_controller.ambient_temperature]
-                        * topic_info.num_thermal,
+                        * state_info.num_thermal,
                     )
 
             for topic in (
@@ -426,7 +426,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             # Test xSystemState events after the CSC has enabled systems
             enabled_system_topic_names = {
-                f"{prefix}SystemState"
+                f"tel_{prefix}SystemState"
                 for prefix in (
                     "azimuth",
                     "elevation",
@@ -436,25 +436,25 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     "topEndChiller",
                 )
             }
-            for topic_info in self.csc.system_state_dict.values():
-                if topic_info.topic.name not in enabled_system_topic_names:
+            for state_info in self.csc.system_state_dict.values():
+                if state_info.topic.attr_name not in enabled_system_topic_names:
                     continue
-                # The topic in topic_info is a ControllerEvent;
+                # The topic in state_info is a ControllerEvent;
                 # we want the associated event in the remote
                 system_state_kwargs = dict()
-                topic = getattr(self.remote, topic_info.topic.attr_name)
+                topic = getattr(self.remote, state_info.topic.attr_name)
                 expected_power_state = PowerState.ON
                 system_state_kwargs["powerState"] = expected_power_state
                 nskip = 0
-                if topic_info.num_elements_power_state > 1:
+                if state_info.num_elements_power_state > 1:
                     system_state_kwargs["elementsPowerState"] = [
                         expected_power_state
-                    ] * topic_info.num_elements_power_state
-                if topic_info.num_motion_controller_state > 1:
+                    ] * state_info.num_elements_power_state
+                if state_info.num_motion_controller_state > 1:
                     nskip += 1
                     system_state_kwargs["motionControllerState"] = [
                         expected_power_state
-                    ] * topic_info.num_motion_controller_state
+                    ] * state_info.num_motion_controller_state
                 for i in range(nskip):
                     await topic.next(flush=False, timeout=STD_TIMEOUT)
                 await self.assert_next_sample(topic, **system_state_kwargs)
@@ -514,25 +514,25 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     "azimuthCableWrap",
                 )
             }
-            for topic_info in self.csc.system_state_dict.values():
-                if topic_info.topic.name not in disabled_system_topic_names:
+            for state_info in self.csc.system_state_dict.values():
+                if state_info.topic.attr_name not in disabled_system_topic_names:
                     continue
-                # The topic in topic_info is a ControllerEvent;
+                # The topic in state_info is a ControllerEvent;
                 # we want the associated event in the remote
                 system_state_kwargs = dict()
-                topic = getattr(self.remote, topic_info.topic.attr_name)
+                topic = getattr(self.remote, state_info.topic.attr_name)
                 expected_power_state = PowerState.OFF
                 system_state_kwargs["powerState"] = expected_power_state
                 nskip = 0
-                if topic_info.num_elements_power_state > 1:
+                if state_info.num_elements_power_state > 1:
                     system_state_kwargs["elementsPowerState"] = [
                         expected_power_state
-                    ] * topic_info.num_elements_power_state
-                if topic_info.num_motion_controller_state > 1:
+                    ] * state_info.num_elements_power_state
+                if state_info.num_motion_controller_state > 1:
                     nskip += 1
                     system_state_kwargs["motionControllerState"] = [
                         expected_power_state
-                    ] * topic_info.num_motion_controller_state
+                    ] * state_info.num_motion_controller_state
                 for i in range(nskip):
                     await topic.next(flush=False, timeout=STD_TIMEOUT)
                 await self.assert_next_sample(topic, **system_state_kwargs)

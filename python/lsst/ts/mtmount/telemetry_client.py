@@ -91,11 +91,7 @@ class TelemetryClient:
     ):
         self.host = host
         self.port = port
-        self.controller = salobj.Controller(name="MTMount")
-        # Cancel the controller read loop; do not want this controller
-        # to acknowledge commands and we do not need the read loop
-        # in order to write messages.
-        self.controller.start_task.cancel()
+        self.controller = salobj.Controller(name="MTMount", write_only=True)
         self.log = self.controller.log.getChild("TelemetryClient")
 
         self.connection_timeout = connection_timeout
@@ -168,6 +164,7 @@ class TelemetryClient:
 
     async def start(self):
         """Connect to the telemetry port and start the read loop."""
+        await self.controller.start_task
         self.log.debug("connecting")
         if self.connected:
             raise RuntimeError("Already connected")
