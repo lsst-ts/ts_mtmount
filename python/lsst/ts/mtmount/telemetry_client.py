@@ -251,7 +251,12 @@ class TelemetryClient:
                 if topic_handler is None:
                     if topic_id not in self.unsupported_topic_ids:
                         self.unsupported_topic_ids.add(topic_id)
-                        self.log.debug(f"Ignoring unsupported topic ID {topic_id}")
+                        self.log.debug(
+                            f"Ignoring unsupported topic ID {topic_id}; data={data}"
+                        )
+                        print(
+                            f"Telemetry client ignoring unsupported topic ID {topic_id}; data={data}"
+                        )
                     continue
                 await topic_handler(llv_data)
             except Exception:
