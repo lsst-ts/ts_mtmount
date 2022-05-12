@@ -695,8 +695,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.info("Enable devices")
         self.disable_task.cancel()
         try:
+            # Reset all systems the CSC controls
             for reset_command in [
                 commands.TopEndChillerResetAlarm(),
+                commands.OilSupplySystemResetAlarm(),
                 commands.MainAxesPowerSupplyResetAlarm(),
                 commands.MirrorCoverLocksResetAlarm(),
                 commands.MirrorCoversResetAlarm(),
@@ -711,11 +713,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         f"Command {reset_command} failed; continuing: {e!r}"
                     )
 
+            # Power on the systems that we want to be on all the time
+            # (all systems the CSC controls, except mirror covers)
             power_on_commands = [
                 commands.TopEndChillerPower(on=True),
                 commands.TopEndChillerTrackAmbient(on=True, temperature=0),
-                commands.MainAxesPowerSupplyPower(on=True),
                 commands.OilSupplySystemPower(on=True),
+                commands.MainAxesPowerSupplyPower(on=True),
                 commands.AzimuthPower(on=True),
                 commands.ElevationPower(on=True),
                 commands.CameraCableWrapPower(on=True),
