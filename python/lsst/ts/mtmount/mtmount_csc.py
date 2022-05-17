@@ -695,14 +695,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.info("Enable devices")
         self.disable_task.cancel()
         try:
+            # Reset all systems the CSC controls
             for reset_command in [
-                commands.TopEndChillerResetAlarm(),
+                # Disabled for 2022-06 commissioning
+                # commands.TopEndChillerResetAlarm(),
+                # commands.OilSupplySystemResetAlarm(),
                 commands.MainAxesPowerSupplyResetAlarm(),
                 commands.MirrorCoverLocksResetAlarm(),
                 commands.MirrorCoversResetAlarm(),
                 commands.AzimuthResetAlarm(),
                 commands.ElevationResetAlarm(),
-                commands.CameraCableWrapResetAlarm(),
+                # commands.CameraCableWrapResetAlarm(),
             ]:
                 try:
                     await self.send_command(reset_command, do_lock=True)
@@ -711,14 +714,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         f"Command {reset_command} failed; continuing: {e!r}"
                     )
 
+            # Power on the systems that we want to be on all the time
+            # (all systems the CSC controls, except mirror covers)
             power_on_commands = [
-                commands.TopEndChillerPower(on=True),
-                commands.TopEndChillerTrackAmbient(on=True, temperature=0),
+                # Disabled for 2022-06 commissioning
+                # commands.TopEndChillerPower(on=True),
+                # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
+                # commands.OilSupplySystemPower(on=True),
                 commands.MainAxesPowerSupplyPower(on=True),
-                commands.OilSupplySystemPower(on=True),
                 commands.AzimuthPower(on=True),
                 commands.ElevationPower(on=True),
-                commands.CameraCableWrapPower(on=True),
+                # commands.CameraCableWrapPower(on=True),
             ]
             await self.send_commands(*power_on_commands, do_lock=True)
         except Exception as e:
@@ -743,10 +749,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             return
         for command in [
             commands.BothAxesStop(),
-            commands.CameraCableWrapStop(),
+            # Disabled for 2022-06 commissioning
+            # commands.CameraCableWrapStop(),
             commands.AzimuthPower(on=False),
             commands.ElevationPower(on=False),
-            commands.CameraCableWrapPower(on=False),
+            # commands.CameraCableWrapPower(on=False),
         ]:
             try:
                 await self.send_command(command, do_lock=True)
@@ -945,6 +952,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         and if it succeeds, starts the camera cable wrap following loop.
         """
         self.camera_cable_wrap_follow_loop_task.cancel()
+
+        # Disabled for 2022-06 commissioning
+        return
+
         try:
             await self.send_command(
                 commands.CameraCableWrapEnableTracking(on=True), do_lock=False
@@ -1085,11 +1096,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_disableCameraCableWrapFollowing(self, data):
         """Handle the disableCameraCableWrapFollowing command."""
         self.assert_enabled()
+        # Disabled for 2022-06 commissioning
+        raise NotImplementedError("Disabled for 2022-06 commissioning")
         await self.stop_camera_cable_wrap_following()
 
     async def do_enableCameraCableWrapFollowing(self, data):
         """Handle the enableCameraCableWrapFollowing command."""
         self.assert_enabled()
+        # Disabled for 2022-06 commissioning
+        raise NotImplementedError("Disabled for 2022-06 commissioning")
         if self.camera_cable_wrap_follow_loop_task.done():
             self.camera_cable_wrap_follow_start_task = asyncio.create_task(
                 self.start_camera_cable_wrap_following()
@@ -1169,7 +1184,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.assert_enabled()
         await self.send_commands(
             commands.BothAxesStop(),
-            commands.CameraCableWrapStop(),
+            # Disabled for 2022-06 commissioning
+            # commands.CameraCableWrapStop(),
             commands.MirrorCoverLocksStop(),
             commands.MirrorCoversStop(),
             do_lock=False,

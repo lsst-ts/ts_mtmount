@@ -6,6 +6,10 @@ ts_mtmount
 
 `Documentation <https://ts-mtmount.lsst.io>`_
 
+This version disables control of the camera cable wrap, oil supply subsystem, and top end chiller.
+It is intended for 2022-06 commissioning tests with an incomplete low-level controller.
+Do not merge this to the develop or main branches.
+
 The package is compatible with the `eups <https://github.com/RobertLuptonTheGood/eups>`_ package management system and ``scons`` build system.
 Assuming you have the basic Vera C. Rubin LSST DM stack installed you can do the following, from within the package directory:
 

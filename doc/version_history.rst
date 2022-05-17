@@ -6,6 +6,13 @@
 Version History
 ###############
 
+2022-06 test
+------------
+
+This version disables control of the camera cable wrap, oil supply subsystem, and top end chiller.
+It is intended for 2022-06 commissioning tests with an incomplete low-level controller.
+Do not merge this to the develop or main branches.
+
 v0.22.0
 -------
 
@@ -16,6 +23,8 @@ Changes:
   * Call ``super().start()`` at the beginning of the start method.
     This requires ts_salobj 7.1.
   * Make going to fault more robust when the connection to the low-level controller is lost.
+  * Reset the oil supply system alarms when resetting other alarms.
+  * Turn on the oil supply system before the main axes power supply, instead of after.
 
 * `TelemetryClient`: make the controller write-only.
   This requires ts_salobj 7.1.
