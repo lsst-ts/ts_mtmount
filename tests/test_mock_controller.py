@@ -859,6 +859,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 "angle",
                 "speed",
                 "acceleration",
+                "torquePercentage1",
+                "torquePercentage2",
             ):
                 assert ccw_telem[name] == 0
             assert ccw_telem["timestamp"] > tai0

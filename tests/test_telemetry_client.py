@@ -153,6 +153,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                 actualPosition=12.3,
                 actualVelocity=-34.5,
                 actualAcceleration=0.25,
+                actualTorquePercentage=[0.11, 0.12],
                 timestamp=time.time(),
             )
             ccw_llv_data = self.convert_dds_data_to_llv(

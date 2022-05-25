@@ -286,3 +286,9 @@ class TelemetryClient:
         self._convert_drive_measurements(
             llv_data=llv_data, keys=["elCurrent"], ndrives=12
         )
+
+    def _preprocess_cameraCableWrap(self, llv_data):
+        """Preprocess status for the tel_elevationDrives topic."""
+        self._convert_drive_measurements(
+            llv_data=llv_data, keys=["torquePercentage"], ndrives=2
+        )
