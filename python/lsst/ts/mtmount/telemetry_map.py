@@ -25,14 +25,21 @@ import yaml
 
 # Mapping to translate telemetry from the low-level controller
 # to SAL telemetry topics.
+
 # The structure is:
-# low-level controller topic ID: (SAL topic name, field translation dict)
+# low-level controller topic ID: [SAL topic name, field translation dict]
 # where field translation dict is a dict of
 # SAL field name: low-level controller field name.
-# These IDs must match the entries in the TelemetryTopicId enum class.
+# These IDs must match the entries in the `TelemetryTopicId` enum class.
+#
 # If the value is a set of scalars in the low-level data and an array in SAL,
-# then list it without the indices. for example:
-# list elCurrent1, elCurrent2, ... elCurrent12 as ``current: elCurrent``.
+# then list it without the indices here, and update TelemetryClient to add
+# _preprocess_x method to convert the scalars to an array.
+# For example: the ``current`` field for the elevationDrives topic
+# is set from id=14 fields ``elCurrent1, elCurrent2, ... elCurrent12``;
+# list this as ``current: elCurrent`` in this file and add method
+# ``_preprocess_elevationDrives`` to `TelemetryClient` to convert the data.
+
 TELEMETRY_MAP = yaml.safe_load(
     """
 
@@ -71,6 +78,7 @@ TELEMETRY_MAP = yaml.safe_load(
 - actualPosition: angle
   actualVelocity: speed
   actualAcceleration: acceleration
+  actualTorquePercentage: torquePercentage
   timestamp: timestamp
 """
 )
