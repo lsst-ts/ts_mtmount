@@ -21,8 +21,13 @@ Changes:
   * Reset the oil supply system alarms when resetting other alarms.
   * Turn on the oil supply system before the main axes power supply, instead of after.
 
-* `TelemetryClient`: make the controller write-only.
-  This requires ts_salobj 7.1.
+* `TelemetryClient`:
+
+    * Make the controller write-only.
+      This requires ts_salobj 7.1.
+    * Stop publishing actual acceleration.
+      It is not available for the azimuth and acceleration axes, and is probably too noisy to be useful for camera cable wrap.
+
 * `mock.Controller`: eliminate the code that detects if the telemetry client drops the connection.
   This requires ts_tcpip 0.4.
 * ``setup.cfg``: set asyncio_mode = auto.
