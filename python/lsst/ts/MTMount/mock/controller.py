@@ -193,7 +193,6 @@ class Controller:
             "angleSet": target.position,
             "velocityActual": actual.velocity,
             "velocitySet": target.velocity,
-            "accelerationActual": actual.acceleration,
             # Torque is arbitrary; I have no idea
             # what realistic values are.
             "torqueActual": actual.acceleration / 10,
@@ -227,7 +226,6 @@ class Controller:
             topicID=enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
             angle=actual.position,
             speed=actual.velocity,
-            acceleration=actual.acceleration,
             timestamp=tai,
         )
         await self.write_telemetry(data_dict)
