@@ -840,7 +840,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     "angleSet",
                     "velocityActual",
                     "velocitySet",
-                    "accelerationActual",
                     "torqueActual",
                 ):
                     if name.startswith("angle"):
@@ -858,7 +857,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             for name in (
                 "angle",
                 "speed",
-                "acceleration",
                 "torquePercentage1",
                 "torquePercentage2",
             ):
@@ -1072,7 +1070,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 "angleSet",
                 "velocityActual",
                 "velocitySet",
-                "accelerationActual",
                 "torqueActual",
             ):
                 if name.startswith("angle"):

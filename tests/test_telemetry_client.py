@@ -105,7 +105,6 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                 demandPosition=45.2,
                 actualVelocity=1.3,
                 demandVelocity=1.4,
-                actualAcceleration=-0.5,
                 actualTorque=3.3,
                 timestamp=time.time(),
             )
@@ -152,7 +151,6 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             desired_ccw_dds_data = dict(
                 actualPosition=12.3,
                 actualVelocity=-34.5,
-                actualAcceleration=0.25,
                 actualTorquePercentage=[0.11, 0.12],
                 timestamp=time.time(),
             )

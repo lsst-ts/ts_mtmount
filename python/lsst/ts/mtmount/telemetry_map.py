@@ -49,7 +49,6 @@ TELEMETRY_MAP = yaml.safe_load(
   demandPosition: angleSet
   actualVelocity: velocityActual
   demandVelocity: velocitySet
-  actualAcceleration: accelerationActual
   actualTorque: torqueActual
   timestamp: timestamp
 
@@ -64,7 +63,6 @@ TELEMETRY_MAP = yaml.safe_load(
   demandPosition: angleSet
   actualVelocity: velocityActual
   demandVelocity: velocitySet
-  actualAcceleration: accelerationActual
   actualTorque: torqueActual
   timestamp: timestamp
 
@@ -77,7 +75,6 @@ TELEMETRY_MAP = yaml.safe_load(
 - cameraCableWrap
 - actualPosition: angle
   actualVelocity: speed
-  actualAcceleration: acceleration
   actualTorquePercentage: torquePercentage
   timestamp: timestamp
 """

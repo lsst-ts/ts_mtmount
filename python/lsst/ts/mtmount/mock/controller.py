@@ -438,7 +438,6 @@ class Controller:
                 topicID=topic_id,
                 angle=actual.position,
                 speed=actual.velocity,
-                acceleration=actual.acceleration,
                 torquePercentage1=torque_percent,
                 torquePercentage2=torque_percent,
                 timestamp=tai,
@@ -450,7 +449,6 @@ class Controller:
                 angleSet=target.position,
                 velocityActual=actual.velocity,
                 velocitySet=target.velocity,
-                accelerationActual=actual.acceleration,
                 # Torque is arbitrary; I have no idea
                 # what realistic values are.
                 torqueActual=actual.acceleration / 10,
