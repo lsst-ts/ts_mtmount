@@ -6,6 +6,14 @@
 Version History
 ###############
 
+ccw_only 8
+----------
+
+Changes:
+
+* Stop publishing actualAcceleration telemetry.
+  This change is necessary for ts_xml 12.
+
 ccw_only 7
 ----------
 
