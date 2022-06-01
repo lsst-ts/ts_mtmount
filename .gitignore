@@ -1,5 +1,6 @@
 .swp
 .cache
+.hypothesis
 .pytest_cache
 .coverage*
 pytest_session.txt
