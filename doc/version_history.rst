@@ -15,12 +15,19 @@ Changes:
 
   * Call ``super().start()`` at the beginning of the start method.
     This requires ts_salobj 7.1.
+  * Report camera cable wrap actual torque (percentage).
+    This requires ts_xml 12.
   * Make going to fault more robust when the connection to the low-level controller is lost.
   * Reset the oil supply system alarms when resetting other alarms.
   * Turn on the oil supply system before the main axes power supply, instead of after.
 
-* `TelemetryClient`: make the controller write-only.
-  This requires ts_salobj 7.1.
+* `TelemetryClient`:
+
+    * Make the controller write-only.
+      This requires ts_salobj 7.1.
+    * Stop publishing actual acceleration.
+      It is not available for the azimuth and acceleration axes, and is probably too noisy to be useful for camera cable wrap.
+
 * `mock.Controller`: eliminate the code that detects if the telemetry client drops the connection.
   This requires ts_tcpip 0.4.
 * ``setup.cfg``: set asyncio_mode = auto.
@@ -34,7 +41,7 @@ Requires:
 * ts_simactuators 2
 * ts_tcpip 0.3.7
 * ts_idl 3.2
-* IDL files for MTMount and MTRotator from ts_xml 11
+* IDL files for MTMount and MTRotator from ts_xml 12
 
 v0.21.1
 -------
