@@ -465,7 +465,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     "angleSet",
                     "velocityActual",
                     "velocitySet",
-                    "accelerationActual",
                     "torqueActual",
                 ):
                     if name.startswith("angle"):
@@ -483,7 +482,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             for name in (
                 "angle",
                 "speed",
-                "acceleration",
             ):
                 assert ccw_telem[name] == 0
             assert ccw_telem["timestamp"] > tai0
@@ -614,7 +612,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 "angleSet",
                 "velocityActual",
                 "velocitySet",
-                "accelerationActual",
                 "torqueActual",
             ):
                 if name.startswith("angle"):
