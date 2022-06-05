@@ -466,7 +466,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 flush=False,
                 actualPosition=0,
                 actualVelocity=0,
-                actualAcceleration=0,
                 actualTorque=0,
                 demandVelocity=0,
             )
@@ -481,7 +480,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 topic=self.remote.tel_elevation,
                 flush=False,
                 actualVelocity=0,
-                actualAcceleration=0,
                 actualTorque=0,
                 demandVelocity=0,
             )
@@ -496,7 +494,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 topic=self.remote.tel_cameraCableWrap,
                 flush=False,
                 actualVelocity=0,
-                actualAcceleration=0,
             )
             assert data.actualPosition == pytest.approx(
                 mtmount.mock.INITIAL_POSITION[System.CAMERA_CABLE_WRAP]
@@ -714,9 +711,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     )
                     assert tel_ccw_data.actualVelocity == pytest.approx(
                         actual_segment.velocity, abs=0.1
-                    )
-                    assert tel_ccw_data.actualAcceleration == pytest.approx(
-                        actual_segment.acceleration, abs=0.1
                     )
 
                     await asyncio.sleep(0.1)
