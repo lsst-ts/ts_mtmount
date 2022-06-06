@@ -32,10 +32,14 @@ __all__ = [
     "AzimuthPower",
     "AzimuthResetAlarm",
     "AzimuthStop",
-    "AzimuthTrack",
+    "AzimuthTrackTarget",
+    "BothAxesEnableTracking",
+    "BothAxesHome",
     "BothAxesMove",
+    "BothAxesPower",
+    "BothAxesResetAlarm",
     "BothAxesStop",
-    "BothAxesTrack",
+    "BothAxesTrackTarget",
     "CameraCableWrapDriveEnable",
     "CameraCableWrapDriveReset",
     "CameraCableWrapEnableTracking",
@@ -43,7 +47,7 @@ __all__ = [
     "CameraCableWrapPower",
     "CameraCableWrapResetAlarm",
     "CameraCableWrapStop",
-    "CameraCableWrapTrack",
+    "CameraCableWrapTrackTarget",
     "Disable",
     "Enable",
     "ElevationDriveEnable",
@@ -54,9 +58,13 @@ __all__ = [
     "ElevationPower",
     "ElevationResetAlarm",
     "ElevationStop",
-    "ElevationTrack",
+    "ElevationTrackTarget",
+    "Heartbeat",
     "MainAxesPowerSupplyPower",
     "MainAxesPowerSupplyResetAlarm",
+    "MainCabinetThermalResetAlarm",
+    "MirrorCoverSystemDeploy",
+    "MirrorCoverSystemRetract",
     "MirrorCoverLocksMoveAll",
     "MirrorCoverLocksPower",
     "MirrorCoverLocksResetAlarm",
@@ -96,11 +104,11 @@ NUM_HEADER_FIELDS = 4
 # Command that are done when CMD_ACKNOWLEDGED is received
 AckOnlyCommandCodes = set(
     (
-        enums.CommandCode.BOTH_AXES_TRACK,
-        enums.CommandCode.AZIMUTH_TRACK,
-        enums.CommandCode.ELEVATION_TRACK,
-        enums.CommandCode.AZIMUTH_CABLE_WRAP_TRACK,
-        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK,
+        enums.CommandCode.BOTH_AXES_TRACK_TARGET,
+        enums.CommandCode.AZIMUTH_TRACK_TARGET,
+        enums.CommandCode.ELEVATION_TRACK_TARGET,
+        enums.CommandCode.AZIMUTH_CABLE_WRAP_TRACK_TARGET,
+        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK_TARGET,
     )
 )
 
@@ -253,7 +261,9 @@ class AzimuthDriveReset(Command):
 
 
 class AzimuthEnableTracking(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_ENABLE_TRACKING)
+    field_infos = make_command_field_infos(
+        enums.CommandCode.AZIMUTH_ENABLE_TRACKING, _OnOffParameters
+    )
 
 
 class AzimuthHome(Command):
@@ -280,10 +290,18 @@ class AzimuthStop(Command):
     field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_STOP)
 
 
-class AzimuthTrack(Command):
+class AzimuthTrackTarget(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_TRACK, _TrackingParameters
+        enums.CommandCode.AZIMUTH_TRACK_TARGET, _TrackingParameters
     )
+
+
+class BothAxesEnableTracking(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_ENABLE_TRACKING)
+
+
+class BothAxesHome(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_HOME)
 
 
 class BothAxesMove(Command):
@@ -297,20 +315,45 @@ class BothAxesMove(Command):
             field_info.FloatFieldInfo(
                 name="azimuth_velocity",
                 default=0,
-                doc="Maximum azimuth velocity (0 for the default value) (deg)",
+                doc="Maximum azimuth velocity (0 for the default value) (deg/sec)",
             ),
             field_info.FloatFieldInfo(
                 name="elevation_velocity",
                 default=0,
-                doc="Maximum elevation velocity (0 for the default value) (deg)",
+                doc="Maximum elevation velocity (0 for the default value) (deg/sec)",
             ),
-            field_info.IntFieldInfo(
-                name="negate_azimuth",
+            field_info.FloatFieldInfo(
+                name="azimuth_acceleration",
                 default=0,
-                doc="If 0 accept azimuth as is; if -1 multiply azimuth by -1",
+                doc="Maximum azimuth acceleration (0 for the default value) (deg/sec^2)",
+            ),
+            field_info.FloatFieldInfo(
+                name="elevation_acceleration",
+                default=0,
+                doc="Maximum elevation acceleration (0 for the default value) (deg/sec^2)",
+            ),
+            field_info.FloatFieldInfo(
+                name="azimuth_jerk",
+                default=0,
+                doc="Maximum azimuth jerk (0 for the default value) (deg/sec^3)",
+            ),
+            field_info.FloatFieldInfo(
+                name="elevation_jerk",
+                default=0,
+                doc="Maximum elevation jerk (0 for the default value) (deg/sec^3)",
             ),
         ),
     )
+
+
+class BothAxesPower(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.BOTH_AXES_POWER, _OnOffParameters
+    )
+
+
+class BothAxesResetAlarm(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_RESET_ALARM)
 
 
 class BothAxesStop(Command):
@@ -319,11 +362,11 @@ class BothAxesStop(Command):
     field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_STOP)
 
 
-class BothAxesTrack(Command):
+class BothAxesTrackTarget(Command):
     """Specify the tracking target for both axes."""
 
     field_infos = make_command_field_infos(
-        enums.CommandCode.BOTH_AXES_TRACK,
+        enums.CommandCode.BOTH_AXES_TRACK_TARGET,
         (
             field_info.FloatFieldInfo(
                 name="azimuth", doc="Target azimuth at tai (deg)"
@@ -338,11 +381,6 @@ class BothAxesTrack(Command):
             field_info.FloatFieldInfo(
                 name="elevation_velocity",
                 doc="Target elevation velocity at tai (deg)",
-            ),
-            field_info.IntFieldInfo(
-                name="negate_azimuth",
-                default=0,
-                doc="If 0 accept azimuth as is; if -1 multiply azimuth by -1",
             ),
             field_info.FloatFieldInfo(
                 name="tai",
@@ -400,9 +438,9 @@ class CameraCableWrapStop(Command):
     field_infos = make_command_field_infos(enums.CommandCode.CAMERA_CABLE_WRAP_STOP)
 
 
-class CameraCableWrapTrack(Command):
+class CameraCableWrapTrackTarget(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK, _TrackingParameters
+        enums.CommandCode.CAMERA_CABLE_WRAP_TRACK_TARGET, _TrackingParameters
     )
 
 
@@ -440,7 +478,9 @@ class ElevationDriveReset(Command):
 
 
 class ElevationEnableTracking(Command):
-    field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_ENABLE_TRACKING)
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_ENABLE_TRACKING, _OnOffParameters
+    )
 
 
 class ElevationHome(Command):
@@ -469,10 +509,14 @@ class ElevationStop(Command):
     field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_STOP)
 
 
-class ElevationTrack(Command):
+class ElevationTrackTarget(Command):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_TRACK, _TrackingParameters
+        enums.CommandCode.ELEVATION_TRACK_TARGET, _TrackingParameters
     )
+
+
+class Heartbeat(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.HEARTBEAT)
 
 
 class MainAxesPowerSupplyPower(Command):
@@ -484,6 +528,22 @@ class MainAxesPowerSupplyPower(Command):
 class MainAxesPowerSupplyResetAlarm(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.MAIN_AXES_POWER_SUPPLY_RESET_ALARM
+    )
+
+
+class MainCabinetThermalResetAlarm(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MAIN_CABINET_THERMAL_RESET_ALARM
+    )
+
+
+class MirrorCoverSystemDeploy(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.MIRROR_COVER_SYSTEM_DEPLOY)
+
+
+class MirrorCoverSystemRetract(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVER_SYSTEM_RETRACT
     )
 
 
@@ -689,10 +749,14 @@ Commands = (
     AzimuthPower,
     AzimuthResetAlarm,
     AzimuthStop,
-    AzimuthTrack,
+    AzimuthTrackTarget,
+    BothAxesEnableTracking,
+    BothAxesHome,
     BothAxesMove,
+    BothAxesPower,
+    BothAxesResetAlarm,
     BothAxesStop,
-    BothAxesTrack,
+    BothAxesTrackTarget,
     CameraCableWrapDriveEnable,
     CameraCableWrapDriveReset,
     CameraCableWrapEnableTracking,
@@ -700,7 +764,7 @@ Commands = (
     CameraCableWrapPower,
     CameraCableWrapResetAlarm,
     CameraCableWrapStop,
-    CameraCableWrapTrack,
+    CameraCableWrapTrackTarget,
     Disable,
     Enable,
     ElevationDriveEnable,
@@ -711,9 +775,13 @@ Commands = (
     ElevationPower,
     ElevationResetAlarm,
     ElevationStop,
-    ElevationTrack,
+    ElevationTrackTarget,
+    Heartbeat,
     MainAxesPowerSupplyPower,
     MainAxesPowerSupplyResetAlarm,
+    MainCabinetThermalResetAlarm,
+    MirrorCoverSystemDeploy,
+    MirrorCoverSystemRetract,
     MirrorCoverLocksMoveAll,
     MirrorCoverLocksPower,
     MirrorCoverLocksResetAlarm,

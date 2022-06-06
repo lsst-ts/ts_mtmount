@@ -38,27 +38,32 @@ class TrivialMockController:
     def __init__(self):
         self.command_dict = {}
         self.log = logging.getLogger()
-
-
-class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        self.controller = TrivialMockController()
         axis_devices = [
             mtmount.mock.AxisDevice(
-                controller=self.controller,
+                controller=self,
                 system_id=system_id,
                 start_position=mtmount.mock.INITIAL_POSITION[system_id],
             )
             for system_id in mtmount.mock.CmdLimitsDict
         ]
         devices = axis_devices + [
-            mtmount.mock.MainAxesPowerSupplyDevice(controller=self.controller),
-            mtmount.mock.MirrorCoverLocksDevice(controller=self.controller),
-            mtmount.mock.MirrorCoversDevice(controller=self.controller),
-            mtmount.mock.OilSupplySystemDevice(controller=self.controller),
-            mtmount.mock.TopEndChillerDevice(controller=self.controller),
+            mtmount.mock.MainAxesPowerSupplyDevice(controller=self),
+            mtmount.mock.MirrorCoverLocksDevice(controller=self),
+            mtmount.mock.MirrorCoversDevice(controller=self),
+            mtmount.mock.OilSupplySystemDevice(controller=self),
+            mtmount.mock.TopEndChillerDevice(controller=self),
         ]
         self.device_dict = {device.system_id: device for device in devices}
+
+    @property
+    def main_axes_power_supply(self):
+        """Return the main axes power supply mock device."""
+        return self.device_dict[System.MAIN_AXES_POWER_SUPPLY]
+
+
+class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.controller = TrivialMockController()
 
     def get_command_class(self, command_code_name):
         command_code = getattr(mtmount.CommandCode, command_code_name.upper())
@@ -114,7 +119,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 self.fail(f"Command {command} failed, but should_fail false: {e!r}")
 
     async def test_base_commands(self):
-        for system_id, device in self.device_dict.items():
+        for system_id, device in self.controller.device_dict.items():
             with self.subTest(system_id=device.system_id.name):
                 if system_id in (
                     System.MIRROR_COVERS,
@@ -126,7 +131,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 await self.check_base_commands(device=device, drive=drive)
 
     async def test_mirror_cover_locks(self):
-        device = self.device_dict[System.MIRROR_COVER_LOCKS]
+        device = self.controller.device_dict[System.MIRROR_COVER_LOCKS]
         self.check_device_repr(device)
 
         await self.check_deployable_device(
@@ -145,7 +150,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_mirror_covers(self):
-        device = self.device_dict[System.MIRROR_COVERS]
+        device = self.controller.device_dict[System.MIRROR_COVERS]
         self.check_device_repr(device)
 
         await self.check_deployable_device(
@@ -160,7 +165,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_oil_supply_system(self):
-        device = self.device_dict[System.OIL_SUPPLY_SYSTEM]
+        device = self.controller.device_dict[System.OIL_SUPPLY_SYSTEM]
         self.check_device_repr(device)
 
         # Test the OilSupplySystemPower command
@@ -228,7 +233,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             assert values == expected_values
 
     async def test_top_end_chiller(self):
-        device = self.device_dict[System.TOP_END_CHILLER]
+        device = self.controller.device_dict[System.TOP_END_CHILLER]
         self.check_device_repr(device)
 
         initial_track_ambient = device.track_ambient
@@ -286,11 +291,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             System.CAMERA_CABLE_WRAP,
         ):
             with self.subTest(system_id=system_id.name):
-                device = self.device_dict[system_id]
+                device = self.controller.device_dict[system_id]
                 await self.check_axis_device(device)
 
     async def test_command_failure(self):
-        device = self.device_dict[System.MIRROR_COVERS]
+        device = self.controller.device_dict[System.MIRROR_COVERS]
         await self.run_command(mtmount.commands.MirrorCoversPower(drive=-1, on=True))
         assert device.power_on
         device.fail_next_command = True
@@ -301,13 +306,17 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
     async def check_axis_device(self, device):
+        # Set main axes power supply off
+        # This test uses TrivialMockController so do not try to send
+        # the usual command.
+        self.controller.main_axes_power_supply.power_on = False
+        assert not self.controller.main_axes_power_supply.power_on
+
         self.check_device_repr(device)
 
-        is_elaz = device.system_id in (
-            System.AZIMUTH,
-            System.ELEVATION,
+        assert device.is_azel == (
+            device.system_id in {System.ELEVATION, System.AZIMUTH}
         )
-
         assert not device.power_on
         assert not device.enabled
         assert not device.has_target
@@ -322,10 +331,10 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             "move",
             "power",
             "stop",
-            "track",
+            "track_target",
             "reset_alarm",
         ]
-        if is_elaz:
+        if device.is_azel:
             short_command_names.append("home")
         dev_prefix = f"{device.system_id.name}_"
         command_codes = {
@@ -336,31 +345,60 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             name: mtmount.commands.CommandDict[cmd_id]
             for name, cmd_id in command_codes.items()
         }
-        slow_command_codes = {command_codes[name] for name in ("move", "track")}
+        slow_command_codes = {command_codes[name] for name in ("move", "track_target")}
 
         # A batch of useful commands.
         drive_enable_off_command = command_classes["drive_enable"](drive=-1, on=False)
         drive_enable_on_command = command_classes["drive_enable"](drive=-1, on=True)
         drive_reset_command = command_classes["drive_reset"](drive=-1)
-        if is_elaz:
+        enable_tracking_on_command = command_classes["enable_tracking"](on=True)
+        if device.is_azel:
             # Elevation and azimuth have a home command,
             # and tracking cannot be paused (so the enable tracking command
             # has no "on" parameter)
             home_command = command_classes["home"]()
-            enable_tracking_on_command = command_classes["enable_tracking"]()
             pause_tracking_command = None
         else:
             # The camera cable wrap has no home command,
             # and tracking can be paused.
             home_command = None
-            enable_tracking_on_command = command_classes["enable_tracking"](on=True)
             pause_tracking_command = command_classes["enable_tracking"](on=False)
         power_off_command = command_classes["power"](on=False)
         power_on_command = command_classes["power"](on=True)
         stop_command = command_classes["stop"]()
         reset_alarm_command = command_classes["reset_alarm"]()
         move_command_class = command_classes["move"]
-        track_command_class = command_classes["track"]
+        track_command_class = command_classes["track_target"]
+
+        # Many commands should fail for elevation and azimuth
+        # if the main power supply is off
+        if device.is_azel:
+            for command in (
+                enable_tracking_on_command,
+                stop_command,
+                home_command,
+                move_command_class(position=device.cmd_limits.min_position + 0.1),
+                pause_tracking_command,
+                power_on_command,
+                track_command_class(
+                    position=device.cmd_limits.min_position + 0.1,
+                    velocity=0,
+                    tai=utils.current_tai(),
+                ),
+            ):
+                if command is None:
+                    continue
+                with self.subTest(command=str(command)):
+                    min_timeout = (
+                        0 if command.command_code in slow_command_codes else None
+                    )
+                    with pytest.raises(RuntimeError):
+                        await self.run_command(command, min_timeout=min_timeout)
+                    assert not device.power_on
+                    assert not device.enabled
+                    assert not device.tracking_enabled
+                    assert not device.has_target
+                    assert not device.homed
 
         # drive_reset fails if off
         assert not device.power_on
@@ -371,6 +409,14 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.power_on
         assert not device.enabled
         assert not device.tracking_enabled
+        assert not device.homed
+
+        # Set main axes power supply on if azimuth or elevation.
+        # This test uses TrivialMockController so do not try to send
+        # the usual command.
+        if device.is_azel:
+            self.controller.main_axes_power_supply.power_on = True
+            assert self.controller.main_axes_power_supply.power_on
 
         # Power on the device; this should not enable the drive.
         await self.run_command(power_on_command)
@@ -378,6 +424,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.enabled
         assert not device.tracking_enabled
         assert not device.has_target
+        assert not device.homed
 
         # Disable the drive
         await self.run_command(drive_enable_off_command)
@@ -385,24 +432,21 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.enabled
         assert not device.tracking_enabled
         assert not device.has_target
+        assert not device.homed
 
         # Most commands should fail if drive not enabled.
-        fail_if_not_enabled_commands = [
+        for command in (
             enable_tracking_on_command,
             stop_command,
             home_command,
             move_command_class(position=device.cmd_limits.min_position + 0.1),
+            pause_tracking_command,
             track_command_class(
                 position=device.cmd_limits.min_position + 0.1,
                 velocity=0,
                 tai=utils.current_tai(),
             ),
-        ]
-        if is_elaz:
-            fail_if_not_enabled_commands.append(home_command)
-        else:
-            fail_if_not_enabled_commands.append(pause_tracking_command)
-        for command in fail_if_not_enabled_commands:
+        ):
             if command is None:
                 continue
             with self.subTest(command=str(command)):
@@ -413,6 +457,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 assert not device.enabled
                 assert not device.tracking_enabled
                 assert not device.has_target
+                assert not device.homed
 
         # Enable the drives
         await self.run_command(drive_enable_on_command)
@@ -420,6 +465,24 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.enabled
         assert not device.tracking_enabled
         assert not device.has_target
+
+        # Enabling tracking should fail for elevation and azimuth until
+        # these axes are homed.
+        if device.is_azel:
+            with pytest.raises(RuntimeError):
+                await self.run_command(enable_tracking_on_command, min_timeout=0)
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
+            assert not device.has_target
+            assert not device.homed
+
+            await self.run_command(home_command, min_timeout=0)
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
+            assert device.has_target
+            assert device.homed
 
         # Do a point to point move
         assert device.motion_state() == AxisMotionState.STOPPED
@@ -439,6 +502,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.has_target
         assert device.moving_point_to_point
         assert device.point_to_point_target == pytest.approx(end_position)
+
+        # Check that homing is rejected while moving
+        if device.is_azel:
+            with pytest.raises(RuntimeError):
+                await self.run_command(home_command, min_timeout=0)
 
         await task
         assert device.motion_state() == AxisMotionState.STOPPED
@@ -463,15 +531,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.has_target
         assert not device.tracking_enabled
 
-        # Start homing or a big point to point move, then stop the axes
-        # (Homing is a point to point move, and it's slow).
-        if is_elaz:
-            slow_move_command = home_command
-            end_position = device.home_position
-        else:
-            start_position = start_segment.position
-            end_position = start_position + 10
-            slow_move_command = move_command_class(position=end_position)
+        # Start a big point to point move, then stop the axes
+        end_position = device.cmd_limits.max_position
+        slow_move_command = move_command_class(position=end_position)
         task = asyncio.create_task(
             self.run_command(
                 slow_move_command, min_timeout=0.5, should_be_superseded=True
@@ -618,7 +680,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.motion_state(tai) == AxisMotionState.TRACKING
 
         # If camera cable wrap, pause tracking and check state
-        if not is_elaz:
+        if not device.is_azel:
             # Pause tracking
             await self.run_command(pause_tracking_command)
             assert device.power_on
@@ -734,6 +796,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             Value for ``drive`` argument of power commands.
             If `None` then the ``drive`` argument is not provided.
         """
+        self.controller.main_axes_power_supply.power_on = False
         assert not device.power_on
         assert not device.alarm_on
 
@@ -750,6 +813,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         power_command_off = power_command_class(on=False, **power_kwargs)
         reset_alarm_command = reset_alarm_command_class()
 
+        is_azel = device.system_id in {System.ELEVATION, System.AZIMUTH}
+
         min_on_timeout = {
             System.MAIN_AXES_POWER_SUPPLY: 5,
             System.OIL_SUPPLY_SYSTEM: 900,
@@ -759,12 +824,35 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             System.OIL_SUPPLY_SYSTEM: 0,
         }.get(device.system_id, None)
 
+        assert not device.alarm_on
+        device.alarm_on = True
+        await self.run_command(reset_alarm_command)
+        assert not device.power_on
+
+        if is_azel:
+            # The reset alarm command for azimuth and elevation
+            # is a no-op if main axes power off
+            assert device.alarm_on
+            self.controller.main_axes_power_supply.power_on = True
+            await self.run_command(reset_alarm_command)
+            assert not device.alarm_on
+            self.controller.main_axes_power_supply.power_on = False
+        else:
+            assert not device.alarm_on
+
+        if is_azel:
+            # Cannot turn on device unless main power is on
+            with pytest.raises(RuntimeError):
+                await self.run_command(power_command_on, min_timeout=min_on_timeout)
+            self.controller.main_axes_power_supply.power_on = True
+
         await self.run_command(power_command_on, min_timeout=min_on_timeout)
         assert device.power_on
         assert not device.alarm_on
 
-        device.alarm_on = False
-        await self.run_command(reset_alarm_command)
+        # Cannot reset alarms once the power is on (alas)
+        with pytest.raises(RuntimeError):
+            await self.run_command(reset_alarm_command)
         assert device.power_on
         assert not device.alarm_on
 

@@ -184,6 +184,7 @@ class TelemetryClient:
 
     def signal_handler(self):
         """Handle signals such as SIGTERM."""
+        print("telemetry client signal handler")
         self.log.info("signal_handler")
         self.start_task.cancel()
         self.read_task.cancel()
@@ -199,6 +200,7 @@ class TelemetryClient:
 
     async def close(self):
         """Disconnect from the TCP/IP controller."""
+        print("telemetry client closing")
         self.log.info("disconnecting")
         self.start_task.cancel()
         self.read_task.cancel()
@@ -230,18 +232,22 @@ class TelemetryClient:
 
     async def read_loop(self):
         """Read and process status from the low-level controller."""
+        print("telemetry client read loop begins")
         while True:
             try:
                 data = await self.reader.readuntil(constants.LINE_TERMINATOR)
             except asyncio.CancelledError:
+                print("telemetry client read loop cancelled")
                 return
             except (ConnectionResetError, asyncio.IncompleteReadError):
                 asyncio.ensure_future(self.close())
                 self.log.info("Reader disconnected; giving up.")
+                print("telemetry client reader disconnected; giving up")
                 return
-            except Exception:
+            except Exception as e:
                 asyncio.ensure_future(self.close())
                 self.log.exception("read_loop failed; giving up.")
+                print(f"telemetry client reader failed; giving up: {e!r}")
                 return
             try:
                 decoded_data = data.decode()
@@ -293,7 +299,7 @@ class TelemetryClient:
         )
 
     def _preprocess_cameraCableWrap(self, llv_data):
-        """Preprocess status for the tel_elevationDrives topic."""
+        """Preprocess status for the tel_cameraCableWrap topic."""
         self._convert_drive_measurements(
             llv_data=llv_data, keys=["torquePercentage"], ndrives=2
         )

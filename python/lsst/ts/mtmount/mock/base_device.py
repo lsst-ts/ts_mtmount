@@ -124,6 +124,8 @@ class BaseDevice:
         self.power_on = command.on
 
     def do_reset_alarm(self, command):
+        if self.power_on:
+            raise RuntimeError("Cannot reset alarms if power on, alas.")
         self.alarm_on = False
 
     def __repr__(self):

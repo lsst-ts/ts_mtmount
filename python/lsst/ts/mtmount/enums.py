@@ -58,15 +58,21 @@ class CommandCode(enum.IntEnum):
     ENTER_CONTROL = 14
     SYSTEM_READY = 15
     ENTER_PUBLISHONLY = 16
-    BOTH_AXES_MOVE = 30  # HMI_MOVE_TO_TARGET in types.h
-    BOTH_AXES_TRACK = 31  # HMI_TRACK_TARGET in types.h
+    BOTH_AXES_POWER = 31
     BOTH_AXES_STOP = 32  # HMI_STOP in types.h
+    BOTH_AXES_MOVE = 33  # HMI_MOVE_TO_TARGET in types.h
+    BOTH_AXES_TRACK_TARGET = 35  # HMI_TRACK_TARGET in types.h
+    BOTH_AXES_HOME = 36
+    BOTH_AXES_RESET_ALARM = 37  # If one fails, will still reset the other
+    BOTH_AXES_ENABLE_TRACKING = 38
+    MIRROR_COVER_SYSTEM_DEPLOY = 41  # Handle mirror covers and locks
+    MIRROR_COVER_SYSTEM_RETRACT = 42  # Handle mirror covers and locks
     AZIMUTH_POWER = 101
     AZIMUTH_STOP = 102
     AZIMUTH_MOVE = 103
     AZIMUTH_MOVE_VELOCITY = 104
     # AZ_AXIS_TRACKING in types.h
-    AZIMUTH_TRACK = 105
+    AZIMUTH_TRACK_TARGET = 105
     AZIMUTH_HOME = 106
     AZIMUTH_RESET_ALARM = 107
     # Not sure what the name will be; not yet implemented
@@ -78,7 +84,7 @@ class CommandCode(enum.IntEnum):
     AZIMUTH_CABLE_WRAP_MOVE = 303
     AZIMUTH_CABLE_WRAP_MOVE_VELOCITY = 304
     # AZ_CW_TRACK_AZIMUTH in types.h
-    AZIMUTH_CABLE_WRAP_TRACK = 305
+    AZIMUTH_CABLE_WRAP_TRACK_TARGET = 305
     AZIMUTH_CABLE_WRAP_RESET_ALARM = 306
     AZIMUTH_CABLE_WRAP_DRIVE_RESET = 307
     AZIMUTH_CABLE_WRAP_DRIVE_ENABLE = 308
@@ -89,13 +95,16 @@ class CommandCode(enum.IntEnum):
     ELEVATION_MOVE = 403
     ELEVATION_MOVE_VELOCITY = 404
     # EL_AXIS_TRACKING in types.h
-    ELEVATION_TRACK = 405
+    ELEVATION_TRACK_TARGET = 405
     ELEVATION_HOME = 406
     ELEVATION_RESET_ALARM = 407
-    # Not sure what the name will be; not yet implemented
     ELEVATION_ENABLE_TRACKING = 408
     ELEVATION_DRIVE_RESET = 501
     ELEVATION_DRIVE_ENABLE = 502
+    # The main axes power supply must be on
+    # in order to turn on power to elevation and azimuth.
+    # While off you cannot usefullly reset alarms for these axes
+    # (the command succeeds but has no effect).
     MAIN_AXES_POWER_SUPPLY_POWER = 601
     MAIN_AXES_POWER_SUPPLY_RESET_ALARM = 602
     ENCODER_INTERFACE_BOX_POWER = 701
@@ -113,17 +122,16 @@ class CommandCode(enum.IntEnum):
     MIRROR_COVERS_STOP = 902
     MIRROR_COVERS_MOVE = 903
     MIRROR_COVERS_MOVE_VELOCITY = 904
-    # WARNING: Tekniker's code presently uses:
-    # OPEN to mean DEPLOY, which we call closing the mirror covers
-    # CLOSE to mean RETRACT, which we call opening the mirror covers.
-    # Tekniker will update their code to use deploy and retract.
+    # NOTES:
+    # * deploy is what we call closing the mirror covers
+    # * retract is what we call opening the mirror covers
     MIRROR_COVERS_DEPLOY = 905
     MIRROR_COVERS_RETRACT = 906
     MIRROR_COVERS_RESET_ALARM = 907
     CAMERA_CABLE_WRAP_POWER = 1001
     CAMERA_CABLE_WRAP_STOP = 1002
     CAMERA_CABLE_WRAP_MOVE = 1003
-    CAMERA_CABLE_WRAP_TRACK = 1004
+    CAMERA_CABLE_WRAP_TRACK_TARGET = 1004
     CAMERA_CABLE_WRAP_RESET_ALARM = 1005
     CAMERA_CABLE_WRAP_DRIVE_ENABLE = 1006
     CAMERA_CABLE_WRAP_DRIVE_RESET = 1007
@@ -142,8 +150,8 @@ class CommandCode(enum.IntEnum):
     DEPLOYABLE_PLATFORMS_RESET_ALARM = 1205
     DEPLOYABLE_PLATFORMS_LOCK_EXTENSION = 1206
     # Main cabinet temperature controller
-    CABINET_TRACK_AMBIENT = 1301
-    CABINET_RESET_ALARM = 1302
+    MAIN_CABINET_THERMAL_TRACK_AMBIENT = 1301
+    MAIN_CABINET_THERMAL_RESET_ALARM = 1302
     LOCKING_PINS_POWER = 1401
     LOCKING_PINS_STOP = 1402
     LOCKING_PINS_MOVE = 1403
@@ -167,15 +175,19 @@ class CommandCode(enum.IntEnum):
     SAFETY_RESET = 1801
     # Override safety interlock
     OVERRIDE_CAUSES = 1802
-    STATE_INFO = 2001
+    STATE_OF_OPERATION_MANAGER = 2001  # NOT ACKED!
     # Ask the Operation Manager to exit
     APPLICATION_EXIT = 2002
     # "Internal command for Operation Manager"
-    ASK_FOR_COMMAND = 2101
+    ASK_FOR_COMMAND = 2103
     TRANSFER_FUNCTION_AZIMUTH_EXCITATION = 2301
     TRANSFER_FUNCTION_ELEVATION_EXCITATION = 2302
     # Get actual set of settings to send them to TCS.
     ASK_FOR_SET_OF_SETTINGS = 2401
+    APPLY_SETTINGS_SET = 2403
+    STATE_INFO = 2502
+    # Send this once a second or so. It will get no ack of any kind.
+    HEARTBEAT = 3000
     PXI_COMMAND_DONE = -1
     ERROR = -100
 
@@ -245,7 +257,7 @@ class ReplyId(enum.IntEnum):
     DEPLOYABLE_PLATFORMS_MOTION_STATE = 204
     LIMITS = 300
     SPECIAL_LIMITS = 301
-    AZIMUTH_TOPPLE_BLOCK = 303
+    AZIMUTH_TOPPLE_BLOCK = 304
     AZIMUTH_CABLE_WRAP_SWITCHES = 305
 
 
@@ -267,6 +279,33 @@ class TelemetryTopicId(enum.IntEnum):
     """Telemetry topic ID values.
 
     These must match the data in `TELEMETRY_MAP`
+
+    From Julen 2022-06-08 here is the full set:
+    Azimuth 6
+    Safety 26 (maybe not reported)
+    Elevation 15
+    LockingPins (for elevation) 19
+    Deployable Platforms 11
+    Auxiliary cabinet AZ 0101 2
+    Azimuth Cable Wrap 3
+    Camera Cable Wrap 8
+    Balancing 7
+    Azimuth Drives 5
+    Azimuth Drives Thermal controller 4
+    Elevation drives 14
+    Elevation Drives Thermal controller 13
+    Encoder 16
+    The main cabinet thermal controller 24
+    Mirror Cover Locks 22
+    Mirror Cover 23
+    Main Power Supply (for AZ and EL) 21
+    Top End Chiller 27
+    Modbus temperature controllers distributed over the TMA 1
+    OSS 25
+    Comprssed Air pressures and temperatures 9
+    Cooling systems pressures and temperatures 10
+    Dynalene cooling pressures and temperatures 12
+    General Purpose Glycol pressures and temperatures 17
     """
 
     AZIMUTH = 6

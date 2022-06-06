@@ -76,6 +76,7 @@ class DeployableDevice(PointToPointDevice):
             raise ValueError(
                 f"deployed_position must not equal retracted_position = {deployed_position}"
             )
+        self.move_time = move_time
         self.retracted_position = retracted_position
         self.deployed_position = deployed_position
         self._deploying_velocity_sign = (
