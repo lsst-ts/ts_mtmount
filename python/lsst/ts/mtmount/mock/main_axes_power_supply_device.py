@@ -30,6 +30,9 @@ from .base_device import BaseDevice
 class MainAxesPowerSupplyDevice(BaseDevice):
     """Main power supply.
 
+    If this turns off and azimuth or elevation is on,
+    stop that device and send it to fault state.
+
     Parameters
     ----------
     controller : `MockController`
@@ -46,6 +49,18 @@ class MainAxesPowerSupplyDevice(BaseDevice):
 
     def do_power(self, command):
         super().do_power(command)
+        if not command.on:
+            for system_id in (
+                System.AZIMUTH,
+                System.ELEVATION,
+            ):
+                axis_device = self.controller.device_dict[system_id]
+                if axis_device.power_on:
+                    axis_device.stop_motion(command=command, gently=False)
+                    self.alarm_on = True
+                    self.power_on = False
+                    self.enabled = False
+
         # The real system takes about 2 minutes to turn on.
         timeout = 120 if command.on else 0
         return timeout, utils.make_done_future()

@@ -47,7 +47,7 @@ from .. import enums
 # from . import device
 from .axis_device import AxisDevice
 from .detailed_settings import detailed_settings
-from .main_power_supply_device import MainAxesPowerSupplyDevice
+from .main_axes_power_supply_device import MainAxesPowerSupplyDevice
 from .mirror_covers_device import MirrorCoversDevice
 from .mirror_cover_locks_device import MirrorCoverLocksDevice
 from .oil_supply_system_device import OilSupplySystemDevice
@@ -170,6 +170,14 @@ class Controller:
         System.AZ0101_CABINET_THERMAL: 1,
         System.MODBUS_TEMPERATURE_CONTROLLERS: 5,
         System.TOP_END_CHILLER: 1,
+        System.MAIN_CABINET_THERMAL: 1,
+    }
+
+    # Dict of system: number of limits elements for LIMITS events
+    limits_nelts = {
+        System.AZIMUTH: 1,
+        System.ELEVATION: 1,
+        System.CAMERA_CABLE_WRAP: 1,
     }
 
     # Dict of system: number of elements for MOTION_CONTROLLER_STATE events.
@@ -194,6 +202,7 @@ class Controller:
         System.AZIMUTH: 1,
         System.ELEVATION: 1,
         System.CAMERA_CABLE_WRAP: 1,
+        System.MAIN_AXES_POWER_SUPPLY: 1,
         System.MIRROR_COVERS: 4,
         System.MIRROR_COVER_LOCKS: 4,
         System.OIL_SUPPLY_SYSTEM: 1,
@@ -208,8 +217,7 @@ class Controller:
         System.ELEVATION_DRIVES_THERMAL: 2,
         System.AZ0101_CABINET_THERMAL: 1,
         System.MODBUS_TEMPERATURE_CONTROLLERS: 5,
-        System.MAIN_CABINET: 1,
-        System.MAIN_AXES_POWER_SUPPLY: 1,
+        System.MAIN_CABINET_THERMAL: 1,
     }
 
     def __init__(self, log, commander=enums.Source.NONE, random_ports=False):
@@ -245,6 +253,9 @@ class Controller:
 
         # Queue of commands, for unit testing
         self.command_queue = None
+        # Should HEARTBEAT commands be added to the command queue?
+        # Feel free to set this false for unit testing.
+        self.queue_heartbeat_commands = False
 
         # Dict of command_code: mock method to call
         self.command_dict = {}
@@ -253,9 +264,16 @@ class Controller:
         self.add_all_devices()
         extra_commands = {
             enums.CommandCode.ASK_FOR_COMMAND: self.do_ask_for_command,
+            enums.CommandCode.BOTH_AXES_HOME: self.do_both_axes_home,
+            enums.CommandCode.BOTH_AXES_ENABLE_TRACKING: self.do_both_axes_enable_tracking,
             enums.CommandCode.BOTH_AXES_MOVE: self.do_both_axes_move,
+            enums.CommandCode.BOTH_AXES_POWER: self.do_both_axes_power,
+            enums.CommandCode.BOTH_AXES_RESET_ALARM: self.do_both_axes_reset_alarm,
             enums.CommandCode.BOTH_AXES_STOP: self.do_both_axes_stop,
-            enums.CommandCode.BOTH_AXES_TRACK: self.do_both_axes_track,
+            enums.CommandCode.BOTH_AXES_TRACK_TARGET: self.do_both_axes_track,
+            enums.CommandCode.MAIN_CABINET_THERMAL_RESET_ALARM: self.do_main_cabinet_thermal_reset_alarm,
+            enums.CommandCode.MIRROR_COVER_SYSTEM_DEPLOY: self.do_mirror_cover_system_deploy,
+            enums.CommandCode.MIRROR_COVER_SYSTEM_RETRACT: self.do_mirror_cover_system_retract,
             enums.CommandCode.SAFETY_RESET: self.do_safety_reset,
             enums.CommandCode.STATE_INFO: self.do_state_info,
         }
@@ -362,6 +380,11 @@ class Controller:
         except Exception as e:
             print(f"Mock TMA controller failed: {e!r}", flush=True)
 
+    @property
+    def main_axes_power_supply(self):
+        """Return the main axes power supply mock device."""
+        return self.device_dict[System.MAIN_AXES_POWER_SUPPLY]
+
     def init_saved_state(self):
         """Initialize saved state used to decide whether to report events
         in handle_telemetry.
@@ -395,6 +418,7 @@ class Controller:
         }
 
         self.power_state_dict = {
+            System.MAIN_AXES_POWER_SUPPLY: None,
             System.AZIMUTH: None,
             System.ELEVATION: None,
             System.CAMERA_CABLE_WRAP: None,
@@ -473,7 +497,7 @@ class Controller:
                 make_reply_dict(
                     id=enums.ReplyId.AXIS_MOTION_STATE,
                     axis=axis,
-                    motionState=motion_state,
+                    state=motion_state,
                     position=device.point_to_point_target,
                 )
             )
@@ -488,6 +512,7 @@ class Controller:
 
             if not self.command_server.connected:
                 return
+
             await self.write_reply(
                 make_reply_dict(
                     id=enums.ReplyId.IN_POSITION,
@@ -560,7 +585,7 @@ class Controller:
             make_reply_dict(
                 id=topic_id,
                 state=motion_state,
-                elementState=[motion_state] * nelts,
+                elementsState=[motion_state] * nelts,
             )
         )
 
@@ -802,7 +827,7 @@ class Controller:
         device = device_class(controller=self, **kwargs)
         self.device_dict[device.system_id] = device
 
-    def set_command_queue(self, maxsize=0):
+    def set_command_queue(self, queue_heartbeat_commands, maxsize=0):
         """Create or replace the command queue.
 
         This sets attribute ``self.command_queue`` to an `asyncio.Queue`
@@ -810,11 +835,14 @@ class Controller:
 
         Parameters
         ----------
+        queue_heartbeat_commands : `bool`
+            Queue heartbeat commands?
         maxsize : `int`, optional
             Maximum number of items on the queue.
             If <= 0 then no limit.
             If the queue gets full then the newest items are dropped.
         """
+        self.queue_heartbeat_commands = queue_heartbeat_commands
         self.command_queue = asyncio.Queue(maxsize=maxsize)
 
     def delete_command_queue(self):
@@ -868,6 +896,11 @@ class Controller:
         command : `Command`
             Command to process.
         """
+        if command.command_code == enums.CommandCode.HEARTBEAT:
+            # Ignore the command; in the long run we may want to
+            # run a heartbeat timer.
+            return
+
         if self.commander != enums.Source.CSC and command.command_code not in (
             enums.CommandCode.ASK_FOR_COMMAND,
             enums.CommandCode.STATE_INFO,
@@ -906,6 +939,71 @@ class Controller:
             # `BaseDevice.close` on each mock device, which cancels the task
             # that `Controller.monitor_command` is awaiting.
             asyncio.create_task(self.monitor_command(command=command, task=task))
+
+    def run_commands_in_parallel(self, *commands):
+        """Run a set of commands in parallel.
+
+        Used to handle meta-commands that run a set of sub-commands
+        that can run at the same time.
+
+        Parameters
+        ----------
+        *commands : list [ `Command` ]
+            Commands to process.
+        """
+        if not self.command_server.connected:
+            raise RuntimeError("Command server not connected")
+
+        timeouts = []
+        tasks = []
+        for command in commands:
+
+            command_func = self.command_dict.get(command.command_code)
+            if command_func is None:
+                raise RuntimeError(f"command {command} is not supported")
+
+            timeout_task = command_func(command)
+            if timeout_task is not None:
+                timeout, task = timeout_task
+                timeouts.append(timeout)
+                tasks.append(task)
+        if timeouts:
+            meta_timeout = max(*timeouts)
+            meta_task = asyncio.create_task(wait_tasks(*tasks))
+            return meta_timeout, meta_task
+        else:
+            return None
+
+    async def async_run_commands_in_series(self, *commands):
+        """Run a set of commands in series and wait for the result.
+
+        Used to handle meta-commands that run a set of sub-commands
+        that have to be run sequentiall, e.g. for deploying or retracting
+        mirror covers.
+
+        Note that there is no to estimate the timeout from the commands
+        being run.
+
+        Parameters
+        ----------
+        *commands : list [ `Command` ]
+            Commands to process.
+        """
+        if not self.command_server.connected:
+            raise RuntimeError("Command server not connected")
+
+        for command in commands:
+            if not self.command_server.connected:
+                raise RuntimeError("Aborted because the command server disconnected")
+
+            command_func = self.command_dict.get(command.command_code)
+            if command_func is None:
+                raise RuntimeError(f"command {command} is not supported")
+
+            timeout_task = command_func(command)
+            if timeout_task is not None:
+                timeout, task = timeout_task
+                await asyncio.wait_for(task, timeout=timeout + 5)
 
     def command_connect_callback(self, server):
         """Called when a client connects to or disconnects from
@@ -958,6 +1056,32 @@ class Controller:
             task = asyncio.create_task(self.write_commander())
             return timeout, task
 
+    def do_both_axes_enable_tracking(self, command):
+        """Handle the BOTH_AXES_ENABLE_TRACKING command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
+        return self.run_commands_in_parallel(
+            commands.AzimuthEnableTracking(sequence_id=command.sequence_id, on=True),
+            commands.ElevationEnableTracking(sequence_id=command.sequence_id, on=True),
+        )
+
+    def do_both_axes_home(self, command):
+        """Handle the BOTH_AXES_HOME command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
+        return self.run_commands_in_parallel(
+            commands.AzimuthHome(sequence_id=command.sequence_id),
+            commands.ElevationHome(sequence_id=command.sequence_id),
+        )
+
     def do_both_axes_move(self, command):
         """Handle the BOTH_AXES_MOVE command.
 
@@ -966,23 +1090,40 @@ class Controller:
         command : `Command`
             The command.
         """
-        azimuth_command = commands.AzimuthMove(
-            sequence_id=command.sequence_id,
-            position=command.azimuth,
+        return self.run_commands_in_parallel(
+            commands.AzimuthMove(
+                sequence_id=command.sequence_id, position=command.azimuth
+            ),
+            commands.ElevationMove(
+                sequence_id=command.sequence_id, position=command.elevation
+            ),
         )
-        elevation_command = commands.ElevationMove(
-            sequence_id=command.sequence_id,
-            position=command.elevation,
+
+    def do_both_axes_power(self, command):
+        """Handle the BOTH_AXES_POWER command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
+        return self.run_commands_in_parallel(
+            commands.AzimuthPower(sequence_id=command.sequence_id, on=command.on),
+            commands.ElevationPower(sequence_id=command.sequence_id, on=command.on),
         )
-        azimuth_time, azimuth_task = self.device_dict[System.AZIMUTH].do_move(
-            azimuth_command
+
+    def do_both_axes_reset_alarm(self, command):
+        """Handle the BOTH_AXES_RESET_ALARM command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
+        return self.run_commands_in_parallel(
+            commands.AzimuthResetAlarm(sequence_id=command.sequence_id),
+            commands.ElevationResetAlarm(sequence_id=command.sequence_id),
         )
-        elevation_time, elevation_task = self.device_dict[System.ELEVATION].do_move(
-            elevation_command
-        )
-        timeout = max(azimuth_time, elevation_time)
-        task = asyncio.create_task(wait_tasks(azimuth_task, elevation_task))
-        return timeout, task
 
     def do_both_axes_stop(self, command):
         """Handle the BOTH_AXES_STOP command.
@@ -992,33 +1133,79 @@ class Controller:
         command : `Command`
             The command.
         """
-        azimuth_command = commands.AzimuthStop(sequence_id=command.sequence_id)
-        elevation_command = commands.ElevationStop(sequence_id=command.sequence_id)
-        self.device_dict[System.AZIMUTH].do_stop(azimuth_command)
-        self.device_dict[System.ELEVATION].do_stop(elevation_command)
+        return self.run_commands_in_parallel(
+            commands.AzimuthStop(sequence_id=command.sequence_id),
+            commands.ElevationStop(sequence_id=command.sequence_id),
+        )
 
     def do_both_axes_track(self, command):
-        """Handle the BOTH_AXES_TRACK command.
+        """Handle the BOTH_AXES_TRACK_TARGET command.
 
         Parameters
         ----------
         command : `Command`
             The command.
         """
-        azimuth_command = commands.AzimuthTrack(
-            sequence_id=command.sequence_id,
-            position=command.azimuth,
-            velocity=command.azimuth_velocity,
-            tai=command.tai,
+        return self.run_commands_in_parallel(
+            commands.AzimuthTrackTarget(
+                sequence_id=command.sequence_id,
+                position=command.azimuth,
+                velocity=command.azimuth_velocity,
+                tai=command.tai,
+            ),
+            commands.ElevationTrackTarget(
+                sequence_id=command.sequence_id,
+                position=command.elevation,
+                velocity=command.elevation_velocity,
+                tai=command.tai,
+            ),
         )
-        elevation_command = commands.ElevationTrack(
-            sequence_id=command.sequence_id,
-            position=command.elevation,
-            velocity=command.elevation_velocity,
-            tai=command.tai,
+
+    def do_main_cabinet_thermal_reset_alarm(self, command):
+        """Handle the MAIN_CABINET_THERMAL_RESET_ALARM command.
+
+        This is presently a no-op as we don't have a mock
+        main cabinet temperature control device.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
+        pass
+
+    def do_mirror_cover_system_deploy(self, command):
+        sequence_id = command.sequence_id
+        timeout = (
+            sum(
+                self.device_dict[system_id].move_time
+                for system_id in (System.MIRROR_COVERS, System.MIRROR_COVER_LOCKS)
+            )
+            + 2
+        )  # the 2 is a margin to cover overhead
+        task = asyncio.create_task(
+            self.async_run_commands_in_series(
+                commands.MirrorCoverLocksMoveAll(sequence_id=sequence_id, deploy=True),
+                commands.MirrorCoversDeploy(sequence_id=sequence_id),
+            )
         )
-        self.device_dict[System.AZIMUTH].do_track(azimuth_command)
-        self.device_dict[System.ELEVATION].do_track(elevation_command)
+        return timeout, task
+
+    def do_mirror_cover_system_retract(self, command):
+        sequence_id = command.sequence_id
+        timeout = 2 + (  # the 2 is a margin to cover overhead
+            sum(
+                self.device_dict[system_id].move_time
+                for system_id in (System.MIRROR_COVERS, System.MIRROR_COVER_LOCKS)
+            )
+        )
+        task = asyncio.create_task(
+            self.async_run_commands_in_series(
+                commands.MirrorCoversRetract(sequence_id=sequence_id),
+                commands.MirrorCoverLocksMoveAll(sequence_id=sequence_id, deploy=False),
+            )
+        )
+        return timeout, task
 
     def do_safety_reset(self, command):
         """Handle the SAFETY_RESET command.
@@ -1105,7 +1292,11 @@ class Controller:
                     self.log.error(f"Ignoring unparsable command {read_bytes}: {e!r}")
                     continue
                 if self.command_queue and not self.command_queue.full():
-                    self.command_queue.put_nowait(command)
+                    if (
+                        self.queue_heartbeat_commands
+                        or command.command_code != enums.CommandCode.HEARTBEAT
+                    ):
+                        self.command_queue.put_nowait(command)
                 asyncio.create_task(self.handle_command(command))
         except asyncio.CancelledError:
             pass
@@ -1245,6 +1436,7 @@ class Controller:
           and safety interlocks.
         * Devices the CSC is not allowed to control,
           including the deployable platform and elevation locking pin.
+        * The main cabinet thermal controller.
         """
         await self.write_commander()
 
@@ -1291,8 +1483,7 @@ class Controller:
             (System.ELEVATION_DRIVES_THERMAL, PowerState.ON),
             (System.AZ0101_CABINET_THERMAL, PowerState.ON),
             (System.MODBUS_TEMPERATURE_CONTROLLERS, PowerState.ON),
-            (System.MAIN_CABINET, PowerState.ON),
-            (System.MAIN_AXES_POWER_SUPPLY, PowerState.ON),
+            (System.MAIN_CABINET_THERMAL, PowerState.ON),
         ):
             nelts = self.power_state_nelts[system_id]
             if not self.command_server.connected:
@@ -1314,7 +1505,7 @@ class Controller:
             make_reply_dict(
                 id=enums.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE,
                 state=DeployableMotionState.RETRACTED,
-                elementState=[DeployableMotionState.RETRACTED] * 2,
+                elementsState=[DeployableMotionState.RETRACTED] * 2,
             )
         )
 
@@ -1322,7 +1513,7 @@ class Controller:
             make_reply_dict(
                 id=enums.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE,
                 state=ElevationLockingPinMotionState.UNLOCKED,
-                elementState=[ElevationLockingPinMotionState.UNLOCKED] * 2,
+                elementsState=[ElevationLockingPinMotionState.UNLOCKED] * 2,
             )
         )
         await self.write_reply(
@@ -1341,16 +1532,12 @@ class Controller:
             )
         )
 
-        for system in (
-            System.ELEVATION,
-            System.AZIMUTH,
-            System.CAMERA_CABLE_WRAP,
-        ):
+        for system, nelts in self.limits_nelts.items():
             await self.write_reply(
                 make_reply_dict(
                     id=enums.ReplyId.LIMITS,
                     system=system,
-                    limits=0,
+                    limits=[0] * nelts,
                 )
             )
 
@@ -1360,7 +1547,7 @@ class Controller:
                 make_reply_dict(
                     id=enums.ReplyId.CHILLER_STATE,
                     system=system,
-                    trackAmbient=as_scalar_or_list(True, nelts),
-                    temperature=as_scalar_or_list(self.ambient_temperature, nelts),
+                    trackAmbient=[True] * nelts,
+                    temperature=[self.ambient_temperature] * nelts,
                 )
             )

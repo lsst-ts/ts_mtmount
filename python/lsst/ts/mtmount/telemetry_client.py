@@ -230,10 +230,12 @@ class TelemetryClient:
 
     async def read_loop(self):
         """Read and process status from the low-level controller."""
+        self.log.info("telemetry client read loop begins")
         while True:
             try:
                 data = await self.reader.readuntil(constants.LINE_TERMINATOR)
             except asyncio.CancelledError:
+                self.log.info("telemetry client read loop cancelled")
                 return
             except (ConnectionResetError, asyncio.IncompleteReadError):
                 asyncio.ensure_future(self.close())
@@ -251,7 +253,9 @@ class TelemetryClient:
                 if topic_handler is None:
                     if topic_id not in self.unsupported_topic_ids:
                         self.unsupported_topic_ids.add(topic_id)
-                        self.log.debug(f"Ignoring unsupported topic ID {topic_id}")
+                        self.log.info(
+                            f"Ignoring unsupported topic ID {topic_id}; data={data}"
+                        )
                     continue
                 await topic_handler(llv_data)
             except Exception:
@@ -288,7 +292,7 @@ class TelemetryClient:
         )
 
     def _preprocess_cameraCableWrap(self, llv_data):
-        """Preprocess status for the tel_elevationDrives topic."""
+        """Preprocess status for the tel_cameraCableWrap topic."""
         self._convert_drive_measurements(
             llv_data=llv_data, keys=["torquePercentage"], ndrives=2
         )
