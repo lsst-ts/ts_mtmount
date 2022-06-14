@@ -270,7 +270,7 @@ class Controller:
             enums.CommandCode.BOTH_AXES_POWER: self.do_both_axes_power,
             enums.CommandCode.BOTH_AXES_RESET_ALARM: self.do_both_axes_reset_alarm,
             enums.CommandCode.BOTH_AXES_STOP: self.do_both_axes_stop,
-            enums.CommandCode.BOTH_AXES_TRACK_TARGET: self.do_both_axes_track,
+            enums.CommandCode.BOTH_AXES_TRACK_TARGET: self.do_both_axes_track_target,
             enums.CommandCode.MAIN_CABINET_THERMAL_RESET_ALARM: self.do_main_cabinet_thermal_reset_alarm,
             enums.CommandCode.MIRROR_COVER_SYSTEM_DEPLOY: self.do_mirror_cover_system_deploy,
             enums.CommandCode.MIRROR_COVER_SYSTEM_RETRACT: self.do_mirror_cover_system_retract,
@@ -1138,8 +1138,11 @@ class Controller:
             commands.ElevationStop(sequence_id=command.sequence_id),
         )
 
-    def do_both_axes_track(self, command):
+    def do_both_axes_track_target(self, command):
         """Handle the BOTH_AXES_TRACK_TARGET command.
+
+        Note that this is an ack-only command
+        (though that does not affect this code).
 
         Parameters
         ----------

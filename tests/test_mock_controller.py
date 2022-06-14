@@ -28,6 +28,7 @@ import time
 import types
 import unittest
 import unittest.mock
+import warnings
 
 import pytest
 
@@ -128,9 +129,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     async def flush_replies(self):
         """Flush all replies."""
         try:
-            for i in range(10):
+            for i in range(2):
                 await asyncio.wait_for(self.command_reader.read(), timeout=0.01)
-
             self.fail("flush read did not time out")
         except asyncio.TimeoutError:
             return
@@ -184,14 +184,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             The read replies.
         """
         nonack_reply_codes_remaining = wait_reply_codes.copy()
-        other_reply_codes = set(other_reply_codes)
+        other_reply_codes_set = set(other_reply_codes)
         replies = []
         while nonack_reply_codes_remaining:
             reply = await self.read_one_reply()
             if reply.id in nonack_reply_codes_remaining:
                 nonack_reply_codes_remaining.remove(reply.id)
                 replies.append(reply)
-            elif return_all_replies or reply.id in other_reply_codes:
+            elif return_all_replies or reply.id in other_reply_codes_set:
                 replies.append(reply)
         return replies
 
@@ -231,7 +231,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         other_reply_codes : `list` [`mtmount.Reply`], optional
             Non-CMD_x reply codes of other messages to return, if seen,
             in addition to those in ``wait_reply_codes``.
-            Duplicates are silently ignored.
+            Unlike wait_reply_codes, each code need only be listed once
+            in order to get all replies with that code.
+            Duplicates are accepted, but generate a warning.
         return_all_replies : `bool`, optional
             Return all replies?
             If True then other_reply_codes must be empty.
@@ -246,6 +248,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             the types listed in ``wait_reply_codes`` and may contain
             other replies as well.
         """
+        if return_all_replies and other_reply_codes:
+            raise ValueError("return_all_replies true, other_reply_codes must be empty")
+
         cmd_reply_codes = frozenset(
             (
                 mtmount.ReplyId.CMD_ACKNOWLEDGED,
@@ -266,10 +271,15 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 f"wait_reply_codes={wait_reply_codes} contains "
                 f"{bad_nonack_codes}, which are cmd replies"
             )
-        if return_all_replies and other_reply_codes:
-            raise ValueError("return_all_replies true, other_reply_codes must be empty")
-        other_reply_codes = set(other_reply_codes)
-        bad_nonack_codes = other_reply_codes & cmd_reply_codes
+
+        other_reply_codes_set = set(other_reply_codes)
+        if len(other_reply_codes_set) < len(other_reply_codes):
+            warnings.warn(
+                "There is no need to specify duplicate codes "
+                f"in other_reply_codes={other_reply_codes}"
+            )
+
+        bad_nonack_codes = other_reply_codes_set & cmd_reply_codes
         if bad_nonack_codes:
             raise ValueError(
                 f"other_reply_codes={other_reply_codes} contains "
@@ -293,7 +303,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             elif reply.id in nonack_reply_codes_remaining:
                 nonack_reply_codes_remaining.remove(reply.id)
                 non_cmd_replies.append(reply)
-            elif return_all_replies or reply.id in other_reply_codes:
+            elif return_all_replies or reply.id in other_reply_codes_set:
                 non_cmd_replies.append(reply)
         if final_reply_code == mtmount.ReplyId.CMD_REJECTED:
             # Should fail before ack
@@ -314,7 +324,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 elif reply.id in nonack_reply_codes_remaining:
                     nonack_reply_codes_remaining.remove(reply.id)
                     non_cmd_replies.append(reply)
-                elif return_all_replies or reply.id in other_reply_codes:
+                elif return_all_replies or reply.id in other_reply_codes_set:
                     non_cmd_replies.append(reply)
             explanation = getattr(reply, "explanation", "")
             assert reply.id == final_reply_code, explanation
@@ -328,7 +338,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 ),
                 timeout=timeout,
             )
-        if return_all_replies or other_reply_codes:
+        if return_all_replies or other_reply_codes_set:
             assert len(non_cmd_replies) >= len(wait_reply_codes)
         else:
             assert len(non_cmd_replies) == len(wait_reply_codes)
@@ -406,6 +416,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_both_axes_commands(self):
+        """Test both_axes_x commands, but test motion elsewhere."""
         async with self.make_controller():
             azimuth_device = self.controller.device_dict[System.AZIMUTH]
             elevation_device = self.controller.device_dict[System.ELEVATION]
@@ -416,10 +427,46 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert not device.enabled
                 assert not device.homed
                 assert not device.tracking_enabled
-                device.alarm_on = True
 
-            # Main power must be on in order for reset alarms to work
-            # and otherwise it is a silent error
+            # Most commands are rejected if the main axes power supply
+            # is powered off. Note:
+            # * BothAxesEnableTracking is also rejected
+            #   because the axes have not been homed
+            # * BothAxesTrackTarget is also rejected
+            #   because tracking has not been enabled
+            # * All motion-related commands are also rejected
+            #   because the axes are not powered on.
+            for command in (
+                mtmount.commands.BothAxesEnableTracking(),
+                mtmount.commands.BothAxesHome(),
+                mtmount.commands.BothAxesMove(azimuth=45, elevation=45),
+                mtmount.commands.BothAxesPower(on=True),
+                mtmount.commands.BothAxesStop(),
+                mtmount.commands.BothAxesTrackTarget(
+                    azimuth=45,
+                    elevation=45,
+                    azimuth_velocity=0,
+                    elevation_velocity=0,
+                    tai=utils.current_tai(),
+                ),
+            ):
+                await self.run_command(
+                    command=command,
+                    use_read_loop=True,
+                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                )
+
+            # BothAxesResetAlarm has no effect if the main axes power supply
+            # is powered off (unfortunately; I wish it was rejected)
+            for device in devices:
+                device.alarm_on = True
+            await self.run_command(
+                command=mtmount.commands.BothAxesResetAlarm(), use_read_loop=True
+            )
+            for device in devices:
+                assert device.alarm_on
+
+            # Turn on main power
             await self.run_command(
                 command=mtmount.commands.MainAxesPowerSupplyPower(on=True),
                 use_read_loop=True,
@@ -434,6 +481,47 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert not device.homed
                 assert not device.tracking_enabled
 
+            # Motion-related commands are rejected if either or both
+            # axes are powered off. Note:
+            # * BothAxesEnableTracking is also rejected
+            #   because the axes have not been homed
+            # * BothAxesTrackTarget is also rejected
+            #   because tracking has not been enabled
+            for azimuth_on, elevation_on in itertools.product(
+                (False, True), (False, True)
+            ):
+                if azimuth_on and elevation_on:
+                    continue
+                await self.run_command(
+                    command=mtmount.commands.AzimuthPower(on=azimuth_on),
+                    use_read_loop=True,
+                )
+                await self.run_command(
+                    command=mtmount.commands.ElevationPower(on=elevation_on),
+                    use_read_loop=True,
+                )
+                assert azimuth_device.power_on == azimuth_on
+                assert elevation_device.power_on == elevation_on
+
+                for command in (
+                    mtmount.commands.BothAxesEnableTracking(),
+                    mtmount.commands.BothAxesHome(),
+                    mtmount.commands.BothAxesMove(azimuth=45, elevation=45),
+                    mtmount.commands.BothAxesTrackTarget(
+                        azimuth=45,
+                        elevation=45,
+                        azimuth_velocity=0,
+                        elevation_velocity=0,
+                        tai=utils.current_tai(),
+                    ),
+                    mtmount.commands.BothAxesStop(),
+                ):
+                    await self.run_command(
+                        command=command,
+                        use_read_loop=True,
+                        final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                    )
+
             await self.run_command(
                 command=mtmount.commands.BothAxesPower(on=True), use_read_loop=True
             )
@@ -443,6 +531,27 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert device.enabled
                 assert not device.homed
                 assert not device.tracking_enabled
+
+            # Tracking command are rejected unless the axes are homed
+            # (eventually BothAxesMove move may also be rejected,
+            # but for now it is not). Note:
+            # * BothAxesTrackTarget is also rejected
+            #   because tracking has not been enabled
+            for command in (
+                mtmount.commands.BothAxesEnableTracking(),
+                mtmount.commands.BothAxesTrackTarget(
+                    azimuth=45,
+                    elevation=45,
+                    azimuth_velocity=0,
+                    elevation_velocity=0,
+                    tai=utils.current_tai(),
+                ),
+            ):
+                await self.run_command(
+                    command=command,
+                    use_read_loop=True,
+                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                )
 
             await self.run_command(
                 command=mtmount.commands.BothAxesHome(), use_read_loop=True
@@ -463,6 +572,354 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert device.enabled
                 assert device.homed
                 assert device.tracking_enabled
+
+    async def test_both_axes_move(self):
+        """Test the BothAxesMove command and InPosition replies."""
+        async with self.make_controller():
+
+            n_in_position = len(self.controller.in_position_dict)
+            n_motion_controller_state = len(
+                self.controller.motion_controller_state_dict
+            )
+            n_axis_motion_state = len(self.controller.axis_motion_state_dict)
+            n_power_state = len(self.controller.power_state_dict)
+            replies = await asyncio.wait_for(
+                self.read_replies(
+                    wait_reply_codes=[mtmount.ReplyId.IN_POSITION] * n_in_position
+                    + [mtmount.ReplyId.MOTION_CONTROLLER_STATE]
+                    * n_motion_controller_state
+                    + [mtmount.ReplyId.POWER_STATE] * n_power_state
+                    + [mtmount.ReplyId.AXIS_MOTION_STATE] * n_axis_motion_state,
+                ),
+                timeout=START_TIMEOUT,
+            )
+            for reply in replies:
+                if reply.id == mtmount.ReplyId.IN_POSITION:
+                    assert reply.axis in self.controller.axis_motion_state_dict
+                    assert not reply.inPosition
+                elif reply.id == mtmount.ReplyId.MOTION_CONTROLLER_STATE:
+                    assert (
+                        reply.system in self.controller.motion_controller_state_dict
+                        or reply.system == System.AZIMUTH_CABLE_WRAP
+                    )
+                    nelts = self.controller.motion_controller_state_nelts[reply.system]
+                    assert reply.motionControllerState == [PowerState.OFF] * nelts
+                elif reply.id == mtmount.ReplyId.POWER_STATE:
+                    assert (
+                        reply.system in self.controller.power_state_dict
+                        or reply.system == System.AZIMUTH_CABLE_WRAP
+                    )
+                    assert reply.powerState == PowerState.OFF
+                elif reply.id == mtmount.ReplyId.AXIS_MOTION_STATE:
+                    assert reply.axis in self.controller.axis_motion_state_dict
+                    assert reply.state == AxisMotionState.STOPPED
+
+            both_axis_device_ids = (System.AZIMUTH, System.ELEVATION)
+            devices = [
+                self.controller.device_dict[device_id]
+                for device_id in both_axis_device_ids
+            ]
+            start_positions = [
+                device.actuator.path.at(utils.current_tai()).position
+                for device in devices
+            ]
+            end_positions = [pos + 1 for pos in start_positions]
+            move_command = mtmount.commands.BothAxesMove(
+                azimuth=end_positions[0], elevation=end_positions[1]
+            )
+            await self.run_command(
+                command=mtmount.commands.MainAxesPowerSupplyPower(on=True),
+                use_read_loop=True,
+                wait_reply_codes=[mtmount.ReplyId.POWER_STATE],
+            )
+            non_cmd_replies = await self.run_command(
+                command=mtmount.commands.BothAxesPower(on=True),
+                use_read_loop=True,
+                wait_reply_codes=[
+                    mtmount.ReplyId.MOTION_CONTROLLER_STATE,
+                    mtmount.ReplyId.MOTION_CONTROLLER_STATE,
+                    mtmount.ReplyId.POWER_STATE,
+                    mtmount.ReplyId.POWER_STATE,
+                ],
+            )
+            assert len(non_cmd_replies) == 4
+            assert len(set(reply.id for reply in non_cmd_replies)) == 2
+            for reply in non_cmd_replies:
+                if reply.id == mtmount.ReplyId.MOTION_CONTROLLER_STATE:
+                    nelts = self.controller.motion_controller_state_nelts[reply.system]
+                    assert reply.motionControllerState == [PowerState.ON] * nelts
+                elif reply.id == mtmount.ReplyId.POWER_STATE:
+                    assert reply.powerState == PowerState.ON
+                    assert not hasattr(reply, "elementsPowerState")
+                else:
+                    raise AssertionError(f"unrecognized reply ID {reply['id']}")
+            for device in devices:
+                assert device.power_on
+                assert device.enabled
+                assert not device.tracking_enabled
+
+            estimated_move_time = 2  # seconds
+            t0 = time.monotonic()
+            non_cmd_replies = await self.run_command(
+                command=move_command,
+                use_read_loop=True,
+                timeout=estimated_move_time + STD_TIMEOUT,
+                wait_reply_codes=[
+                    mtmount.ReplyId.IN_POSITION,
+                    mtmount.ReplyId.IN_POSITION,
+                ],
+            )
+            dt = time.monotonic() - t0
+            print(f"Move duration={dt:0.2f} second")
+            assert len(non_cmd_replies) == 2
+            for device in devices:
+                assert device.power_on
+                assert device.enabled
+                assert not device.tracking_enabled
+            for reply in non_cmd_replies:
+                assert reply.inPosition
+            assert {reply.axis for reply in non_cmd_replies} == set(
+                both_axis_device_ids
+            )
+
+            # Test telemetry after move
+            axis_telems = [
+                await self.next_telemetry(topic_id)
+                for topic_id in (
+                    mtmount.TelemetryTopicId.AZIMUTH,
+                    mtmount.TelemetryTopicId.ELEVATION,
+                )
+            ]
+            for i in (0, 1):
+                for name in (
+                    "angleActual",
+                    "angleSet",
+                    "velocityActual",
+                    "velocitySet",
+                    "torqueActual",
+                ):
+                    if name.startswith("angle"):
+                        desired_value = end_positions[i]
+                    else:
+                        desired_value = 0
+                    assert axis_telems[i][name] == pytest.approx(desired_value)
+
+            # Test that out-of-range positions are rejected.
+            for i, device in enumerate(devices):
+                for bad_axis_position in (
+                    device.cmd_limits.min_position - 0.001,
+                    device.cmd_limits.max_position + 0.001,
+                ):
+                    bad_positions = end_positions[:]
+                    bad_positions[i] = bad_axis_position
+                    await self.run_command(
+                        command=mtmount.commands.BothAxesMove(
+                            azimuth=bad_positions[0], elevation=bad_positions[1]
+                        ),
+                        use_read_loop=True,
+                        final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                    )
+                assert device.power_on
+                assert device.enabled
+                assert not device.tracking_enabled
+
+    async def test_both_axes_track_target(self):
+        """Test the BothAxesTrackTarget command and InPosition replies."""
+        async with self.make_controller():
+            # Wait for IN_POSITION replies for azimuth, elevation,
+            # and camera cable wrap.
+            seen_axes = set()
+            replies = await asyncio.wait_for(
+                self.read_replies(
+                    wait_reply_codes=[mtmount.ReplyId.IN_POSITION] * 3,
+                ),
+                timeout=START_TIMEOUT,
+            )
+            for reply in replies:
+                assert not reply.inPosition
+                seen_axes.add(reply.axis)
+            assert seen_axes == {
+                System.AZIMUTH,
+                System.ELEVATION,
+                System.CAMERA_CABLE_WRAP,
+            }
+
+            both_axis_device_ids = (System.AZIMUTH, System.ELEVATION)
+            devices = [
+                self.controller.device_dict[device_id]
+                for device_id in both_axis_device_ids
+            ]
+
+            await self.run_command(
+                command=mtmount.commands.MainAxesPowerSupplyPower(on=True),
+                use_read_loop=True,
+            )
+            for device in devices:
+                assert not device.power_on
+                assert not device.enabled
+                assert not device.homed
+                assert not device.tracking_enabled
+
+            await self.run_command(
+                command=mtmount.commands.BothAxesPower(on=True), use_read_loop=True
+            )
+            for device in devices:
+                assert device.power_on
+                assert device.enabled
+                assert not device.homed
+                assert not device.tracking_enabled
+
+            non_cmd_replies = await self.run_command(
+                command=mtmount.commands.BothAxesHome(),
+                use_read_loop=True,
+                wait_reply_codes=[
+                    mtmount.ReplyId.IN_POSITION,
+                    mtmount.ReplyId.IN_POSITION,
+                ],
+            )
+            for device in devices:
+                assert device.power_on
+                assert device.enabled
+                assert device.homed
+                assert not device.tracking_enabled
+            assert len(non_cmd_replies) == 2
+            for reply in non_cmd_replies:
+                assert reply.id == mtmount.ReplyId.IN_POSITION
+                assert reply.inPosition
+            assert {reply.axis for reply in non_cmd_replies} == {0, 1}
+
+            await self.run_command(
+                command=mtmount.commands.BothAxesEnableTracking(),
+                use_read_loop=True,
+            )
+            for device in devices:
+                assert device.power_on
+                assert device.enabled
+                assert device.tracking_enabled
+
+            start_positions = [
+                device.actuator.path.at(utils.current_tai()).position
+                for device in devices
+            ]
+            end_positions = [start_position + 3 for start_position in start_positions]
+            previous_tai = 0
+            # Send tracking updates until an IN_POSITION reply is seen.
+            not_in_position_axes = set()
+            in_position_axes = set()
+            # How many tracking commands to send
+            # once the slew is done
+            num_tracking_remaining = 10
+            t0 = utils.current_tai()
+            # The maximum time for slewing and tracking (seconds);
+            # be generous, because this is used as a timeout
+            max_slewing_and_tracking_duration = 10
+            timeout_tai = t0 + max_slewing_and_tracking_duration
+            while num_tracking_remaining > 0:
+                tai = utils.current_tai()
+                assert tai < timeout_tai, "Timed out while slewing and tracking"
+                # Work around non-monotonic clocks, which are
+                # sometimes seen when running Docker on macOS.
+                if tai <= previous_tai:
+                    tai = previous_tai + 0.001
+                track_command = mtmount.commands.BothAxesTrackTarget(
+                    azimuth=end_positions[0],
+                    elevation=end_positions[1],
+                    azimuth_velocity=0,
+                    elevation_velocity=0,
+                    tai=tai,
+                )
+                non_cmd_replies = await self.run_command(
+                    command=track_command,
+                    final_reply_code=mtmount.ReplyId.CMD_ACKNOWLEDGED,
+                    flush=False,
+                    use_read_loop=True,
+                    other_reply_codes=[mtmount.ReplyId.IN_POSITION],
+                )
+                for reply in non_cmd_replies:
+                    if reply.axis in not_in_position_axes:
+                        assert reply.id == mtmount.ReplyId.IN_POSITION
+                        in_position_axes.add(reply.axis)
+                    else:
+                        not_in_position_axes.add(reply.axis)
+                if len(in_position_axes) == 2:
+                    num_tracking_remaining -= 1
+                previous_tai = tai
+                await asyncio.sleep(0.1)
+            dt = utils.current_tai() - t0
+            print(f"Slewing and tracking took {dt:0.2f} seconds")
+
+            # Test that out-of-range tracking updates are rejected,
+            # leaving the device enabled and in tracking mode.
+            print("***** starting out-of-bounds tracking test; going verbose")
+            for device in devices:
+                device.verbose = True
+            for i, device in enumerate(devices):
+                for bad_axis_position in (
+                    device.cmd_limits.min_position - 0.001,
+                    device.cmd_limits.max_position + 0.001,
+                ):
+                    bad_positions = end_positions[:]
+                    bad_positions[i] = bad_axis_position
+                    tai = utils.current_tai()
+                    if tai < previous_tai:
+                        tai = previous_tai + 0.001
+                    bad_track_command = mtmount.commands.BothAxesTrackTarget(
+                        azimuth=bad_positions[0],
+                        elevation=bad_positions[1],
+                        azimuth_velocity=0,
+                        elevation_velocity=0,
+                        tai=tai,
+                    )
+                    await self.run_command(
+                        bad_track_command,
+                        use_read_loop=True,
+                        final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                    )
+                    previous_tai = tai
+
+            for i, device in enumerate(devices):
+                for bad_velocity in (
+                    -device.cmd_limits.max_velocity - 0.001,
+                    device.cmd_limits.max_velocity + 0.001,
+                ):
+                    bad_velocities = [0, 0]
+                    bad_velocities[i] = bad_velocity
+                    tai = utils.current_tai()
+                    if tai < previous_tai:
+                        tai = previous_tai + 0.001
+                    bad_track_command = mtmount.commands.BothAxesTrackTarget(
+                        azimuth=end_positions[0],
+                        elevation=end_positions[1],
+                        azimuth_velocity=bad_velocities[0],
+                        elevation_velocity=bad_velocities[1],
+                        velocity=bad_velocity,
+                        tai=tai,
+                    )
+                    await self.run_command(
+                        bad_track_command,
+                        use_read_loop=True,
+                        final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                    )
+                    previous_tai = tai
+
+            for device in devices:
+                assert device.power_on
+                assert device.enabled
+                assert device.tracking_enabled
+
+            non_cmd_replies = await self.run_command(
+                command=mtmount.commands.BothAxesStop(),
+                use_read_loop=True,
+                wait_reply_codes=[mtmount.ReplyId.IN_POSITION],
+            )
+            assert device.power_on
+            assert device.enabled
+            assert not device.tracking_enabled
+            assert len(non_cmd_replies) == 1
+            reply = non_cmd_replies[0]
+            assert reply.id == mtmount.ReplyId.IN_POSITION
+            assert not reply.inPosition
+            assert reply.axis == 0
 
     async def test_command_failed(self):
         async with self.make_controller():
@@ -952,174 +1409,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert ccw_telem[name] == 0
             assert ccw_telem["timestamp"] > tai0
 
-    async def test_tracking(self):
-        """Test the <axis>AxisTrack command and InPosition replies."""
-        async with self.make_controller():
-            # Wait for IN_POSITION replies for azimuth, elevation,
-            # and camera cable wrap.
-            seen_axes = set()
-            replies = await asyncio.wait_for(
-                self.read_replies(
-                    wait_reply_codes=[mtmount.ReplyId.IN_POSITION] * 3,
-                ),
-                timeout=START_TIMEOUT,
-            )
-            for reply in replies:
-                assert not reply.inPosition
-                seen_axes.add(reply.axis)
-            assert seen_axes == {
-                System.AZIMUTH,
-                System.ELEVATION,
-                System.CAMERA_CABLE_WRAP,
-            }
-
-            device = self.controller.device_dict[System.AZIMUTH]
-
-            # Powering on the device should fail before the main axes
-            # power supply is turned on
-            await self.run_command(
-                command=mtmount.commands.AzimuthPower(on=True),
-                use_read_loop=True,
-                final_reply_code=mtmount.ReplyId.CMD_REJECTED,
-            )
-
-            await self.run_command(
-                command=mtmount.commands.MainAxesPowerSupplyPower(on=True),
-                use_read_loop=True,
-            )
-            assert not device.power_on
-            assert not device.enabled
-            assert not device.homed
-            assert not device.tracking_enabled
-
-            await self.run_command(
-                command=mtmount.commands.AzimuthPower(on=True), use_read_loop=True
-            )
-            assert device.power_on
-            assert device.enabled
-            assert not device.homed
-            assert not device.tracking_enabled
-
-            # Enabling tracking should fail before the axis is homed
-            await self.run_command(
-                command=mtmount.commands.AzimuthEnableTracking(on=True),
-                use_read_loop=True,
-                final_reply_code=mtmount.ReplyId.CMD_REJECTED,
-            )
-
-            non_cmd_replies = await self.run_command(
-                command=mtmount.commands.AzimuthHome(),
-                use_read_loop=True,
-                wait_reply_codes=[mtmount.ReplyId.IN_POSITION],
-            )
-            assert device.power_on
-            assert device.enabled
-            assert device.homed
-            assert not device.tracking_enabled
-            assert len(non_cmd_replies) == 1
-            reply = non_cmd_replies[0]
-            assert reply.id == mtmount.ReplyId.IN_POSITION
-            assert reply.axis == 0
-            assert reply.inPosition
-
-            await self.run_command(
-                command=mtmount.commands.AzimuthEnableTracking(on=True),
-                use_read_loop=True,
-            )
-            assert device.power_on
-            assert device.enabled
-            assert device.tracking_enabled
-
-            start_position = device.actuator.path.at(utils.current_tai()).position
-            end_position = start_position + 3
-            previous_tai = 0
-            # Send tracking updates until an IN_POSITION reply is seen.
-            not_in_position_seen = False
-            while True:
-                tai = utils.current_tai()
-                # Work around non-monotonic clocks, which are
-                # sometimes seen when running Docker on macOS.
-                if tai <= previous_tai:
-                    tai = previous_tai + 0.001
-                track_command = mtmount.commands.AzimuthTrackTarget(
-                    position=end_position,
-                    velocity=0,
-                    tai=tai,
-                )
-                non_cmd_replies = await self.run_command(
-                    command=track_command,
-                    final_reply_code=mtmount.ReplyId.CMD_ACKNOWLEDGED,
-                    flush=False,
-                    use_read_loop=True,
-                    other_reply_codes=[mtmount.ReplyId.IN_POSITION],
-                )
-                if non_cmd_replies:
-                    assert len(non_cmd_replies) == 1
-                    reply = non_cmd_replies[0]
-                    assert reply.id == mtmount.ReplyId.IN_POSITION
-                    assert reply.axis == 0
-                    if not_in_position_seen:
-                        assert reply.inPosition
-                        break
-                    else:
-                        assert not reply.inPosition
-                        not_in_position_seen = True
-                previous_tai = tai
-                await asyncio.sleep(0.1)
-
-            # Test that out-of-range tracking updates are rejected,
-            # leaving the device enabled and in tracking mode.
-            for bad_position in (
-                device.cmd_limits.min_position - 0.001,
-                device.cmd_limits.max_position + 0.001,
-            ):
-                tai = previous_tai + 0.001
-                previous_tai = tai
-                bad_track_command = mtmount.commands.AzimuthTrackTarget(
-                    position=bad_position,
-                    velocity=0,
-                    tai=previous_tai + 0.001,
-                )
-                await self.run_command(
-                    bad_track_command,
-                    use_read_loop=True,
-                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
-                )
-
-            for bad_velocity in (
-                -device.cmd_limits.max_velocity - 0.001,
-                device.cmd_limits.max_velocity + 0.001,
-            ):
-                tai = previous_tai + 0.001
-                previous_tai = tai
-                bad_track_command = mtmount.commands.AzimuthTrackTarget(
-                    position=end_position,
-                    velocity=bad_velocity,
-                    tai=previous_tai + 0.001,
-                )
-                await self.run_command(
-                    bad_track_command,
-                    use_read_loop=True,
-                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
-                )
-            assert device.power_on
-            assert device.enabled
-            assert device.tracking_enabled
-
-            non_cmd_replies = await self.run_command(
-                command=mtmount.commands.AzimuthStop(),
-                use_read_loop=True,
-                wait_reply_codes=[mtmount.ReplyId.IN_POSITION],
-            )
-            assert device.power_on
-            assert device.enabled
-            assert not device.tracking_enabled
-            assert len(non_cmd_replies) == 1
-            reply = non_cmd_replies[0]
-            assert reply.id == mtmount.ReplyId.IN_POSITION
-            assert not reply.inPosition
-            assert reply.axis == 0
-
     async def test_mirror_cover_system_commands(self):
         async with self.make_controller():
             covers_device = self.controller.device_dict[System.MIRROR_COVERS]
@@ -1157,125 +1446,3 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         use_read_loop=True,
                         final_reply_code=mtmount.ReplyId.CMD_FAILED,
                     )
-
-    async def test_move(self):
-        """Test the <axis>AxisMove command and InPosition replies."""
-        async with self.make_controller():
-
-            n_in_position = len(self.controller.in_position_dict)
-            n_motion_controller_state = len(
-                self.controller.motion_controller_state_dict
-            )
-            n_axis_motion_state = len(self.controller.axis_motion_state_dict)
-            n_power_state = len(self.controller.power_state_dict)
-            replies = await asyncio.wait_for(
-                self.read_replies(
-                    wait_reply_codes=[mtmount.ReplyId.IN_POSITION] * n_in_position
-                    + [mtmount.ReplyId.MOTION_CONTROLLER_STATE]
-                    * n_motion_controller_state
-                    + [mtmount.ReplyId.POWER_STATE] * n_power_state
-                    + [mtmount.ReplyId.AXIS_MOTION_STATE] * n_axis_motion_state,
-                ),
-                timeout=START_TIMEOUT,
-            )
-            for reply in replies:
-                if reply.id == mtmount.ReplyId.IN_POSITION:
-                    assert reply.axis in self.controller.axis_motion_state_dict
-                    assert not reply.inPosition
-                elif reply.id == mtmount.ReplyId.MOTION_CONTROLLER_STATE:
-                    assert (
-                        reply.system in self.controller.motion_controller_state_dict
-                        or reply.system == System.AZIMUTH_CABLE_WRAP
-                    )
-                    nelts = self.controller.motion_controller_state_nelts[reply.system]
-                    assert reply.motionControllerState == [PowerState.OFF] * nelts
-                elif reply.id == mtmount.ReplyId.POWER_STATE:
-                    assert (
-                        reply.system in self.controller.power_state_dict
-                        or reply.system == System.AZIMUTH_CABLE_WRAP
-                    )
-                    assert reply.powerState == PowerState.OFF
-                elif reply.id == mtmount.ReplyId.AXIS_MOTION_STATE:
-                    assert reply.axis in self.controller.axis_motion_state_dict
-                    assert reply.state == AxisMotionState.STOPPED
-
-            await self.run_command(
-                command=mtmount.commands.MainAxesPowerSupplyPower(on=True),
-                use_read_loop=True,
-                wait_reply_codes=[mtmount.ReplyId.POWER_STATE],
-            )
-
-            device = self.controller.device_dict[System.ELEVATION]
-            non_cmd_replies = await self.run_command(
-                command=mtmount.commands.ElevationPower(on=True),
-                use_read_loop=True,
-                wait_reply_codes=[
-                    mtmount.ReplyId.MOTION_CONTROLLER_STATE,
-                    mtmount.ReplyId.POWER_STATE,
-                ],
-            )
-            assert len(non_cmd_replies) == 2
-            assert len(set(reply.id for reply in non_cmd_replies)) == 2
-            for reply in non_cmd_replies:
-                if reply.id == mtmount.ReplyId.MOTION_CONTROLLER_STATE:
-                    nelts = self.controller.motion_controller_state_nelts[
-                        System.ELEVATION
-                    ]
-                    assert reply.motionControllerState == [PowerState.ON] * nelts
-                elif reply.id == mtmount.ReplyId.POWER_STATE:
-                    assert reply.powerState == PowerState.ON
-                    assert not hasattr(reply, "elementsPowerState")
-                else:
-                    raise AssertionError(f"unrecognized reply ID {reply['id']}")
-            assert device.power_on
-            assert device.enabled
-            assert not device.tracking_enabled
-
-            start_position = device.actuator.path.at(utils.current_tai()).position
-            end_position = start_position + 1
-            estimated_move_time = 2  # seconds
-            t0 = time.monotonic()
-            non_cmd_replies = await self.run_command(
-                command=mtmount.commands.ElevationMove(position=end_position),
-                use_read_loop=True,
-                timeout=estimated_move_time + STD_TIMEOUT,
-                wait_reply_codes=[mtmount.ReplyId.IN_POSITION],
-            )
-            dt = time.monotonic() - t0
-            print(f"Move duration={dt:0.2f} second")
-            assert device.power_on
-            assert device.enabled
-            assert not device.tracking_enabled
-            assert len(non_cmd_replies) == 1
-            reply = non_cmd_replies[0]
-            assert reply.inPosition
-            assert reply.axis == 1
-
-            # Test telemetry after move
-            axis_telem = await self.next_telemetry(mtmount.TelemetryTopicId.ELEVATION)
-            for name in (
-                "angleActual",
-                "angleSet",
-                "velocityActual",
-                "velocitySet",
-                "torqueActual",
-            ):
-                if name.startswith("angle"):
-                    desired_value = end_position
-                else:
-                    desired_value = 0
-                assert axis_telem[name] == pytest.approx(desired_value)
-
-            # Test that out-of-range positions are rejected.
-            for bad_position in (
-                device.cmd_limits.min_position - 0.001,
-                device.cmd_limits.max_position + 0.001,
-            ):
-                await self.run_command(
-                    command=mtmount.commands.ElevationMove(position=bad_position),
-                    use_read_loop=True,
-                    final_reply_code=mtmount.ReplyId.CMD_REJECTED,
-                )
-            assert device.power_on
-            assert device.enabled
-            assert not device.tracking_enabled
