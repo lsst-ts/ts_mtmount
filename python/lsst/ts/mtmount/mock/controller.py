@@ -897,8 +897,8 @@ class Controller:
             Command to process.
         """
         if command.command_code == enums.CommandCode.HEARTBEAT:
-            # Ignore the command; in the long run we may want to
-            # run a heartbeat timer.
+            # The heartbeat command gets no ack. Ignore it for now, but
+            # TODO DM-35226: go to fault if heartbeat is not seen often enough
             return
 
         if self.commander != enums.Source.CSC and command.command_code not in (
@@ -941,15 +941,30 @@ class Controller:
             asyncio.create_task(self.monitor_command(command=command, task=task))
 
     def run_commands_in_parallel(self, *commands):
-        """Run a set of commands in parallel.
+        """Run a set of commands in parallel without waiting or the result.
 
         Used to handle meta-commands that run a set of sub-commands
-        that can run at the same time.
+        that can run at the same time. This method acts like the other
+        command handlers: it returns right away, and if any of the commands
+        run in the background, it returns a task and timeout to monitor them.
 
         Parameters
         ----------
         *commands : list [ `Command` ]
             Commands to process.
+
+        Returns
+        -------
+        task_timeout
+            One of:
+
+            * None if the command is done immediately
+            * (task, timeout) if the command runs in the background, where:
+
+              * task (asyncio.Task) is done or raises an exception
+                when the command succeeds or fails.
+              * timeout (float seconds) is an upper limit guess
+                of command duration.
         """
         if not self.command_server.connected:
             raise RuntimeError("Command server not connected")
