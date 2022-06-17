@@ -43,6 +43,17 @@ class AxisDevice(BaseDevice):
 
     Suports all commands except MOVE_VELOCITY.
 
+    For azimuth and elevation:
+    * You can home the axis.
+    * You must home the axis before enabling slewing
+      (but not for point-to-point moves, oddly enough).
+    * The main axes power supply must be on in order to power on the axis.
+    * Resetting the alarm is silently ignored
+      if the main axes power supply is off.
+
+    Camera cable wrap cannot be homed and has nothing to do with
+    the main axes power supply.
+
     Parameters
     ----------
     controller : `MockController`
@@ -70,6 +81,9 @@ class AxisDevice(BaseDevice):
         self.cmd_limits = limits.CmdLimitsDict[system_id]
         device_limits = self.cmd_limits.scaled()
         self.enabled = False
+        self.is_azel = system_id in {System.ELEVATION, System.AZIMUTH}
+        self.homing = False
+        self.homed = False
         self.tracking_enabled = False
         self.tracking_paused = False
         # Has a target position been specified?
@@ -83,9 +97,8 @@ class AxisDevice(BaseDevice):
             dtmax_track=0.2,
             start_position=start_position,
         )
-        self.home_position = (
-            self.actuator.min_position + self.actuator.max_position
-        ) / 2
+        # How much to move the axis when faking homing (degrees)
+        self.home_offset = 5
 
         # The actuator cannot tell the difference between tracking and
         # moving point to point, so keep track of that with this flag.
@@ -114,6 +127,20 @@ class AxisDevice(BaseDevice):
         self.assert_on()
         if not self.enabled:
             raise RuntimeError("Not enabled")
+
+    def assert_homed(self):
+        """Raise `RuntimeError` if the device is not homed
+        and the device must be homed to be moved.
+        """
+        if self.is_azel and not self.homed:
+            raise RuntimeError("Not homed")
+
+    def assert_main_axes_power_supply_power_on(self):
+        """Raise `RuntimeError` if this is elevation or azimuth
+        and the main power supply is not powered on.
+        """
+        if self.is_azel and not self.controller.main_axes_power_supply.power_on:
+            raise RuntimeError("Main power supply not powered on")
 
     def assert_tracking_enabled(self, enabled):
         """Raise `RuntimeError` if tracking is or is not enabled."""
@@ -151,10 +178,15 @@ class AxisDevice(BaseDevice):
 
     async def _monitor_move(self, command):
         """Do most of the work for monitor_move_command."""
-        # Provide some slop for non-monotonic clocks, which are
-        # sometimes seen when running Docker on macOS.
-        duration = 0.2 + self.end_tai - utils.current_tai()
+        duration = self.end_tai - utils.current_tai()
         await asyncio.sleep(duration)
+        # Stop the axis since otherwise it will still be tracking
+        # the last segment (which has non-zero acceleration)
+        self.actuator.stop()
+        # A bit of slop for the stop
+        await asyncio.sleep(0.2)
+        if self.homing:
+            self.homed = True
         if not self._move_result_task.done():
             self._move_result_task.set_result(None)
 
@@ -171,7 +203,7 @@ class AxisDevice(BaseDevice):
 
         Abort motion and disable tracking.
         """
-        self._stop_motion(command=command, gently=False)
+        self.stop_motion(command=command, gently=False)
         self.enabled = command.on
 
     def do_drive_reset(self, command):
@@ -182,7 +214,7 @@ class AxisDevice(BaseDevice):
         Abort motion, disable tracking, disable the drive.
         """
         self.assert_on()
-        self._stop_motion(command=command, gently=False)
+        self.stop_motion(command=command, gently=False)
         self.enabled = False
 
     def do_enable_tracking(self, command):
@@ -190,7 +222,9 @@ class AxisDevice(BaseDevice):
 
         The drive must be enabled.
         """
+        self.assert_main_axes_power_supply_power_on()
         self.assert_enabled()
+        self.assert_homed()
         self.supersede_move_command(command)
         self.actuator.stop()
         self.moving_point_to_point = False
@@ -219,10 +253,26 @@ class AxisDevice(BaseDevice):
         The drive must be enabled and tracking must be disabled.
 
         For sake of doing something vaguely plausible,
-        move to the mid-point of the position limits.
+        move self.home_offset degrees, avoiding limits.
         """
+        self.assert_main_axes_power_supply_power_on()
         self.assert_enabled()
-        return self.move_point_to_point(position=self.home_position, command=command)
+        tai = utils.current_tai()
+        motion_state = self.motion_state(tai)
+        if motion_state != AxisMotionState.STOPPED:
+            raise RuntimeError(
+                f"Axis motion state is {self.motion_state!r}; "
+                f"must be {AxisMotionState.STOPPED}"
+            )
+        current_position = self.actuator.path[-1].at(tai).position
+        home_position = current_position + self.home_offset
+        if home_position >= self.actuator.max_position:
+            home_position = current_position - self.home_offset
+        if home_position < self.actuator.min_position:
+            raise RuntimeError("Bug: can't compute a suitable home position")
+        return self.move_point_to_point(
+            position=home_position, command=command, homing=True
+        )
 
     def do_move(self, command):
         """Set target position.
@@ -234,27 +284,47 @@ class AxisDevice(BaseDevice):
         correctly restored when the move finishes,
         and the CSC doesn't support these parameters anyway.
         """
+        self.assert_main_axes_power_supply_power_on()
         self.assert_enabled()
         self.has_target = True
-        return self.move_point_to_point(position=command.position, command=command)
+        self.homing = False
+        return self.move_point_to_point(
+            position=command.position, command=command, homing=False
+        )
 
     def do_move_velocity(self, command):
         raise NotImplementedError("Not implemented")
 
     def do_power(self, command):
+        """Turn power on or off.
+
+        Fail if the turning on and the main power supply is not powered on.
+        Halt motion if turning off.
+        """
+        if command.on:
+            self.assert_main_axes_power_supply_power_on()
         if command.on == self.power_on and self.enabled == self.power_on:
             # Nothing to do; don't stop existing motion
             return
-        self._stop_motion(command=command, gently=False)
         super().do_power(command)
         self.enabled = command.on
+        self.stop_motion(command=command, gently=False)
+
+    def do_reset_alarm(self, command):
+        """Reset alarm.
+
+        A silent no-op if elevation or azimuth and the main axes power supply
+        is not powered on.
+        """
+        if not self.is_azel or self.controller.main_axes_power_supply.power_on:
+            super().do_reset_alarm(command=command)
 
     def do_stop(self, command):
         """Stop the actuator."""
         self.assert_enabled()
-        self._stop_motion(command=command, gently=True)
+        self.stop_motion(command=command, gently=True)
 
-    def do_track(self, command):
+    def do_track_target(self, command):
         """Specify a tracking target position, velocity, and time.
 
         The drive must be enabled and tracking must be enabled.
@@ -264,6 +334,7 @@ class AxisDevice(BaseDevice):
         ValueError
             If command.position or command.velocity exceeds command limits.
         """
+        self.assert_main_axes_power_supply_power_on()
         self.assert_enabled()
         self.assert_tracking_enabled(True)
         if (
@@ -327,7 +398,7 @@ class AxisDevice(BaseDevice):
             motion_state = AxisMotionState.TRACKING_PAUSED
         return motion_state
 
-    def move_point_to_point(self, position, command):
+    def move_point_to_point(self, position, command, homing):
         """Move to the specified position.
 
         The drive must be enabled and tracking must be disabled.
@@ -339,6 +410,8 @@ class AxisDevice(BaseDevice):
             than ``command`` so that it can be called by `do_home`.
         command : `Command`
             Command to monitor and report done.
+        homing : `bool`
+            Is this a homing move?
 
         Returns
         -------
@@ -363,6 +436,7 @@ class AxisDevice(BaseDevice):
         tai = utils.current_tai()
         self.actuator.set_target(tai=tai, position=position, velocity=0)
         self.has_target = True
+        self.homing = homing
         timeout = self.end_tai - tai
         task = self.monitor_move_command(command)
         return timeout, task
@@ -392,9 +466,9 @@ class AxisDevice(BaseDevice):
         self.alarm_on = True
         self.power_on = False
         self.enabled = False
-        self._stop_motion(command=None, gently=False)
+        self.stop_motion(command=None, gently=False)
 
-    def _stop_motion(self, command, gently):
+    def stop_motion(self, command, gently):
         """Stop motion, if any, and clear tracking_x and has_target flags.
 
         Parameters

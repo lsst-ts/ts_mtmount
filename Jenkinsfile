@@ -1,134 +1,150 @@
-properties(
-    [
-    buildDiscarder
-        (logRotator (
+properties([
+    buildDiscarder(
+        logRotator(
             artifactDaysToKeepStr: '',
             artifactNumToKeepStr: '',
             daysToKeepStr: '14',
-            numToKeepStr: '10'
-        ) ),
-    disableConcurrentBuilds()
-    ]
-)
-
+            numToKeepStr: '10',
+        )
+    ),
+    // Make new builds terminate existing builds
+    disableConcurrentBuilds(
+        abortPrevious: true,
+    )
+])
 pipeline {
-
     agent {
-        // Use the docker to assign the Python version.
-        // Use the label to assign the node to run the test.
-        // It is recommended by SQUARE to not add the label
+        // Run as root to avoid permission issues when creating files.
+        // To run on a specific node, e.g. for a specific architecture, add `label '...'`.
         docker {
             alwaysPull true
             image 'lsstts/develop-env:develop'
             args "-u root --entrypoint=''"
         }
     }
-
     environment {
-        // XML report path
-        XML_REPORT="jenkinsReport/report.xml"
-        // Module name used in the pytest coverage analysis
-        MODULE_NAME="lsst.ts.mtmount"
-        user_ci = credentials('lsst-io')
-        LTD_USERNAME="${user_ci_USR}"
-        LTD_PASSWORD="${user_ci_PSW}"
-        work_branches = "${GIT_BRANCH} ${CHANGE_BRANCH} develop"
-    }
+        // Python module name.
+        MODULE_NAME = "lsst.ts.mtmount"
+        // Space-separated list of SAL component names for all IDL files required.
+        IDL_NAMES = "MTMount MTRotator"
+        // Product name for documentation upload; the associated
+        // documentation site is `https://{DOC_PRODUCT_NAME}.lsst.io`.
+        DOC_PRODUCT_NAME = "ts-mtmount"
 
+        WORK_BRANCHES = "${GIT_BRANCH} ${CHANGE_BRANCH} develop"
+        LSST_IO_CREDS = credentials('lsst-io')
+        XML_REPORT_PATH = 'jenkinsReport/report.xml'
+    }
     stages {
-        stage ('Install Requirements And Update Branches') {
+        stage ('Update branches of required packages') {
             steps {
-                // When using the docker container, we need to change
-                // the HOME path to WORKSPACE to have the authority
-                // to install the packages.
+                // When using the docker container, we need to change the HOME path
+                // to WORKSPACE to have the authority to install the packages.
                 withEnv(["HOME=${env.WORKSPACE}"]) {
                     sh """
-                        source /home/saluser/.setup_dev.sh || echo loading env failed. Continuing...
-                        cd /home/saluser/repos/ts_utils
-                        /home/saluser/.checkout_repo.sh ${work_branches}
-                        git pull
-                        cd /home/saluser/repos/ts_xml
-                        /home/saluser/.checkout_repo.sh ${work_branches}
-                        git pull
-                        cd /home/saluser/repos/ts_sal
-                        /home/saluser/.checkout_repo.sh ${work_branches}
-                        git pull
-                        cd /home/saluser/repos/ts_salobj
-                        /home/saluser/.checkout_repo.sh ${work_branches}
-                        git pull
+                        source /home/saluser/.setup_dev.sh || echo "Loading env failed; continuing..."
+
+                        # Update base required packages
                         cd /home/saluser/repos/ts_idl
-                        /home/saluser/.checkout_repo.sh ${work_branches}
+                        /home/saluser/.checkout_repo.sh ${WORK_BRANCHES}
                         git pull
+
+                        cd /home/saluser/repos/ts_sal
+                        /home/saluser/.checkout_repo.sh ${WORK_BRANCHES}
+                        git pull
+
+                        cd /home/saluser/repos/ts_salobj
+                        /home/saluser/.checkout_repo.sh ${WORK_BRANCHES}
+                        git pull
+
+                        cd /home/saluser/repos/ts_utils
+                        /home/saluser/.checkout_repo.sh ${WORK_BRANCHES}
+                        git pull
+
+                        cd /home/saluser/repos/ts_xml
+                        /home/saluser/.checkout_repo.sh ${WORK_BRANCHES}
+                        git pull
+
+                        # Update additional required packages
                         cd /home/saluser/repos/ts_config_mttcs
                         /home/saluser/.checkout_repo.sh ${work_branches}
                         git pull
+
                         cd /home/saluser/repos/ts_simactuators
                         /home/saluser/.checkout_repo.sh ${work_branches}
                         git pull
+
                         cd /home/saluser/repos/ts_tcpip
                         /home/saluser/.checkout_repo.sh ${work_branches}
                         git pull
-                        make_idl_files.py MTMount MTRotator
-                    """
-                }
-            }
-        }
 
-        stage('Unit Tests and Coverage Analysis') {
-            steps {
-                // Direct the HOME to WORKSPACE for pip to get the
-                // installed library.
-                // 'PATH' can only be updated in a single shell block.
-                // We can not update PATH in 'environment' block.
-                // Pytest needs to export the junit report.
-                withEnv(["HOME=${env.WORKSPACE}"]) {
-                    sh """
-                        source /home/saluser/.setup_dev.sh || echo loading env failed. Continuing...
-                        setup -k -r .
-                        pytest --cov-report html --cov=${env.MODULE_NAME} --junitxml=${env.XML_REPORT}
+                        # Make IDL files
+                        make_idl_files.py ${env.IDL_NAMES}
                     """
                 }
             }
         }
-        stage('Build and Upload Documentation') {
+        stage('Run unit tests') {
             steps {
                 withEnv(["HOME=${env.WORKSPACE}"]) {
                     sh """
-                        source /home/saluser/.setup_dev.sh || echo loading env failed. Continuing...
-                        pip install .
-                        package-docs build
-                        ltd upload --product ts-mtmount --git-ref ${GIT_BRANCH} --dir doc/_build/html
+                        source /home/saluser/.setup_dev.sh || echo "Loading env failed; continuing..."
+                        setup -r .
+                        pytest --cov-report html --cov=${env.MODULE_NAME} --junitxml=${env.XML_REPORT_PATH}
                     """
+                }
+            }
+        }
+        stage('Build documentation') {
+            steps {
+                withEnv(["HOME=${env.WORKSPACE}"]) {
+                    sh """
+                        source /home/saluser/.setup_dev.sh || echo "Loading env failed; continuing..."
+                        setup -r .
+                        package-docs build
+                    """
+                }
+            }
+        }
+        stage('Try to upload documentation') {
+            steps {
+                withEnv(["HOME=${env.WORKSPACE}"]) {
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+                        sh '''
+                            source /home/saluser/.setup_dev.sh || echo "Loading env failed; continuing..."
+                            setup -r .
+                            ltd -u ${LSST_IO_CREDS_USR} -p ${LSST_IO_CREDS_PSW} upload \
+                                --product ${DOC_PRODUCT_NAME} --git-ref ${GIT_BRANCH} --dir doc/_build/html
+                        '''
+                    }
                 }
             }
         }
     }
-
     post {
         always {
-            // Change the ownership of workspace to Jenkins for the clean up
-            // This is a "work around" method
+            // Change ownership of the workspace to Jenkins for clean up.
             withEnv(["HOME=${env.WORKSPACE}"]) {
                 sh 'chown -R 1003:1003 ${HOME}/'
             }
 
-            // The path of xml needed by JUnit is relative to
-            // the workspace.
+            // The path of xml needed by JUnit is relative to the workspace.
             junit 'jenkinsReport/*.xml'
 
-            // Publish the HTML report
-            publishHTML (target: [
-                allowMissing: false,
-                alwaysLinkToLastBuild: false,
-                keepAll: true,
-                reportDir: 'htmlcov',
-                reportFiles: 'index.html',
-                reportName: "Coverage Report"
-              ])
+            // Publish the HTML report.
+            publishHTML (
+                target: [
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: false,
+                    keepAll: true,
+                    reportDir: 'jenkinsReport',
+                    reportFiles: 'index.html',
+                    reportName: "Coverage Report"
+                ]
+            )
         }
-
         cleanup {
-            // clean up the workspace
+            // Clean up the workspace.
             deleteDir()
         }
     }

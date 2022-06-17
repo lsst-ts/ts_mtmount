@@ -23,7 +23,7 @@ from .detailed_settings import *
 from .limits import *
 from .axis_device import *
 from .deployable_device import *
-from .main_power_supply_device import *
+from .main_axes_power_supply_device import *
 from .mirror_cover_locks_device import *
 from .mirror_covers_device import *
 from .oil_supply_system_device import *
