@@ -134,7 +134,7 @@ class TmaCommander:
             az_power=commands.AzimuthPower,
             az_reset_alarm=commands.AzimuthResetAlarm,
             az_stop=commands.AzimuthStop,
-            az_track=commands.AzimuthTrack,
+            az_track=commands.AzimuthTrackTarget,
             ccw_drive_enable=commands.CameraCableWrapDriveEnable,
             ccw_drive_reset=commands.CameraCableWrapDriveReset,
             ccw_enable_tracking=commands.CameraCableWrapEnableTracking,
@@ -142,7 +142,7 @@ class TmaCommander:
             ccw_power=commands.CameraCableWrapPower,
             ccw_reset_alarm=commands.CameraCableWrapResetAlarm,
             ccw_stop=commands.CameraCableWrapStop,
-            ccw_track=commands.CameraCableWrapTrack,
+            ccw_track=commands.CameraCableWrapTrackTarget,
             el_drive_enable=commands.ElevationDriveEnable,
             el_drive_reset=commands.ElevationDriveReset,
             el_enable_tracking=commands.ElevationEnableTracking,
@@ -151,7 +151,7 @@ class TmaCommander:
             el_power=commands.ElevationPower,
             el_reset_alarm=commands.ElevationResetAlarm,
             el_stop=commands.ElevationStop,
-            el_track=commands.ElevationTrack,
+            el_track=commands.ElevationTrackTarget,
             mc_deploy=commands.MirrorCoversDeploy,
             mc_power=commands.MirrorCoversPower,
             mc_reset_alarm=commands.MirrorCoversResetAlarm,
@@ -501,7 +501,7 @@ ask_for_command 1
                 commands.CameraCableWrapEnableTracking(on=True), do_wait=True
             )
             for positions, velocities, tai in ramp_generator():
-                track_command = commands.CameraCableWrapTrack(
+                track_command = commands.CameraCableWrapTrackTarget(
                     position=positions[0],
                     velocity=velocities[0],
                     tai=tai,
@@ -548,7 +548,7 @@ ask_for_command 1
                 commands.CameraCableWrapEnableTracking(on=True), do_wait=True
             )
             for positions, velocities, tai in cosine_generator():
-                track_command = commands.CameraCableWrapTrack(
+                track_command = commands.CameraCableWrapTrackTarget(
                     position=positions[0],
                     velocity=velocities[0],
                     tai=tai,

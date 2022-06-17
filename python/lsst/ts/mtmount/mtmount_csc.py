@@ -99,7 +99,8 @@ class SystemStateInfo:
     def __init__(self, topic: salobj.topics.ControllerEvent) -> None:
         self.topic = topic
         data = topic.DataType()
-        topic.set(powerState=PowerState.UNKNOWN)
+        if hasattr(data, "powerState"):
+            topic.set(powerState=PowerState.UNKNOWN)
         eps = getattr(data, "elementsPowerState", None)
         if eps is None:
             self.num_elements_power_state = 0
@@ -121,7 +122,10 @@ class SystemStateInfo:
         if ta is not None:
             if isinstance(ta, bool):
                 self.num_thermal = 1
-                topic.set(trackAmbient=False, setTemperature=math.nan)
+                topic.set(
+                    trackAmbient=False,
+                    setTemperature=math.nan,
+                )
             else:
                 self.num_thermal = len(ta)
                 topic.set(
@@ -237,6 +241,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Both are set to exceptions if the command fails.
         self.command_dict = dict()
 
+        # Reply IDs that this code does not handle.
+        self.unknown_reply_ids = set()
+
         self.command_lock = asyncio.Lock()
 
         # Does the CSC have control of the mount?
@@ -258,8 +265,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.camera_cable_wrap_follow_start_task = utils.make_done_future()
         self.camera_cable_wrap_follow_loop_task = utils.make_done_future()
 
-        # Task for self.read_loop
         self.read_loop_task = utils.make_done_future()
+        self.send_heartbeat_loop_task = utils.make_done_future()
 
         # Is camera rotator actual position - demand position
         # greater than config.max_rotator_position_error?
@@ -309,7 +316,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 System.MODBUS_TEMPERATURE_CONTROLLERS,
                 self.evt_modbusTemperatureControllersSystemState,
             ),
-            (System.MAIN_CABINET, self.evt_mainCabinetSystemState),
+            (System.MAIN_CABINET_THERMAL, self.evt_mainCabinetThermalSystemState),
             (System.MAIN_AXES_POWER_SUPPLY, self.evt_mainAxesPowerSupplySystemState),
             (System.TOP_END_CHILLER, self.evt_topEndChillerSystemState),
         ):
@@ -453,6 +460,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
         self.read_loop_task.cancel()
+        self.send_heartbeat_loop_task.cancel()
 
         await self.disconnect()
         processes = self.terminate_background_processes()
@@ -578,6 +586,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 connect_coro, timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
+            self.send_heartbeat_loop_task = asyncio.create_task(
+                self.send_heartbeat_loop()
+            )
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
             await self.send_command(commands.StateInfo(), do_lock=True)
@@ -695,36 +706,39 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.log.info("Enable devices")
         self.disable_task.cancel()
         try:
-            # Reset all systems the CSC controls
-            for reset_command in [
-                commands.TopEndChillerResetAlarm(),
-                commands.OilSupplySystemResetAlarm(),
-                commands.MainAxesPowerSupplyResetAlarm(),
-                commands.MirrorCoverLocksResetAlarm(),
-                commands.MirrorCoversResetAlarm(),
-                commands.AzimuthResetAlarm(),
-                commands.ElevationResetAlarm(),
-                commands.CameraCableWrapResetAlarm(),
-            ]:
+            # Reset commands will fail if the subsystem is already on.
+            # Also they will claim to succeed if the subsystem is off
+            # or in standby, EVEN IF THE RESET ACTUALLY FAILS.
+            # Thus the only reason a reset command can fail is if
+            # the subsystem is already on, so we can basically ignore
+            # such failures. It's a bit skanky, but avoids a race condition
+            # in checking the subsystem power state and using that
+            # to decide whether to reset alarms.
+            for command, must_succeed in (
+                (commands.MainCabinetThermalResetAlarm(), False),
+                (commands.TopEndChillerResetAlarm(), False),
+                (commands.OilSupplySystemResetAlarm(), False),
+                (commands.MainAxesPowerSupplyResetAlarm(), False),
+                (commands.MirrorCoverLocksResetAlarm(), False),
+                (commands.MirrorCoversResetAlarm(), False),
+                (commands.CameraCableWrapResetAlarm(), False),
+                (commands.TopEndChillerPower(on=True), True),
+                (commands.TopEndChillerTrackAmbient(on=True, temperature=0), True),
+                (commands.MainAxesPowerSupplyPower(on=True), True),
+                (commands.OilSupplySystemPower(on=True), True),
+                (commands.BothAxesResetAlarm(), True),
+                (commands.BothAxesPower(on=True), True),
+                (commands.CameraCableWrapPower(on=True), True),
+            ):
                 try:
-                    await self.send_command(reset_command, do_lock=True)
+                    await self.send_command(command, do_lock=True)
                 except Exception as e:
-                    self.log.warning(
-                        f"Command {reset_command} failed; continuing: {e!r}"
-                    )
-
-            # Power on the systems that we want to be on all the time
-            # (all systems the CSC controls, except mirror covers)
-            power_on_commands = [
-                commands.TopEndChillerPower(on=True),
-                commands.TopEndChillerTrackAmbient(on=True, temperature=0),
-                commands.OilSupplySystemPower(on=True),
-                commands.MainAxesPowerSupplyPower(on=True),
-                commands.AzimuthPower(on=True),
-                commands.ElevationPower(on=True),
-                commands.CameraCableWrapPower(on=True),
-            ]
-            await self.send_commands(*power_on_commands, do_lock=True)
+                    if must_succeed:
+                        raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
+                    else:
+                        self.log.info(
+                            f"Reset command {command} failed; the subsystem is probably already on"
+                        )
         except Exception as e:
             self.log.error(f"Failed to power on one or more devices: {e!r}")
             raise
@@ -763,7 +777,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         try:
             self.log.info("Give up command of the mount.")
             await self.send_command(
-                commands.AskForCommand(commander=enums.Source.NONE),
+                # Give control to EUI so the TMA keeps receiving heartbeats;
+                # this prevents it from shutting off the oil supply system,
+                # main axes power supply, and top-end chiller.
+                # TODO DM-35194: if we get Tekniker to change the behavior when
+                # there is no heartbeat, change this to enums.Source.NONE.
+                commands.AskForCommand(commander=enums.Source.EUI),
                 do_lock=True,
                 wait_done=True,
             )
@@ -1018,7 +1037,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     )
 
                 position, velocity, tai = position_velocity_tai
-                command = commands.CameraCableWrapTrack(
+                command = commands.CameraCableWrapTrackTarget(
                     position=position,
                     velocity=velocity,
                     tai=tai,
@@ -1071,17 +1090,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
-        # Deploy the mirror cover locks/guides.
         await self.send_commands(
             commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoverLocksMoveAll(deploy=True),
-            commands.MirrorCoverLocksPower(on=False),
-            do_lock=True,
-        )
-        # Deploy the mirror covers.
-        await self.send_commands(
             commands.MirrorCoversPower(on=True),
-            commands.MirrorCoversDeploy(),
+            commands.MirrorCoverSystemDeploy(),
+            commands.MirrorCoverLocksPower(on=False),
             commands.MirrorCoversPower(on=False),
             do_lock=True,
         )
@@ -1100,23 +1113,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             await self.camera_cable_wrap_follow_start_task
 
+    async def do_homeBothAxes(self, data):
+        self.assert_enabled()
+        await self.send_command(
+            commands.BothAxesHome(),
+            do_lock=True,
+        )
+
     async def do_openMirrorCovers(self, data):
         """Handle the openMirrorCovers command."""
         self.assert_enabled()
         await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
-        # Retract the mirror covers.
-        await self.send_commands(
-            commands.MirrorCoversPower(on=True),
-            commands.MirrorCoversRetract(),
-            commands.MirrorCoversPower(on=False),
-            do_lock=True,
-        )
-        # Retract the mirror cover locks/guides.
         await self.send_commands(
             commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoverLocksMoveAll(deploy=False),
+            commands.MirrorCoversPower(on=True),
+            commands.MirrorCoverSystemRetract(),
+            commands.MirrorCoversPower(on=False),
             commands.MirrorCoverLocksPower(on=False),
             do_lock=True,
         )
@@ -1138,7 +1152,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Use do_lock=False to prevent a slow command
         # from interrrupting tracking
         await self.send_command(
-            commands.BothAxesTrack(
+            commands.BothAxesTrackTarget(
                 azimuth=data.azimuth,
                 azimuth_velocity=data.azimuthVelocity,
                 elevation=data.elevation,
@@ -1162,11 +1176,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled()
-        await self.send_commands(
-            commands.ElevationEnableTracking(),
-            commands.AzimuthEnableTracking(),
-            do_lock=True,
-        )
+        await self.send_command(commands.BothAxesEnableTracking(), do_lock=True)
 
     async def do_stop(self, data):
         """Handle the stop command."""
@@ -1196,7 +1206,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_axis_motion_state(self, reply):
         """Handle a `ReplyId.AXIS_MOTION_STATE` reply."""
         axis = reply.axis
-        state = reply.motionState
+        state = reply.state
         was_tracking = self.is_tracking()
         if axis == System.ELEVATION:
             await self.evt_elevationMotionState.set_write(state=state)
@@ -1237,10 +1247,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_chiller_state(self, reply):
         """Andle a `ReplyId.CHILLER_STATE` reply."""
         topic_info = self.system_state_dict[reply.system]
-        await topic_info.topic.set_write(
-            trackAmbient=reply.trackAmbient,
-            setTemperature=reply.temperature,
-        )
+        if topic_info.num_thermal == 1:
+            await topic_info.topic.set_write(
+                trackAmbient=reply.trackAmbient[0],
+                setTemperature=reply.temperature[0],
+            )
+        else:
+            await topic_info.topic.set_write(
+                trackAmbient=reply.trackAmbient,
+                setTemperature=reply.temperature,
+            )
 
     async def handle_command_reply(self, reply):
         """Handle a ReplyId.CMD_x reply."""
@@ -1284,7 +1300,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         * `ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE`
         * `ReplyId.MIRROR_COVERS_MOTION_STATE`
         """
-        await topic.set_write(state=reply.state, elementState=reply.elementState)
+        await topic.set_write(state=reply.state, elementsState=reply.elementsState)
 
     async def handle_detailed_settings_applied(self, reply):
         """Handle a `ReplyId.DETAILED_SETTINGS_APPLIED` reply."""
@@ -1367,16 +1383,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_elevation_locking_pin_motion_state(self, reply):
         """Handle a `ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE` reply."""
         await self.evt_elevationLockingPinMotionState.set_write(
-            state=reply.state, elementState=reply.elementState
+            state=reply.state, elementsState=reply.elementsState
         )
 
     async def handle_error(self, reply):
         """Handle a `ReplyId.ERROR` reply."""
         await self.evt_error.set_write(
             code=reply.code,
-            latched=reply.on,
+            latched=reply.latched,
             active=reply.active,
-            text="\n".join(reply.description),
+            text=reply.description,
             force_output=True,
         )
 
@@ -1394,22 +1410,34 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def handle_limits(self, reply):
         """Handle a `ReplyId.LIMITS` reply."""
-        topic = {
-            System.ELEVATION: self.evt_elevationLimits,
-            System.AZIMUTH: self.evt_azimuthLimits,
-            System.CAMERA_CABLE_WRAP: self.evt_cameraCableWrapLimits,
+        topic, nelts = {
+            System.ELEVATION: (self.evt_elevationLimits, 1),
+            System.AZIMUTH: (self.evt_azimuthLimits, 1),
+            System.CAMERA_CABLE_WRAP: (self.evt_cameraCableWrapLimits, 1),
         }.get(reply.system, None)
         if topic is None:
-            self.log.warning(f"Unrecognized system={reply.system} in handle_limits")
+            try:
+                reply.system = System(reply.system)
+            except ValueError:
+                pass
+            self.log.info(f"Unsupported system={reply.system!r} in handle_limits")
         else:
-            await topic.set_write(limits=reply.limits)
+            if nelts > 1:
+                await topic.set_write(limits=reply.limits)
+            else:
+                await topic.set_write(limits=reply.limits[0])
 
     async def handle_motion_controller_state(self, reply):
         """Handle a `ReplyId.MOTION_CONTROLLER_STATE` reply."""
         topic_info = self.system_state_dict[reply.system]
-        await topic_info.topic.set_write(
-            motionControllerState=reply.motionControllerState,
-        )
+        if topic_info.num_motion_controller_state == 1:
+            await topic_info.topic.set_write(
+                motionControllerState=reply.motionControllerState[0],
+            )
+        else:
+            await topic_info.topic.set_write(
+                motionControllerState=reply.motionControllerState,
+            )
 
     async def handle_power_state(self, reply):
         """Handle a `ReplyId.POWER_STATE` reply."""
@@ -1433,7 +1461,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.evt_warning.set_write(
             code=reply.code,
             active=reply.active,
-            text="\n".join(reply.description),
+            text=reply.description,
             force_output=True,
         )
 
@@ -1457,19 +1485,29 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def read_loop(self):
         """Read and process replies from the low-level controller."""
         self.log.debug("Read loop begins")
+        known_reply_ids = {int(item) for item in enums.ReplyId}
         while self.should_be_connected and self.connected:
             try:
                 read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
                 try:
                     reply_dict = json.loads(read_bytes)
                     self.log.debug("Read %s", reply_dict)
+                    reply_id = reply_dict["id"]
+                    if reply_id not in known_reply_ids:
+                        if reply_id not in self.unknown_reply_ids:
+                            self.unknown_reply_ids.add(reply_id)
+                            self.log.warning(
+                                f"Ignoring reply with unknown id={reply_id}: {read_bytes}:"
+                            )
+                        continue
                     reply = types.SimpleNamespace(
-                        id=enums.ReplyId(reply_dict["id"]),
+                        id=enums.ReplyId(reply_id),
                         timestamp=reply_dict["timestamp"],
                         **reply_dict["parameters"],
                     )
                 except Exception as e:
                     self.log.warning(f"Ignoring unparsable reply: {read_bytes}: {e!r}")
+                    continue
 
                 handler = self.reply_dispatch.get(reply.id, None)
                 if handler:
@@ -1496,6 +1534,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             report="Connection lost to low-level controller (noticed in read_loop)",
                         )
         self.log.debug("Read loop ends")
+
+    async def send_heartbeat_loop(self):
+        """Send a regular heartbeat "command" to the low-level controller.
+
+        The command is not acknowledged in any way.
+        """
+        heartbeat_bytes = commands.Heartbeat().encode()
+        try:
+            while self.connected:
+                self.writer.write(heartbeat_bytes)
+                await self.writer.drain()
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            self.log.exception("send heartbeat loop failed")
 
     def signal_handler(self):
         """Handle signals such as SIGTERM."""

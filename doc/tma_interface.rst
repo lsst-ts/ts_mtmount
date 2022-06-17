@@ -101,7 +101,7 @@ https://gitlab.tekniker.es/publico/3151-lsst/pxicontroller_documentation/-/blob/
 
 Some supplemental information:
 
-* motionState: the position field is the target position for point to point moves.
+* axisMotionState: the position field is the target position for point to point moves.
 
 Here are some sample replies:
 
