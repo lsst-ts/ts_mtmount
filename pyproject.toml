@@ -17,7 +17,12 @@ version = { attr = "setuptools_scm.get_version" }
 where = [ "python" ]
 
 [project.scripts]
+command_mtmount = "lsst.ts.mtmount:command_mtmount"
+command_tma = "lsst.ts.mtmount:command_tma"
+monitor_mtmount_telemetry = "lsst.ts.mtmount:monitor_mtmount_telemetry"
+run_mock_tma = "lsst.ts.mtmount:run_mock_tma"
 run_mtmount = "lsst.ts.mtmount:run_mtmount"
+run_mtmount_telemetry_client = "lsst.ts.mtmount:run_mtmount_telemetry_client"
 
 [tool.setuptools_scm]
 write_to = "python/lsst/ts/mtmount/version.py"
