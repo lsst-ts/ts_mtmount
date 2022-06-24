@@ -604,7 +604,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         # Run the telemetry client as a background process.
         args = [
-            "run_mtmount_telemetry_client.py",
+            "run_mtmount_telemetry_client",
             f"--host={telemetry_host}",
             f"--port={self.telemetry_port}",
             f"--loglevel={self.log.level}",
@@ -1562,7 +1562,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # Run the mock controller using random ports;
             # read the ports to set command_port and telemetry_port.
             args = [
-                "run_mock_tma.py",
+                "run_mock_tma",
                 f"--loglevel={self.log.level}",
                 "--random-ports",
             ]

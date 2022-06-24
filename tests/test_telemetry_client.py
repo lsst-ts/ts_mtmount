@@ -73,7 +73,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         await self.server.start_task
 
         args = [
-            "run_mtmount_telemetry_client.py",
+            "run_mtmount_telemetry_client",
             f"--host={salobj.LOCAL_HOST}",
             f"--port={self.server.port}",
         ]
