@@ -204,7 +204,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         await self.check_bin_script(
             name="MTMount",
             index=None,
-            exe_name="run_mtmount.py",
+            exe_name="run_mtmount",
         )
 
     def test_class_attributes(self):

@@ -38,9 +38,9 @@ pipeline {
     stages {
         stage ('Update branches of required packages') {
             steps {
-                // When using the docker container, we need to change the HOME path
+                // When using the docker container, we need to change the WHOME path
                 // to WORKSPACE to have the authority to install the packages.
-                withEnv(["HOME=${env.WORKSPACE}"]) {
+                withEnv(["WHOME=${env.WORKSPACE}"]) {
                     sh """
                         source /home/saluser/.setup_dev.sh || echo "Loading env failed; continuing..."
 
@@ -86,7 +86,7 @@ pipeline {
         }
         stage('Run unit tests') {
             steps {
-                withEnv(["HOME=${env.WORKSPACE}"]) {
+                withEnv(["WHOME=${env.WORKSPACE}"]) {
                     sh """
                         source /home/saluser/.setup_dev.sh || echo "Loading env failed; continuing..."
                         setup -r .
@@ -97,7 +97,7 @@ pipeline {
         }
         stage('Build documentation') {
             steps {
-                withEnv(["HOME=${env.WORKSPACE}"]) {
+                withEnv(["WHOME=${env.WORKSPACE}"]) {
                     sh """
                         source /home/saluser/.setup_dev.sh || echo "Loading env failed; continuing..."
                         setup -r .
@@ -108,7 +108,7 @@ pipeline {
         }
         stage('Try to upload documentation') {
             steps {
-                withEnv(["HOME=${env.WORKSPACE}"]) {
+                withEnv(["WHOME=${env.WORKSPACE}"]) {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
                         sh '''
                             source /home/saluser/.setup_dev.sh || echo "Loading env failed; continuing..."
