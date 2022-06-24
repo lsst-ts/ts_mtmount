@@ -6,6 +6,24 @@
 Version History
 ###############
 
+v0.22.1
+-------
+
+Changes:
+
+* Rename bin scripts to remove ".py" extension.
+* pyproject.toml: add missing entries to ``[project.scripts]``.
+* Jenkinsfile: work around a new git permission issue.
+* Suppress N818 flake8 warning.
+
+Requires:
+
+* ts_salobj 7.1
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 12
+
 v0.22.0
 -------
 
