@@ -32,7 +32,7 @@ For more information:
 
 tma_commander.py --help
 """
-__all__ = ["TmaCommander"]
+__all__ = ["TmaCommander", "command_tma"]
 
 import argparse
 import asyncio
@@ -563,3 +563,8 @@ ask_for_command 1
             # Wait a bit in case there is a tracking command to be acked.
             await asyncio.sleep(0.1)
             await self.write_command(commands.CameraCableWrapStop())
+
+
+def command_tma():
+    """Run TMA Commander."""
+    asyncio.run(TmaCommander.amain())

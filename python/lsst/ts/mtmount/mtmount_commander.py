@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["MTMountCommander"]
+__all__ = ["MTMountCommander", "command_mtmount"]
 
 import asyncio
 import dataclasses
@@ -153,3 +153,8 @@ class MTMountCommander(salobj.CscCommander):
         print("Disable tracking")
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
         print("Ramp done")
+
+
+def command_mtmount():
+    """Run MTMount Commander."""
+    asyncio.run(MTMountCommander.amain(index=0))
