@@ -6,6 +6,28 @@
 Version History
 ###############
 
+v0.22.2
+-------
+
+Changes:
+
+* Update entrypoints in pyproject.toml
+* In conda recipe, add entry points and replace py.test with pytest, running in verbose mode.
+* Update run_mtmount_telemetry_client entrypoint and bin script.
+* Update run_mtmount entrypoint and bin script.
+* Update run_mock_tma entrypoint and bin script.
+* Update monitor_mtmount_telemetry entrypoint and bin script.
+* Update command_tma entrypoint and bin script.
+* Update command_mtmount entrypoint and bin script.
+
+Requires:
+
+* ts_salobj 7.1
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 12
+
 v0.22.1
 -------
 
