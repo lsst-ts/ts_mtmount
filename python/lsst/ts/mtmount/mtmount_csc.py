@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["MTMountCsc"]
+__all__ = ["MTMountCsc", "run_mtmount"]
 
 import asyncio
 import functools
@@ -1612,3 +1612,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.camera_cable_wrap_follow_loop_task.cancel()
         finally:
             await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
+
+
+def run_mtmount() -> None:
+    """Run the MTMount CSC."""
+    asyncio.run(MTMountCsc.amain(index=None))
