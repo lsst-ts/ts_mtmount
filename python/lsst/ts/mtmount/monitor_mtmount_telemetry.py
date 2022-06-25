@@ -20,13 +20,33 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""A trivial command-line script that checks if MTMount telemetry is output.
+import asyncio
 
-To run it::
+from lsst.ts import salobj
 
-    monitor_mtmount_telemetry.py
-"""
+num_messages = 0
 
-from lsst.ts.mtmount.monitor_mtmount_telemetry import monitor_mtmount_telemetry
 
-monitor_mtmount_telemetry()
+def topic_callback(data):
+    global num_messages
+    num_messages += 1
+    if num_messages % 10 == 0:
+        print(f"Read {num_messages} messages")
+
+
+async def monitor_tel_azimuth() -> None:
+    """A trivial method to moninor azimuth telemetry for 600s seconds."""
+    async with salobj.Domain() as domain, salobj.Remote(
+        domain=domain,
+        name="MTMount",
+        include=["azimuth"],
+    ) as remote:
+        print("monitor_mtmount_telemetry monitoring the azimuth topic")
+        remote.tel_azimuth.callback = topic_callback
+        await asyncio.sleep(10 * 60)
+
+
+def monitor_mtmount_telemetry():
+    """Run Monitor MTMount Telemetry."""
+    asyncio.run(monitor_tel_azimuth())
+    print("monitor_mtmount_telemetry done")

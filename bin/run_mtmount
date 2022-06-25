@@ -17,8 +17,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-import asyncio
 
-from lsst.ts import mtmount
+from lsst.ts.mtmount import run_mtmount
 
-asyncio.run(mtmount.MTMountCsc.amain(index=None))
+run_mtmount()
