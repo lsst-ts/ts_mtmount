@@ -19,6 +19,6 @@
 #
 import asyncio
 
-from lsst.ts import mtmount
+from lsst.ts.mtmount import run_mtmount_telemetry_client
 
-asyncio.run(mtmount.TelemetryClient.amain())
+run_mtmount_telemetry_client()

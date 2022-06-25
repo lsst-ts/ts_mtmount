@@ -19,10 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = [
-    "TelemetryTopicHandler",
-    "TelemetryClient",
-]
+__all__ = ["TelemetryTopicHandler", "TelemetryClient", "run_mtmount_telemetry_client"]
 
 import argparse
 import asyncio
@@ -296,3 +293,8 @@ class TelemetryClient:
         self._convert_drive_measurements(
             llv_data=llv_data, keys=["torquePercentage"], ndrives=2
         )
+
+
+def run_mtmount_telemetry_client():
+    """Run MTMount telemetry client."""
+    asyncio.run(TelemetryClient.amain())
