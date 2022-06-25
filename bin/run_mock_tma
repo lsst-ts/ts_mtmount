@@ -17,12 +17,11 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-import asyncio
 import logging
 
-from lsst.ts import mtmount
+from lsst.ts.mtmount.mock import run_mock_tma
 
 logging.basicConfig()
 
 
-asyncio.run(mtmount.mock.Controller.amain())
+run_mock_tma()

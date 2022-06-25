@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["INITIAL_POSITION", "Controller", "make_reply_dict"]
+__all__ = ["INITIAL_POSITION", "Controller", "make_reply_dict", "run_mock_tma"]
 
 import argparse
 import asyncio
@@ -1569,3 +1569,8 @@ class Controller:
                     temperature=[self.ambient_temperature] * nelts,
                 )
             )
+
+
+def run_mock_tma():
+    """Run Mock TMA."""
+    asyncio.run(Controller.amain())
