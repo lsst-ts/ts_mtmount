@@ -31,12 +31,10 @@ Warning: this should not be used while the CSC is running.
 
 For more information::
 
-    command_tma.py --help
+    command_tma --help
 """
 
-import asyncio
-
-from lsst.ts import mtmount
+from lsst.ts.mtmount import command_tma
 
 
-asyncio.run(mtmount.TmaCommander.amain())
+command_tma()
