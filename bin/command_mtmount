@@ -27,11 +27,9 @@ Warning: this should not be used while the CSC is running.
 
 For more information::
 
-    command_mtmount.py --help
+    command_mtmount --help
 """
 
-import asyncio
+from lsst.ts.mtmount import command_mtmount
 
-from lsst.ts import mtmount
-
-asyncio.run(mtmount.MTMountCommander.amain(index=0))
+command_mtmount()
