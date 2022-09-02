@@ -6,6 +6,21 @@
 Version History
 ###############
 
+fall22
+------
+
+This branch is for commissioning the TMA in fall of 2022.
+The primary change is to not try to enable the oil supply system (OSS) or top-end chiller (TEC).
+These may not be controllable by the TMA, and can be controlled manually for now.
+
+Requires:
+
+* ts_salobj 7.1
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 12
+
 v0.22.2
 -------
 
