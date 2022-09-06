@@ -716,16 +716,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # to decide whether to reset alarms.
             for command, must_succeed in (
                 (commands.MainCabinetThermalResetAlarm(), False),
-                (commands.TopEndChillerResetAlarm(), False),
-                (commands.OilSupplySystemResetAlarm(), False),
+                # Disabled for 2022-10 commissioning
+                # (commands.TopEndChillerResetAlarm(), False),
+                # (commands.OilSupplySystemResetAlarm(), False),
                 (commands.MainAxesPowerSupplyResetAlarm(), False),
                 (commands.MirrorCoverLocksResetAlarm(), False),
                 (commands.MirrorCoversResetAlarm(), False),
                 (commands.CameraCableWrapResetAlarm(), False),
-                (commands.TopEndChillerPower(on=True), True),
-                (commands.TopEndChillerTrackAmbient(on=True, temperature=0), True),
+                # Disabled for 2022-10 commissioning
+                # (commands.TopEndChillerPower(on=True), True),
+                # (commands.TopEndChillerTrackAmbient(
+                #     on=True, temperature=0), True),
                 (commands.MainAxesPowerSupplyPower(on=True), True),
-                (commands.OilSupplySystemPower(on=True), True),
+                # Disabled for 2022-10 commissioning
+                # (commands.OilSupplySystemPower(on=True), True),
                 (commands.BothAxesResetAlarm(), True),
                 (commands.BothAxesPower(on=True), True),
                 (commands.CameraCableWrapPower(on=True), True),
