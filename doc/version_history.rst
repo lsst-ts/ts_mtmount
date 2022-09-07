@@ -6,12 +6,36 @@
 Version History
 ###############
 
-fall22
-------
+ugly_ccw_only_hack_fall22
+-------------------------
 
-This branch is for commissioning the TMA in fall of 2022.
-The primary change is to not try to enable the oil supply system (OSS) or top-end chiller (TEC).
-These may not be controllable by the TMA, and can be controlled manually for now.
+This branch controls the camera cable wrap normally, while only pretending to control azimuth and elevation.
+Limitations:
+
+* The reported ``azimuth`` and ``elevation`` telemetry is simply the ``target`` event extrapolated to the current time.
+  Thus slewing is instantaneous and point moves are nearly instantaneous.
+* Azimuth and elevation limits are ignored.
+* The ``azimuthDrives`` and ``elevationDrives`` telemetry topics are not reported.
+* The only main-axis-related events that are faked (and not faked accurately) are:
+
+    * ``azimuthInPosition``
+    * ``elevationInPosition``
+    * ``azimuthMotionState``
+    * ``elevationMotionState``
+    * ``target``
+
+  All other main-axis-related events are reported based on the real azimuth and elevation axes, including:
+
+    * ``azimuthSystemState``
+    * ``elevationSystemState``
+    * ``elevationDrivesThermalSystemState``
+    * ``azimuthLimits``
+    * ``elevationLimits``
+    * ``azimuthToppleBlock``
+
+* The mirror covers are not controllable.
+
+**WARNING**: This version **CANNOT STOP THE MAIN AXES**.
 
 Requires:
 

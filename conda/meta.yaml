@@ -7,7 +7,7 @@ source:
   path: ../
 
 build:
-  string: fall22
+  string: ugly_ccw_only_hack_fall22
   noarch: generic
   script: python -m pip install --no-deps --ignore-installed .
   entry_points:

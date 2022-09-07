@@ -40,6 +40,7 @@ from . import constants
 from . import command_futures
 from . import commands
 from . import enums
+from . import mock
 from . import __version__
 
 # Extra time to wait for commands to be done (sec)
@@ -73,6 +74,9 @@ ROTATOR_TELEMETRY_TIMEOUT = 1
 # then this will no longer be necessary; we can use the timeout provided
 # by the low-level controller, which is likely to be more accurate.
 MIRROR_COVER_TIMEOUT = 60
+
+# Interval between fake azimuth and elevation telemetry
+FAKE_TELEMETRY_INTERVAL = 0.1
 
 
 class SystemStateInfo:
@@ -260,6 +264,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.mock_controller_started_task = asyncio.Future()
         self.monitor_telemetry_client_task = utils.make_done_future()
+        # Task to track fake telemetry. This is started and stopped
+        # when monitor_telemetry_client_task is started and stopped.
+        self.fake_telemetry_task = utils.make_done_future()
 
         # Tasks for camera cable wrap following the rotator
         self.camera_cable_wrap_follow_start_task = utils.make_done_future()
@@ -278,6 +285,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Set True when fully connected and False just before
         # intentionally disconnecting.
         self.should_be_connected = False
+
+        # For the ugly hack: keep track of axes homed
+        self.main_axes_homed = False
 
         super().__init__(
             name="MTMount",
@@ -457,6 +467,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.enable_task.cancel()
         self.disable_task.cancel()
         self.monitor_telemetry_client_task.cancel()
+        self.fake_telemetry_task.cancel()
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
         self.read_loop_task.cancel()
@@ -634,6 +645,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.monitor_telemetry_client_task = asyncio.create_task(
             self.monitor_telemetry_client()
         )
+        await self.clear_target()
+        await self.evt_azimuthMotionState.set_write(state=AxisMotionState.STOPPED)
+        await self.evt_elevationMotionState.set_write(state=AxisMotionState.STOPPED)
+        await self.evt_elevationInPosition.set_write(inPosition=False)
+        await self.evt_azimuthInPosition.set_write(inPosition=False)
+        self.fake_telemetry_task = asyncio.create_task(self.fake_telemetry_loop())
 
     async def _wait_for_mock_controller(self):
         """Wait for the mock controller to be running.
@@ -672,6 +689,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.should_be_connected = False
 
         self.monitor_telemetry_client_task.cancel()
+        self.fake_telemetry_task.cancel()
 
         if self.writer is not None:
             self.log.info("Disconnect from the low-level controller")
@@ -715,23 +733,27 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # in checking the subsystem power state and using that
             # to decide whether to reset alarms.
             for command, must_succeed in (
-                (commands.MainCabinetThermalResetAlarm(), False),
+                # Disabled for the ugly CCW-only hack
+                # (commands.MainCabinetThermalResetAlarm(), False),
                 # Disabled for 2022-10 commissioning
                 # (commands.TopEndChillerResetAlarm(), False),
                 # (commands.OilSupplySystemResetAlarm(), False),
-                (commands.MainAxesPowerSupplyResetAlarm(), False),
-                (commands.MirrorCoverLocksResetAlarm(), False),
-                (commands.MirrorCoversResetAlarm(), False),
-                (commands.CameraCableWrapResetAlarm(), False),
+                # Disabled for the ugly CCW-only hack
+                # (commands.MainAxesPowerSupplyResetAlarm(), False),
+                # (commands.MirrorCoverLocksResetAlarm(), False),
+                # (commands.MirrorCoversResetAlarm(), False),
+                # (commands.CameraCableWrapResetAlarm(), False),
                 # Disabled for 2022-10 commissioning
                 # (commands.TopEndChillerPower(on=True), True),
                 # (commands.TopEndChillerTrackAmbient(
                 #     on=True, temperature=0), True),
-                (commands.MainAxesPowerSupplyPower(on=True), True),
+                # Disabled for the ugly CCW-only hack
+                # (commands.MainAxesPowerSupplyPower(on=True), True),
                 # Disabled for 2022-10 commissioning
                 # (commands.OilSupplySystemPower(on=True), True),
-                (commands.BothAxesResetAlarm(), True),
-                (commands.BothAxesPower(on=True), True),
+                # Disabled for the ugly CCW-only hack
+                # (commands.BothAxesResetAlarm(), True),
+                # (commands.BothAxesPower(on=True), True),
                 (commands.CameraCableWrapPower(on=True), True),
             ):
                 try:
@@ -764,10 +786,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if not self.connected:
             return
         for command in [
-            commands.BothAxesStop(),
+            # Disabled for the ugly CCW-only hack
+            # commands.BothAxesStop(),
             commands.CameraCableWrapStop(),
-            commands.AzimuthPower(on=False),
-            commands.ElevationPower(on=False),
+            # Disabled for the ugly CCW-only hack
+            # commands.AzimuthPower(on=False),
+            # commands.ElevationPower(on=False),
             commands.CameraCableWrapPower(on=False),
         ]:
             try:
@@ -1091,16 +1115,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_closeMirrorCovers(self, data):
         """Handle the closeMirrorCovers command."""
         self.assert_enabled()
-        await self.cmd_openMirrorCovers.ack_in_progress(
-            data=data, timeout=MIRROR_COVER_TIMEOUT
-        )
-        await self.send_commands(
-            commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoversPower(on=True),
-            commands.MirrorCoverSystemDeploy(),
-            commands.MirrorCoverLocksPower(on=False),
-            commands.MirrorCoversPower(on=False),
-            do_lock=True,
+        raise salobj.ExpectedError(
+            "The CCW-only hack does not even pretend to deal with mirror covers."
         )
 
     async def do_disableCameraCableWrapFollowing(self, data):
@@ -1119,52 +1135,74 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_homeBothAxes(self, data):
         self.assert_enabled()
-        await self.send_command(
-            commands.BothAxesHome(),
-            do_lock=True,
+        self.log.warning(
+            "A no-op: the CCW-only hacked version only pretends to support elevation and azimuth"
         )
+        self.main_axes_homed = True
 
     async def do_openMirrorCovers(self, data):
         """Handle the openMirrorCovers command."""
         self.assert_enabled()
-        await self.cmd_openMirrorCovers.ack_in_progress(
-            data=data, timeout=MIRROR_COVER_TIMEOUT
-        )
-        await self.send_commands(
-            commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoversPower(on=True),
-            commands.MirrorCoverSystemRetract(),
-            commands.MirrorCoversPower(on=False),
-            commands.MirrorCoverLocksPower(on=False),
-            do_lock=True,
+        raise salobj.ExpectedError(
+            "The CCW-only hack does not even pretend to deal with mirror covers."
         )
 
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command."""
         self.assert_enabled()
-        cmd_futures = await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
-            do_lock=True,
+        self.log.warning("Faking moveToTarget; this is the CCW-only hacked version.")
+        if (
+            self.evt_azimuthMotionState.data.state != AxisMotionState.STOPPED
+            or self.evt_elevationMotionState.data.state != AxisMotionState.STOPPED
+        ):
+            raise salobj.ExpectedError("Both axes must be stopped")
+
+        # The low-level controller reports first one axis and then the other,
+        # so do the same here.
+        await self.evt_target.set_write(
+            azimuth=data.azimuth,
+            elevation=math.nan,
+            azimuthVelocity=0,
+            elevationVelocity=0,
+            taiTime=utils.current_tai(),
+            trackId=0,
+            tracksys="LOCAL",
+            radesys="",
+            force_output=True,
         )
-        timeout = cmd_futures.timeout + TIMEOUT_BUFFER
-        await self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
-        await cmd_futures.done
+        await self.evt_target.set_write(
+            azimuth=data.azimuth,
+            elevation=data.elevation,
+            azimuthVelocity=0,
+            elevationVelocity=0,
+            taiTime=utils.current_tai(),
+            trackId=0,
+            tracksys="LOCAL",
+            radesys="",
+            force_output=True,
+        )
+        await self.evt_elevationInPosition.set_write(inPosition=False)
+        await self.evt_azimuthInPosition.set_write(inPosition=False)
+        await self.evt_azimuthMotionState.set_write(
+            state=AxisMotionState.MOVING_POINT_TO_POINT
+        )
+        await self.evt_elevationMotionState.set_write(
+            state=AxisMotionState.MOVING_POINT_TO_POINT
+        )
+        await asyncio.sleep(1)
+        await self.evt_azimuthMotionState.set_write(state=AxisMotionState.STOPPED)
+        await self.evt_elevationMotionState.set_write(state=AxisMotionState.STOPPED)
+        await self.evt_elevationInPosition.set_write(inPosition=True)
+        await self.evt_azimuthInPosition.set_write(inPosition=True)
 
     async def do_trackTarget(self, data):
         """Handle the trackTarget command."""
         self.assert_enabled()
-        # Use do_lock=False to prevent a slow command
-        # from interrrupting tracking
-        await self.send_command(
-            commands.BothAxesTrackTarget(
-                azimuth=data.azimuth,
-                azimuth_velocity=data.azimuthVelocity,
-                elevation=data.elevation,
-                elevation_velocity=data.elevationVelocity,
-                tai=data.taiTime,
-            ),
-            do_lock=False,
-        )
+        if (
+            self.evt_azimuthMotionState.data.state != AxisMotionState.TRACKING
+            or self.evt_elevationMotionState.data.state != AxisMotionState.TRACKING
+        ):
+            raise salobj.ExpectedError("Not tracking")
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
@@ -1176,27 +1214,94 @@ class MTMountCsc(salobj.ConfigurableCsc):
             radesys=data.radesys,
             force_output=True,
         )
+        await self.evt_elevationInPosition.set_write(inPosition=True)
+        await self.evt_azimuthInPosition.set_write(inPosition=True)
 
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled()
-        await self.send_command(commands.BothAxesEnableTracking(), do_lock=True)
+        self.log.warning("Faking startTracking; this is the CCW-only hacked version.")
+        if not self.main_axes_homed:
+            raise salobj.ExpectedError("Both axes must be homed")
+        if (
+            self.evt_azimuthMotionState.data.state != AxisMotionState.STOPPED
+            or self.evt_elevationMotionState.data.state != AxisMotionState.STOPPED
+        ):
+            raise salobj.ExpectedError("Both axes must be stopped")
+        await self.evt_azimuthMotionState.set_write(state=AxisMotionState.TRACKING)
+        await self.evt_elevationMotionState.set_write(state=AxisMotionState.TRACKING)
 
     async def do_stop(self, data):
         """Handle the stop command."""
         self.assert_enabled()
-        await self.send_commands(
-            commands.BothAxesStop(),
-            commands.CameraCableWrapStop(),
-            commands.MirrorCoverLocksStop(),
-            commands.MirrorCoversStop(),
-            do_lock=False,
-        )
+        self.log.warning("Faking stop; this is the CCW-only hacked version.")
+        await self.fake_stop_main_axes()
 
     async def do_stopTracking(self, data):
         """Handle the stopTracking command."""
         self.assert_enabled()
-        await self.send_command(commands.BothAxesStop(), do_lock=False)
+        self.log.warning("Faking stopTracking; this is the CCW-only hacked version.")
+        await self.fake_stop_main_axes()
+
+    async def fake_stop_main_axes(self):
+        """Pretend to stop the azimuth and elevation axes."""
+        await self.evt_target.set_write(
+            azimuthVelocity=0,
+            elevationVelocity=0,
+            taiTime=utils.current_tai(),
+            trackId=0,
+            tracksys="LOCAL",
+            radesys="",
+        )
+        await self.evt_azimuthMotionState.set_write(state=AxisMotionState.STOPPING)
+        await self.evt_elevationMotionState.set_write(state=AxisMotionState.STOPPING)
+        await asyncio.sleep(0.1)
+        await self.evt_azimuthMotionState.set_write(state=AxisMotionState.STOPPED)
+        await self.evt_elevationMotionState.set_write(state=AxisMotionState.STOPPED)
+        await self.evt_elevationInPosition.set_write(inPosition=False)
+        await self.evt_azimuthInPosition.set_write(inPosition=False)
+
+    async def fake_telemetry_loop(self):
+        """Report minimal fake telemetry for azimuth and elevation.
+
+        This linearly extrapolates the target event data.
+        Thus there is no attempt to emulate slewing.
+        """
+        try:
+            while True:
+                target = self.evt_target.data
+                tai = utils.current_tai()
+                dt = tai - target.taiTime
+                current_azimuth = target.azimuth + target.azimuthVelocity * dt
+                azimuth_velocity = target.azimuthVelocity
+                if math.isnan(current_azimuth):
+                    current_azimuth = mock.INITIAL_POSITION[System.AZIMUTH]
+                    azimuth_velocity = 0
+                current_elevation = target.elevation + target.elevationVelocity * dt
+                elevation_velocity = target.elevationVelocity
+                if math.isnan(current_elevation):
+                    current_elevation = mock.INITIAL_POSITION[System.ELEVATION]
+                    elevation_velocity = 0
+                await self.tel_azimuth.set_write(
+                    actualPosition=current_azimuth,
+                    demandPosition=current_azimuth,
+                    demandVelocity=azimuth_velocity,
+                    actualVelocity=azimuth_velocity,
+                    timestamp=tai,
+                )
+                await self.tel_elevation.set_write(
+                    actualPosition=current_elevation,
+                    demandPosition=current_elevation,
+                    demandVelocity=elevation_velocity,
+                    actualVelocity=elevation_velocity,
+                    timestamp=tai,
+                )
+                await asyncio.sleep(FAKE_TELEMETRY_INTERVAL)
+        except asyncio.CancelledError:
+            self.log.info("fake_telemetry_loop ends")
+        except Exception as e:
+            print(f"fake_telemetry_loop failed: {e!r}")
+            self.log.exception("fake_telemetry_loop failed")
 
     async def handle_available_settings(self, reply):
         """Handle a `ReplyId.AVAILABLE_SETTINGS` reply."""
@@ -1213,27 +1318,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         state = reply.state
         was_tracking = self.is_tracking()
         if axis == System.ELEVATION:
-            await self.evt_elevationMotionState.set_write(state=state)
-            if state == AxisMotionState.MOVING_POINT_TO_POINT:
-                await self.evt_target.set_write(
-                    elevation=reply.position,
-                    elevationVelocity=0,
-                    taiTime=utils.current_tai(),
-                    trackId=0,
-                    tracksys="LOCAL",
-                    radesys="",
-                )
+            pass
         elif axis == System.AZIMUTH:
-            await self.evt_azimuthMotionState.set_write(state=state)
-            if state == AxisMotionState.MOVING_POINT_TO_POINT:
-                await self.evt_target.set_write(
-                    azimuth=reply.position,
-                    azimuthVelocity=0,
-                    taiTime=utils.current_tai(),
-                    trackId=0,
-                    tracksys="LOCAL",
-                    radesys="",
-                )
+            pass
         elif axis == System.CAMERA_CABLE_WRAP:
             await self.evt_cameraCableWrapMotionState.set_write(state=state)
         else:
@@ -1402,15 +1489,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def handle_in_position(self, reply):
         """Handle a `ReplyId.IN_POSITION` reply."""
-        topic = {
-            System.ELEVATION: self.evt_elevationInPosition,
-            System.AZIMUTH: self.evt_azimuthInPosition,
-            System.CAMERA_CABLE_WRAP: self.evt_cameraCableWrapInPosition,
-        }.get(reply.axis, None)
-        if topic is None:
-            self.log.warning(f"Unrecognized axis={reply.system} in handle_in_position")
-        else:
-            await topic.set_write(inPosition=reply.inPosition)
+        return
 
     async def handle_limits(self, reply):
         """Handle a `ReplyId.LIMITS` reply."""
@@ -1600,6 +1679,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
         await self.clear_target()
+        await self.evt_azimuthMotionState.set_write(state=AxisMotionState.STOPPED)
+        await self.evt_elevationMotionState.set_write(state=AxisMotionState.STOPPED)
+        await self.evt_elevationInPosition.set_write(inPosition=False)
+        await self.evt_azimuthInPosition.set_write(inPosition=False)
 
     async def stop_camera_cable_wrap_following(self):
         """Stop the camera cable wrap from following the rotator."""
