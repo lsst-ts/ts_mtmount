@@ -43,33 +43,36 @@ import yaml
 TELEMETRY_MAP = yaml.safe_load(
     """
 
-6: # fields are in flux
-- azimuth
-- actualPosition: angleActual
-  demandPosition: angleSet
-  actualVelocity: velocityActual
-  demandVelocity: velocitySet
-  actualTorque: torqueActual
-  timestamp: timestamp
+# Disable azimuth and elevation telemetry. The hacked-up CSC reports
+# "azimuth" and "elevation" telemetry topics and does not bother
+# to report "azimuthDrives" and "elevationDrives".
+# 6: # fields are in flux
+# - azimuth
+# - actualPosition: angleActual
+#   demandPosition: angleSet
+#   actualVelocity: velocityActual
+#   demandVelocity: velocitySet
+#   actualTorque: torqueActual
+#   timestamp: timestamp
 
-5:
-- azimuthDrives
-- current: azCurrent
-  timestamp: timestamp
+# 5:
+# - azimuthDrives
+# - current: azCurrent
+#   timestamp: timestamp
 
-15: # fields are in flux
-- elevation
-- actualPosition: angleActual
-  demandPosition: angleSet
-  actualVelocity: velocityActual
-  demandVelocity: velocitySet
-  actualTorque: torqueActual
-  timestamp: timestamp
+# 15: # fields are in flux
+# - elevation
+# - actualPosition: angleActual
+#   demandPosition: angleSet
+#   actualVelocity: velocityActual
+#   demandVelocity: velocitySet
+#   actualTorque: torqueActual
+#   timestamp: timestamp
 
-14:
-- elevationDrives
-- current: elCurrent
-  timestamp: timestamp
+# 14:
+# - elevationDrives
+# - current: elCurrent
+#   timestamp: timestamp
 
 8:
 - cameraCableWrap

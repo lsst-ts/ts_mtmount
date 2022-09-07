@@ -98,56 +98,6 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_telemetry(self):
         """Test all telemetry topics."""
         async with self.make_all():
-            # Arbitrary values that are suitable for both
-            # the elevation and azimuth telemetry topics.
-            desired_elaz_dds_data = dict(
-                actualPosition=55.1,
-                demandPosition=45.2,
-                actualVelocity=1.3,
-                demandVelocity=1.4,
-                actualTorque=3.3,
-                timestamp=time.time(),
-            )
-            # topic_id is from telemetry_map.yaml
-            azimuth_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_elaz_dds_data,
-                topic_id=mtmount.TelemetryTopicId.AZIMUTH,
-            )
-            azimuth_llv_data["this_extra_field_should_be_ignored"] = 55.2
-            await self.publish_data(azimuth_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_azimuth, desired_elaz_dds_data
-            )
-
-            elevation_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_elaz_dds_data,
-                topic_id=mtmount.TelemetryTopicId.ELEVATION,
-            )
-            await self.publish_data(elevation_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_elevation, desired_elaz_dds_data
-            )
-
-            desired_azimuth_drives_dds_data = self.make_elaz_drives_dds_data(naxes=16)
-            azimuth_drives_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_azimuth_drives_dds_data,
-                topic_id=mtmount.TelemetryTopicId.AZIMUTH_DRIVE,
-            )
-            await self.publish_data(azimuth_drives_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_azimuthDrives, desired_azimuth_drives_dds_data
-            )
-
-            desired_elevation_drives_dds_data = self.make_elaz_drives_dds_data(naxes=12)
-            elevation_drives_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_elevation_drives_dds_data,
-                topic_id=mtmount.TelemetryTopicId.ELEVATION_DRIVE,
-            )
-            await self.publish_data(elevation_drives_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_elevationDrives, desired_elevation_drives_dds_data
-            )
-
             desired_ccw_dds_data = dict(
                 actualPosition=12.3,
                 actualVelocity=-34.5,
