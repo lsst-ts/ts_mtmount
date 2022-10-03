@@ -1166,6 +1166,29 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_summary_state(salobj.State.DISABLED)
             await self.remote.tel_cameraCableWrap.next(flush=True, timeout=STD_TIMEOUT)
 
+    async def test_telemetry_timeout(self):
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.assert_next_summary_state(salobj.State.ENABLED)
+            # TODO DM-36445: remove this hasattr test
+            # and assume Remote has an evt_telemetryConnected topic
+            if hasattr(self.remote, "evt_telemetryConnected"):
+                await self.assert_next_sample(
+                    self.remote.evt_telemetryConnected, connected=False
+                )
+                await self.assert_next_sample(
+                    self.remote.evt_telemetryConnected, connected=True
+                )
+            # Kill the low-level telemetry publishing loop
+            # and wait for things to go sour.
+            self.mock_controller.telemetry_loop_task.cancel()
+            # TODO DM-36445: remove this hasattr test
+            # and assume Remote has an evt_telemetryConnected topic
+            if hasattr(self.remote, "evt_telemetryConnected"):
+                await self.assert_next_sample(
+                    self.remote.evt_telemetryConnected, connected=False
+                )
+            await self.assert_next_summary_state(salobj.State.FAULT)
+
     async def test_tracking(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
             name="MTRotator"

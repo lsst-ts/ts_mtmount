@@ -19,7 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["TelemetryTopicHandler", "TelemetryClient", "run_mtmount_telemetry_client"]
+__all__ = [
+    "TELEMETRY_TIMEOUT",
+    "TelemetryTopicHandler",
+    "TelemetryClient",
+    "run_mtmount_telemetry_client",
+]
 
 import argparse
 import asyncio
@@ -31,6 +36,10 @@ import signal
 from lsst.ts import salobj
 from . import constants
 from .telemetry_map import TELEMETRY_MAP
+
+# Timeout to read telemetry (seconds). If no telemetry is seen
+# in this time, the telemetry client logs an error and quits.
+TELEMETRY_TIMEOUT = 2
 
 
 class TelemetryTopicHandler:
@@ -248,7 +257,10 @@ class TelemetryClient:
         self.log.info("telemetry client read loop begins")
         try:
             while True:
-                data = await self.reader.readuntil(constants.LINE_TERMINATOR)
+                data = await asyncio.wait_for(
+                    self.reader.readuntil(constants.LINE_TERMINATOR),
+                    timeout=TELEMETRY_TIMEOUT,
+                )
                 try:
                     decoded_data = data.decode()
                     llv_data = json.loads(decoded_data)
@@ -268,6 +280,9 @@ class TelemetryClient:
                     )
         except asyncio.CancelledError:
             self.log.info("telemetry client read loop cancelled")
+        except asyncio.TimeoutError:
+            self.log.error("Timed out waiting for telemetry; giving up.")
+            asyncio.ensure_future(self.close())
         except (ConnectionResetError, asyncio.IncompleteReadError):
             self.log.info("Reader disconnected; giving up.")
             asyncio.ensure_future(self.close())
