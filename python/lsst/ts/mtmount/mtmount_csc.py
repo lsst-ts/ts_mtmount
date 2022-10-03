@@ -1484,7 +1484,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def monitor_telemetry_client(self):
         """Go to FAULT state if the telemetry client exits prematurely."""
         await self.telemetry_client_process.wait()
-        self.fail("Telemetry process exited prematurely")
+        await self.fault(
+            code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR,
+            report="Telemetry process exited prematurely",
+        )
 
     async def read_loop(self):
         """Read and process replies from the low-level controller."""
