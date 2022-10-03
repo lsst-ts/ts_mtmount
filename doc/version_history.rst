@@ -13,6 +13,13 @@ This branch is for commissioning the TMA in fall of 2022.
 The primary change is to not try to enable the oil supply system (OSS) or top-end chiller (TEC).
 These may not be controllable by the TMA, and can be controlled manually for now.
 
+Other changes:
+
+* `MTMountCSC` fix a bug in the ``monitor_telemetry_client`` method.
+* Publish the ``connected`` and ``telemetryConnected`` events from ts_xml 12.1, if present.
+* `TelemetryClient`: fail if no telemetry received in a few seconds.
+* ``test_mock_devices.py``: fix deprecation warnings caused by no running event loop when constructing mock devices.
+
 Requires:
 
 * ts_salobj 7.1
