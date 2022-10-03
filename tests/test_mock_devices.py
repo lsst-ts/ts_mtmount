@@ -62,7 +62,8 @@ class TrivialMockController:
 
 
 class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+    async def asyncSetUp(self):
+        # Use asyncSetUp instead of setUp, so there is a running event loop.
         self.controller = TrivialMockController()
 
     def get_command_class(self, command_code_name):
