@@ -232,6 +232,15 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 subsystemVersions="",
             )
             # TODO DM-36445: remove this hasattr test
+            # and assume evt_connected has a "connected" field
+            if hasattr(self.remote.evt_connected.DataType(), "connected"):
+                await self.assert_next_sample(
+                    topic=self.remote.evt_connected, connected=False
+                )
+                await self.assert_next_sample(
+                    topic=self.remote.evt_connected, connected=True
+                )
+            # TODO DM-36445: remove this hasattr test
             # and assume Remote has an evt_telemetryConnected topic
             if hasattr(self.remote, "evt_telemetryConnected"):
                 await self.assert_next_sample(
