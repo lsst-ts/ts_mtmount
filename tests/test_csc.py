@@ -600,7 +600,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         )
 
     @contextlib.asynccontextmanager
-    async def fake_rotation_loop(self, rotator, position=0, velocity=0, interval=0.2):
+    async def fake_rotation_loop(self, rotator, position=0, velocity=0, interval=0.1):
         """Publish regular MTRotator rotation telemetry messages.
 
         Parameters
