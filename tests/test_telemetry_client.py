@@ -45,12 +45,8 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         self.log.setLevel(logging.INFO)
         self.log.addHandler(logging.StreamHandler())
 
-        # List of (server name, is connected). A new item is appended
-        # each time self.connect_callback is called.
-        self.connect_callback_data = []
-
     @contextlib.asynccontextmanager
-    async def make_all(self):
+    async def make_all(self, fail_if_end_early):
         r"""Make a telemetry server, client, and remote.
 
         The client is run as a background process.
@@ -70,34 +66,35 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             connect_callback=None,
         )
         # Wait for the server to start so the port is set
-        await self.server.start_task
+        await asyncio.wait_for(self.server.start_task, timeout=STD_TIMEOUT)
 
         args = [
             "run_mtmount_telemetry_client",
             f"--host={salobj.LOCAL_HOST}",
             f"--port={self.server.port}",
         ]
-        telemetry_client_process = await asyncio.create_subprocess_exec(*args)
         domain = salobj.Domain()
         self.remote = salobj.Remote(domain=domain, name="MTMount")
-        await asyncio.gather(self.server.connected_task, self.remote.start_task)
+        await asyncio.wait_for(self.remote.start_task, timeout=STD_TIMEOUT)
+        self.telemetry_client_process = await asyncio.create_subprocess_exec(*args)
+        await asyncio.wait_for(self.server.connected_task, timeout=STD_TIMEOUT)
         try:
             yield
         finally:
-            process_ended_early = telemetry_client_process.returncode is not None
+            process_ended_early = self.telemetry_client_process.returncode is not None
             if not process_ended_early:
-                telemetry_client_process.terminate()
+                self.telemetry_client_process.terminate()
             await asyncio.gather(
                 self.remote.close(),
                 self.server.close(),
                 domain.close(),
             )
-            if process_ended_early:
+            if process_ended_early and fail_if_end_early:
                 self.fail("telemetry client exited early")
 
-    async def test_telemetry(self):
+    async def test_telemetry_x(self):
         """Test all telemetry topics."""
-        async with self.make_all():
+        async with self.make_all(fail_if_end_early=True):
             # Arbitrary values that are suitable for both
             # the elevation and azimuth telemetry topics.
             desired_elaz_dds_data = dict(
@@ -161,6 +158,13 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             await self.publish_data(ccw_llv_data)
             await self.assert_next_telemetry(
                 self.remote.tel_cameraCableWrap, desired_ccw_dds_data
+            )
+
+    async def test_timeout(self):
+        async with self.make_all(fail_if_end_early=False):
+            await asyncio.wait_for(
+                self.telemetry_client_process.wait(),
+                timeout=mtmount.TELEMETRY_TIMEOUT + STD_TIMEOUT,
             )
 
     async def assert_next_telemetry(

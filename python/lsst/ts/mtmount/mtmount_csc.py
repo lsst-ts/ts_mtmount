@@ -223,6 +223,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_port = command_port
         self.telemetry_port = telemetry_port
 
+        # TODO DM-36445: remove this flag and assume evt_connected is modern
+        self.has_modern_connected_event = False
+
         self.run_mock_controller = run_mock_controller
 
         # Connection to the low-level controller, or None if not connected.
@@ -555,6 +558,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Connect to the low-level controller and start the telemetry
         client.
         """
+        if self.has_modern_connected_event:
+            await self.evt_connected.set_write(connected=self.connected)
+
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
@@ -601,6 +607,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e!r}"
             )
             return
+
+        if self.has_modern_connected_event:
+            await self.evt_connected.set_write(connected=self.connected)
 
         # Run the telemetry client as a background process.
         args = [
@@ -685,6 +694,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.warning(
                     "Timed out waiting for the writer to close; continuing"
                 )
+
+        if self.has_modern_connected_event:
+            await self.evt_connected.set_write(connected=self.connected)
 
         await self.clear_target()
 
@@ -1484,7 +1496,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def monitor_telemetry_client(self):
         """Go to FAULT state if the telemetry client exits prematurely."""
         await self.telemetry_client_process.wait()
-        self.fail("Telemetry process exited prematurely")
+        await self.fault(
+            code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR,
+            report="Telemetry process exited prematurely",
+        )
 
     async def read_loop(self):
         """Read and process replies from the low-level controller."""
@@ -1562,6 +1577,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def start(self):
         await super().start()
+        self.has_modern_connected_event = hasattr(self.evt_connected.data, "connected")
+        if self.has_modern_connected_event:
+            await self.evt_connected.set_write(connected=self.connected)
         if self.simulation_mode == 1 and self.run_mock_controller:
             # Run the mock controller using random ports;
             # read the ports to set command_port and telemetry_port.

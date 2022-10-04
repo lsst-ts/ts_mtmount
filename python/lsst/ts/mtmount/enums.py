@@ -195,7 +195,7 @@ class CommandCode(enum.IntEnum):
 class CscErrorCode(enum.IntEnum):
     COULD_NOT_CONNECT = 1  # Could not connect to low-level controller
     CONNECTION_LOST = 2  # Lost connection to low-level controller
-    TELEMETRY_CLIENT_ERROR = 3  # Could not start telemetry client
+    TELEMETRY_CLIENT_ERROR = 3  # Telemetry client failed
     MOCK_CONTROLLER_ERROR = 98
     INTERNAL_ERROR = 99
 
