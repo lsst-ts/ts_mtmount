@@ -291,6 +291,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
             simulation_mode=simulation_mode,
         )
 
+        # TODO DM-36879: remove this and rely on GetActualSettings
+        # to return the data.
+        self.evt_cameraCableWrapControllerSettings.set(
+            maxCmdVelocity=5.6,
+            minCmdPosition=-90,
+            maxCmdPosition=90,
+        )
+
         # Dict of system ID: SystemStateInfo;
         # this provides useful information for handling replies and also
         # initializes the relevant fields of the events. Initialization is
@@ -598,7 +606,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
             await self.send_command(commands.StateInfo(), do_lock=True)
-            await self.send_command(commands.GetActualSettings(), do_lock=True)
+            # TODO DM-36879: enable this when the TMA command works:
+            if False:
+                await self.send_command(commands.GetActualSettings(), do_lock=True)
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
             err_msg = "Could not connect to the low-level controller: "
