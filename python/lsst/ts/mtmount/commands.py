@@ -59,6 +59,7 @@ __all__ = [
     "ElevationResetAlarm",
     "ElevationStop",
     "ElevationTrackTarget",
+    "GetActualSettings",
     "Heartbeat",
     "MainAxesPowerSupplyPower",
     "MainAxesPowerSupplyResetAlarm",
@@ -515,6 +516,10 @@ class ElevationTrackTarget(Command):
     )
 
 
+class GetActualSettings(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.GET_ACTUAL_SETTINGS)
+
+
 class Heartbeat(Command):
     field_infos = make_command_field_infos(enums.CommandCode.HEARTBEAT)
 
@@ -776,6 +781,7 @@ Commands = (
     ElevationResetAlarm,
     ElevationStop,
     ElevationTrackTarget,
+    GetActualSettings,
     Heartbeat,
     MainAxesPowerSupplyPower,
     MainAxesPowerSupplyResetAlarm,
