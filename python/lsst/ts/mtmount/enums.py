@@ -184,6 +184,7 @@ class CommandCode(enum.IntEnum):
     TRANSFER_FUNCTION_ELEVATION_EXCITATION = 2302
     # Get actual set of settings to send them to TCS.
     ASK_FOR_SET_OF_SETTINGS = 2401
+    GET_ACTUAL_SETTINGS = 2402
     APPLY_SETTINGS_SET = 2403
     STATE_INFO = 2502
     # Send this once a second or so. It will get no ack of any kind.
