@@ -598,6 +598,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
             await self.send_command(commands.StateInfo(), do_lock=True)
+            await self.send_command(commands.GetActualSettings(), do_lock=True)
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
             err_msg = "Could not connect to the low-level controller: "
