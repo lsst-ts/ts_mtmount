@@ -68,6 +68,14 @@ INITIAL_POSITION = {
     System.CAMERA_CABLE_WRAP: 0,
 }
 
+# Set of commands that are allowed when not the commander
+ALWAYS_ALLOWED_COMMANDS = {
+    enums.CommandCode.ASK_FOR_COMMAND,
+    enums.CommandCode.ASK_FOR_SET_OF_SETTINGS,
+    enums.CommandCode.GET_ACTUAL_SETTINGS,
+    enums.CommandCode.STATE_INFO,
+}
+
 
 def make_reply_dict(id, **parameters):
     """Make a reply dict."""
@@ -271,6 +279,7 @@ class Controller:
             enums.CommandCode.BOTH_AXES_RESET_ALARM: self.do_both_axes_reset_alarm,
             enums.CommandCode.BOTH_AXES_STOP: self.do_both_axes_stop,
             enums.CommandCode.BOTH_AXES_TRACK_TARGET: self.do_both_axes_track_target,
+            enums.CommandCode.GET_ACTUAL_SETTINGS: self.do_get_actual_settings,
             enums.CommandCode.MAIN_CABINET_THERMAL_RESET_ALARM: self.do_main_cabinet_thermal_reset_alarm,
             enums.CommandCode.MIRROR_COVER_SYSTEM_DEPLOY: self.do_mirror_cover_system_deploy,
             enums.CommandCode.MIRROR_COVER_SYSTEM_RETRACT: self.do_mirror_cover_system_retract,
@@ -901,9 +910,9 @@ class Controller:
             # TODO DM-35226: go to fault if heartbeat is not seen often enough
             return
 
-        if self.commander != enums.Source.CSC and command.command_code not in (
-            enums.CommandCode.ASK_FOR_COMMAND,
-            enums.CommandCode.STATE_INFO,
+        if (
+            self.commander != enums.Source.CSC
+            and command.command_code not in ALWAYS_ALLOWED_COMMANDS
         ):
             await self.write_cmd_rejected(
                 command=command,
@@ -1179,6 +1188,18 @@ class Controller:
             ),
         )
 
+    def do_get_actual_settings(self, command):
+        """Handle the GET_ACTUAL_SETTINGS command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+        """
+        task = asyncio.create_task(self.write_detailed_settings_applied())
+        timeout = 1
+        return timeout, task
+
     def do_main_cabinet_thermal_reset_alarm(self, command):
         """Handle the MAIN_CABINET_THERMAL_RESET_ALARM command.
 
@@ -1444,8 +1465,17 @@ class Controller:
                 )
             )
 
+    async def write_detailed_settings_applied(self):
+        """Write the DETAILED_SETTINGS_APPLIED event."""
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.DETAILED_SETTINGS_APPLIED,
+                **self.detailed_settings,
+            )
+        )
+
     async def write_unmocked_events(self):
-        """Write all events that are not output in the normal course of
+        """Write most events that are not output in the normal course of
         controlling mock controller.
 
         This includes:
@@ -1455,6 +1485,9 @@ class Controller:
         * Devices the CSC is not allowed to control,
           including the deployable platform and elevation locking pin.
         * The main cabinet thermal controller.
+
+        It does not include DETAILED_SETTINGS_APPLIED, because that is
+        retrieved by a specific command.
         """
         await self.write_commander()
 
@@ -1466,13 +1499,6 @@ class Controller:
             make_reply_dict(
                 id=enums.ReplyId.AVAILABLE_SETTINGS,
                 sets=available_settings_formatted,
-            )
-        )
-
-        await self.write_reply(
-            make_reply_dict(
-                id=enums.ReplyId.DETAILED_SETTINGS_APPLIED,
-                **self.detailed_settings,
             )
         )
 

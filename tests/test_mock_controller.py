@@ -972,62 +972,19 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_read_loop(self):
         await self.check_command_sequence(use_read_loop=True)
 
-    async def test_state_info_command(self):
-        # The STATE_INFO command is accepted regardless of the commander.
-
+    async def test_get_actual_settings(self):
+        # Check that the GET_ACTUAL_SETTINGS command is accepted
+        # regardless of commander by setting a different commander.
         async with self.make_controller(commander=mtmount.Source.HHD):
-            # Wait for one iteration of telemetry,
-            # to avoid duplicate message.
-            await asyncio.wait_for(
-                self.controller.wait_telemetry(), timeout=STD_TIMEOUT
-            )
-
             replies = await self.run_command(
-                command=mtmount.commands.StateInfo(),
+                command=mtmount.commands.GetActualSettings(),
                 return_all_replies=True,
                 use_read_loop=True,
             )
-            limits_systems = []
-            motion_state_axes = []
-            chiller_state_systems = []
-            motion_controller_state_systems = []
-            power_state_systems = []
+            saw_detailed_settings_applied = False
             for reply in replies:
-                if reply.id == mtmount.ReplyId.AVAILABLE_SETTINGS:
-                    assert len(reply.sets) == len(self.controller.available_settings)
-
-                    for data, desired in zip(
-                        reply.sets, self.controller.available_settings
-                    ):
-                        assert data.keys() == desired.keys()
-                        for key in ("name", "description"):
-                            assert isinstance(data[key], str)
-                            assert data[key] == desired[key]
-                        for key in ("createdDate", "modifiedDate"):
-                            assert data[key] == desired[key].iso
-                        assert desired["modifiedDate"] >= desired["createdDate"]
-
-                elif reply.id == mtmount.ReplyId.AXIS_MOTION_STATE:
-                    motion_state_axes.append(reply.axis)
-                    assert reply.state == AxisMotionState.STOPPED
-                elif reply.id == mtmount.ReplyId.AZIMUTH_TOPPLE_BLOCK:
-                    assert not reply.reverse
-                    assert not reply.forward
-                elif reply.id == mtmount.ReplyId.CHILLER_STATE:
-                    chiller_state_systems.append(reply.system)
-                    nelts = self.controller.chiller_state_nelts[reply.system]
-                    desired_trackAmbient = [True] * nelts
-                    desired_temperature = [self.controller.ambient_temperature] * nelts
-                    assert reply.trackAmbient == desired_trackAmbient
-                    numpy.testing.assert_allclose(
-                        reply.temperature, desired_temperature
-                    )
-                elif reply.id == mtmount.ReplyId.COMMANDER:
-                    assert reply.actualCommander == mtmount.Source.HHD
-                elif reply.id == mtmount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE:
-                    assert reply.state == DeployableMotionState.RETRACTED
-                    assert reply.elementsState == [DeployableMotionState.RETRACTED] * 2
-                elif reply.id == mtmount.ReplyId.DETAILED_SETTINGS_APPLIED:
+                if reply.id == mtmount.ReplyId.DETAILED_SETTINGS_APPLIED:
+                    saw_detailed_settings_applied = True
                     # Make a dict that only has the parameters
                     # (no "id" or "timestamp" field)
                     reply_dict = vars(reply)
@@ -1104,6 +1061,63 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                             axis_settings["SoftmotionTrackingMaxAcceleration"]
                             == axis_actuator.max_acceleration
                         )
+            assert saw_detailed_settings_applied
+
+    async def test_state_info_command(self):
+        # Check that the STATE_INFO command is accepted
+        # regardless of commander by setting a different commander.
+        async with self.make_controller(commander=mtmount.Source.HHD):
+            # Wait for one iteration of telemetry,
+            # to avoid duplicate message.
+            await asyncio.wait_for(
+                self.controller.wait_telemetry(), timeout=STD_TIMEOUT
+            )
+
+            replies = await self.run_command(
+                command=mtmount.commands.StateInfo(),
+                return_all_replies=True,
+                use_read_loop=True,
+            )
+            limits_systems = []
+            motion_state_axes = []
+            chiller_state_systems = []
+            motion_controller_state_systems = []
+            power_state_systems = []
+            for reply in replies:
+                if reply.id == mtmount.ReplyId.AVAILABLE_SETTINGS:
+                    assert len(reply.sets) == len(self.controller.available_settings)
+
+                    for data, desired in zip(
+                        reply.sets, self.controller.available_settings
+                    ):
+                        assert data.keys() == desired.keys()
+                        for key in ("name", "description"):
+                            assert isinstance(data[key], str)
+                            assert data[key] == desired[key]
+                        for key in ("createdDate", "modifiedDate"):
+                            assert data[key] == desired[key].iso
+                        assert desired["modifiedDate"] >= desired["createdDate"]
+
+                elif reply.id == mtmount.ReplyId.AXIS_MOTION_STATE:
+                    motion_state_axes.append(reply.axis)
+                    assert reply.state == AxisMotionState.STOPPED
+                elif reply.id == mtmount.ReplyId.AZIMUTH_TOPPLE_BLOCK:
+                    assert not reply.reverse
+                    assert not reply.forward
+                elif reply.id == mtmount.ReplyId.CHILLER_STATE:
+                    chiller_state_systems.append(reply.system)
+                    nelts = self.controller.chiller_state_nelts[reply.system]
+                    desired_trackAmbient = [True] * nelts
+                    desired_temperature = [self.controller.ambient_temperature] * nelts
+                    assert reply.trackAmbient == desired_trackAmbient
+                    numpy.testing.assert_allclose(
+                        reply.temperature, desired_temperature
+                    )
+                elif reply.id == mtmount.ReplyId.COMMANDER:
+                    assert reply.actualCommander == mtmount.Source.HHD
+                elif reply.id == mtmount.ReplyId.DEPLOYABLE_PLATFORMS_MOTION_STATE:
+                    assert reply.state == DeployableMotionState.RETRACTED
+                    assert reply.elementsState == [DeployableMotionState.RETRACTED] * 2
 
                 elif reply.id == mtmount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE:
                     assert reply.state == ElevationLockingPinMotionState.UNLOCKED
