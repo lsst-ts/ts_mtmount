@@ -96,7 +96,6 @@ class MTMountCommander(salobj.CscCommander):
             for i, (name, info) in enumerate(ramp_arg_info.items())
         }
         args = RampArgs(**arg_dict)
-        print("args=", args)
         self.ramp_count += 1
         self.tracking_task = asyncio.create_task(
             self._ramp(ramp_count=self.ramp_count, ramp_args=args)
