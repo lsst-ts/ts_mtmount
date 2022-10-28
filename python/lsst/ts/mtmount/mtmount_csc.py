@@ -909,6 +909,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         futures = command_futures.CommandFutures()
         self.command_dict[command.sequence_id] = futures
+        print(f"send command {command.encode()} at {utils.current_tai():0.2f}")
         self.writer.write(command.encode())
         await self.writer.drain()
         timeout = await asyncio.wait_for(futures.ack, self.config.ack_timeout)
