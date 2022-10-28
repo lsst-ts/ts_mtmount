@@ -743,7 +743,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 # (commands.MainAxesPowerSupplyResetAlarm(), False),
                 # (commands.MirrorCoverLocksResetAlarm(), False),
                 # (commands.MirrorCoversResetAlarm(), False),
-                # (commands.CameraCableWrapResetAlarm(), False),
+                (commands.CameraCableWrapResetAlarm(), False),
                 # Disabled for 2022-10 commissioning
                 # (commands.TopEndChillerPower(on=True), True),
                 # (commands.TopEndChillerTrackAmbient(
