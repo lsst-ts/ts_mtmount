@@ -230,34 +230,9 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         llv_data = dict(topicID=topic_id)
         field_dict = mtmount.TELEMETRY_MAP[topic_id][1]
         for key, value in dds_data.items():
-            llv_key = field_dict[key]
-            self.convert_dds_item_to_llv(
-                llv_data=llv_data,
-                llv_key=llv_key,
-                value=value,
-            )
-        llv_data["topicID"] = topic_id
+            func = field_dict[key]
+            llv_data.update(func.llv_dict_from_sal_value(value))
         return llv_data
-
-    def convert_dds_item_to_llv(self, llv_data, llv_key, value):
-        """Convert one telemetry item from DDS to low-level controller format.
-
-        This usually adds a prefix and in some cases modifies the value.
-
-        Parameters
-        ----------
-        llv_data : dict
-            Dict of low-level data. Modified in place.
-        llv_key : `str`
-            Low-level field name (or field name prefix for array values).
-        value : `str`
-            DDS value.
-        """
-        if isinstance(value, list):
-            for i, item in enumerate(value):
-                llv_data[llv_key + str(i + 1)] = item
-        else:
-            llv_data[llv_key] = value
 
     def make_elaz_drives_dds_data(self, naxes):
         """Make telemetry data for elevation or azimuth drives.

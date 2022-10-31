@@ -30,7 +30,6 @@ import argparse
 import asyncio
 import json
 import logging
-import math
 import signal
 
 from lsst.ts import salobj
@@ -76,8 +75,8 @@ class TelemetryTopicHandler:
         if self.preprocessor is not None:
             self.preprocessor(llv_data)
         sal_data = {
-            sal_name: llv_data[llv_name]
-            for sal_name, llv_name in self.field_dict.items()
+            sal_name: func.sal_value_from_llv_dict(llv_data)
+            for sal_name, func in self.field_dict.items()
         }
         await self.topic.set_write(**sal_data)
 
@@ -289,42 +288,6 @@ class TelemetryClient:
         except Exception:
             self.log.exception("read_loop failed; giving up.")
             asyncio.ensure_future(self.close())
-
-    def _convert_drive_measurements(self, llv_data, keys, ndrives):
-        """Convert per-drive measurements or other items numbered from 1
-
-        Parameters
-        ----------
-        llv_data : dict
-            Data from the low-level controller. Modified in place.
-        keys : list [str]
-            Prefix for named items; full names have the drive number appended.
-            For example "azCurrent" refers to "azCurrent1" - "azCurrent16".
-        ndrives : int
-            The number of drives.
-        """
-        for key in keys:
-            llv_data[key] = [
-                llv_data.pop(f"{key}{n}", math.nan) for n in range(1, ndrives + 1)
-            ]
-
-    def _preprocess_azimuthDrives(self, llv_data):
-        """Preprocess status for the tel_azimuthDrives topic."""
-        self._convert_drive_measurements(
-            llv_data=llv_data, keys=["azCurrent"], ndrives=16
-        )
-
-    def _preprocess_elevationDrives(self, llv_data):
-        """Preprocess status for the tel_elevationDrives topic."""
-        self._convert_drive_measurements(
-            llv_data=llv_data, keys=["elCurrent"], ndrives=12
-        )
-
-    def _preprocess_cameraCableWrap(self, llv_data):
-        """Preprocess status for the tel_cameraCableWrap topic."""
-        self._convert_drive_measurements(
-            llv_data=llv_data, keys=["torquePercentage"], ndrives=2
-        )
 
 
 def run_mtmount_telemetry_client():
