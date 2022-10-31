@@ -44,6 +44,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger()
         self.log.setLevel(logging.INFO)
         self.log.addHandler(logging.StreamHandler())
+        salobj.set_random_lsst_dds_partition_prefix()
 
     @contextlib.asynccontextmanager
     async def make_all(self, fail_if_end_early):
