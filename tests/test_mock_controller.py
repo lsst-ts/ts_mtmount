@@ -68,7 +68,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         """Make a mock controller as self.controller.
 
         Parameters
-        ----------
+        ----------if name in ("actualPosition
         commander : `Source`, optional
             Who initially has command. Defaults to `Source.CSC`,
             so tests need not issue the ``ASK_FOR_COMMAND`` command
@@ -692,13 +692,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             ]
             for i in (0, 1):
                 for name in (
-                    "angleActual",
-                    "angleSet",
-                    "velocityActual",
-                    "velocitySet",
-                    "torqueActual",
+                    "actualPosition",
+                    "demandPosition",
+                    "actualVelocity",
+                    "demandVelocity",
+                    "actualTorque",
                 ):
-                    if name.startswith("angle"):
+                    if name in {"actualPosition", "demandPosition"}:
                         desired_value = end_positions[i]
                     else:
                         desired_value = 0
@@ -1396,13 +1396,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 tai0 = utils.current_tai() - 0.1
                 axis_telem = await self.next_telemetry(topic_id)
                 for name in (
-                    "angleActual",
-                    "angleSet",
-                    "velocityActual",
-                    "velocitySet",
-                    "torqueActual",
+                    "actualPosition",
+                    "demandPosition",
+                    "actualVelocity",
+                    "demandVelocity",
+                    "actualTorque",
                 ):
-                    if name.startswith("angle"):
+                    if name in {"actualPosition", "demandPosition"}:
                         desired_value = device.actuator.path.at(tai0).position
                     else:
                         desired_value = 0
@@ -1415,10 +1415,10 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 mtmount.TelemetryTopicId.CAMERA_CABLE_WRAP
             )
             for name in (
-                "angle",
-                "speed",
-                "torquePercentage1",
-                "torquePercentage2",
+                "actualPosition",
+                "actualVelocity",
+                "actualTorquePercentage1",
+                "actualTorquePercentage2",
             ):
                 assert ccw_telem[name] == 0
             assert ccw_telem["timestamp"] > tai0

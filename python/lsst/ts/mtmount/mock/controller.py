@@ -469,22 +469,22 @@ class Controller:
             torque_percent = 100 * actual.acceleration / actuator.max_acceleration
             data_dict = dict(
                 topicID=topic_id,
-                angle=actual.position,
-                speed=actual.velocity,
-                torquePercentage1=torque_percent,
-                torquePercentage2=torque_percent,
+                actualPosition=actual.position,
+                actualVelocity=actual.velocity,
+                actualTorquePercentage1=torque_percent,
+                actualTorquePercentage2=torque_percent,
                 timestamp=tai,
             )
         else:
             data_dict = dict(
                 topicID=topic_id,
-                angleActual=actual.position,
-                angleSet=target.position,
-                velocityActual=actual.velocity,
-                velocitySet=target.velocity,
-                # Torque is arbitrary; I have no idea
-                # what realistic values are.
-                torqueActual=actual.acceleration / 10,
+                actualPosition=actual.position,
+                demandPosition=target.position,
+                actualVelocity=actual.velocity,
+                demandVelocity=target.velocity,
+                # Torque is in Nm but I have little idea what realistic
+                # values are, so output something vaguely plausible
+                actualTorque=actual.acceleration / 10,
                 timestamp=tai,
             )
         if self.telemetry_server.connected:

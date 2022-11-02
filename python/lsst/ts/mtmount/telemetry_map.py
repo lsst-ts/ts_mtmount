@@ -22,7 +22,6 @@
 __all__ = ["TELEMETRY_MAP"]
 
 import abc
-import re
 
 import yaml
 
@@ -30,87 +29,75 @@ import yaml
 # to SAL telemetry and back.
 #
 # RAW_TELEMETRY_MAP is a dict of:
-# ``topic_id: [sal_topic_name, field_translation_dict]``, where:
+# ``topic_id: [sal_topic_name, field_len_dict]``, where:
 #
 # * ``topic_id`` is the low-level controller topic ID (an integer).
 #   These IDs must match the TopicID entries in the telemetry config file.
 # * ``sal_topic_name`` is the SAL telemetry topic name.
-# * ``field_translation_dict`` is a dict of
-#   ``sal_field_name: [num_elements, llv_name_template]``,
-#   information used to map between one SAL telemetry field and one or more
-#   low-level controller fields, where:
+# * ``field_len_dict`` is a dict of ``field_name: num_elements``
+# * ``num_elements`` is the number of array elements of that SAL field
+#   (1 for a scalar).
 #
-#   * ``sal_field_name`` is the name of a SAL telemetry field.
-#   * ``num_elements`` it the number of array elements of that SAL field.
-#     1 indicates a scalar, and num_elements must be ≥ 1.
-#   * ``llv_name_template`` is a template for the name of the low-level
-#     controller field(s), with a format that depends on num_elements:
+# Note: in order to simplify the code, there is a 1:1 mapping between:
 #
-#     * if ``num_elements = 1``: ``llv_name_template`` is a low-level
-#       telemetry field name.
-#     * if ``num_elements > 1``: ``llv_name_template`` is a template string
-#       of the form "field_name_prefix{0:d}", or similar, that when formatted
-#       with a single integer argument whose value ranges from 1
-#       through num_elements, produces a low-level telemetry field name.
-#
-# Note: in order to simplify the code, there is a 1:1 mapping between
-# low-level controller topic IDs and SAL telemetry topics.
+# * Low-level controller topic IDs and SAL telemetry topics.
+# * Low-level controller telemetry field names and SAL field names.
 RAW_TELEMETRY_MAP = yaml.safe_load(
     """
 
 6: # fields are in flux
 - azimuth
-- actualPosition: [1, actualPosition]
-  demandPosition: [1, demandPosition]
-  actualVelocity: [1, actualVelocity]
-  demandVelocity: [1, demandVelocity]
-  actualTorque: [1, actualTorque]
-  timestamp: [1, timestamp]
+- actualPosition: 1
+  demandPosition: 1
+  actualVelocity: 1
+  demandVelocity: 1
+  actualTorque: 1
+  timestamp: 1
 
 5:
 - azimuthDrives
-- current: [16, "current{0:d}"]
-  timestamp: [1, timestamp]
+- current: 16
+  timestamp: 1
 
 # 4:
 # - azimuthDrivesThermal
-# - actualSurfaceTemperature: [16, "actualSurfaceTemperature{0:d}"]
-#   demandTemperature: [4, "demandTemperature{0:d}"]
-#   actualValvePosition: [4, "actualValvePosition{0:d}"]
-#   demandValvePosition: [4, "demandValvePosition{0:d}"]
-#   timestamp: [1, timestamp]
+# - actualSurfaceTemperature: 16
+#   demandTemperature: 4
+#   actualValvePosition: 4
+#   demandValvePosition: 4
+#   timestamp: 1
 
 15: # fields are in flux
 - elevation
-- actualPosition: [1, actualPosition]
-  demandPosition: [1, demandPosition]
-  actualVelocity: [1, actualVelocity]
-  demandVelocity: [1, demandVelocity]
-  actualTorque: [1, actualTorque]
-  timestamp: [1, timestamp]
+- actualPosition: 1
+  demandPosition: 1
+  actualVelocity: 1
+  demandVelocity: 1
+  actualTorque: 1
+  timestamp: 1
 
 14:
 - elevationDrives
-- current: [12, "current{0:d}"]
-  timestamp: [1, timestamp]
+- current: 12
+  timestamp: 1
 
 # 13:
 # - elevationDrivesThermal
-# - actualSurfaceTemperature: [12, "actualSurfaceTemperature{0:d}"]
-#   demandTemperature: [2, "demandTemperature{0:d}"]
-#   actualValvePosition: [2, "actualValvePosition{0:d}"]
-#   demandValvePosition: [2, "demandValvePosition{0:d}"]
-#   timestamp: [1, timestamp]
+# - actualSurfaceTemperature: 12
+#   demandTemperature: 2
+#   actualValvePosition: 2
+#   demandValvePosition: 2
+#   timestamp: 1
 
 8:
 - cameraCableWrap
   # Note: the low-level controller reports consolidated angle and speed
   # and drive-specific angles and speeds. At present MTMount
   # only reports the consolidated values.
-- actualPosition: [1, actualPosition]
-  actualVelocity: [1, actualVelocity]
-  actualTorquePercentage: [2, "actualTorquePercentage{0:d}"]
-  timestamp: [1, timestamp]
+- actualPosition: 1
+  actualVelocity: 1
+  actualTorquePercentage: 2
+  timestamp: 1
 """
 )
 
@@ -123,13 +110,13 @@ class BaseTelemetryFieldFunctor(abc.ABC):
     ----------
     num_elements : `int`
         The number of elements in the low-level telemetry.
-    llv_name_template : `str`
+    field_name : `str`
         Name template for low-level controller telemetry fields.
     """
 
-    def __init__(self, num_elements, llv_name_template):
+    def __init__(self, num_elements, field_name):
         self.num_elements = num_elements
-        self.llv_name_template = llv_name_template
+        self.field_name = field_name
 
     @abc.abstractmethod
     def sal_value_from_llv_dict(self, data_dict):
@@ -138,8 +125,9 @@ class BaseTelemetryFieldFunctor(abc.ABC):
         Parameters
         ----------
         data_dict : `dict`
-            Dict of llv_field_name: value. This must include all fields
-            needed by this SAL field; other entries are ignored.
+            Dict of field_name: value. For an array, the dict
+            must contain all fields that belong in that array.
+            For a scalar, this must include just the one field.
         """
         raise NotImplementedError()
 
@@ -164,28 +152,26 @@ class ScalarTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
     ----------
     num_elements : `int`
         The number of elements in the low-level telemetry; must be 1
-    llv_name_template : `str`
+    field_name : `str`
         The name of the low-level controller telemetry field.
         Must not contain "{" or "}".
 
     Raises
     ------
     ValueError
-        If num_elements != 1 or llv_name_template contains "{" or "}".
+        If num_elements != 1.
     """
 
-    def __init__(self, num_elements, llv_name_template):
+    def __init__(self, num_elements, field_name):
         if num_elements != 1:
             raise ValueError(f"{num_elements=} must be 1")
-        if "{" in llv_name_template or "}" in llv_name_template:
-            raise ValueError(f"{llv_name_template=} must not contain {{ or }}")
-        super().__init__(num_elements=num_elements, llv_name_template=llv_name_template)
+        super().__init__(num_elements=num_elements, field_name=field_name)
 
     def sal_value_from_llv_dict(self, data_dict):
-        return data_dict[self.llv_name_template]
+        return data_dict[self.field_name]
 
     def llv_dict_from_sal_value(self, value):
-        return {self.llv_name_template: value}
+        return {self.field_name: value}
 
 
 class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
@@ -196,28 +182,25 @@ class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
     ----------
     num_elements : `int`
         The number of elements in the low-level telemetry; must be > 1
-    llv_name_template : `str`
+    field_name : `str`
         Template for the name of the low-level controller telemetry field.
         Must contain one template section that takes an integer.
 
     Raises
     ------
     ValueError
-        If num_elements <= 1 or llv_name_template.format(1) raises.
+        If num_elements <= 1.
     """
 
-    def __init__(self, num_elements, llv_name_template):
+    def __init__(self, num_elements, field_name):
         if num_elements <= 1:
             raise ValueError(f"{num_elements=} must be > 1")
-        try:
-            llv_name_template.format(1)
-        except Exception as e:
-            raise ValueError(f"{llv_name_template=} is not a usable template: {e!r}")
-        super().__init__(num_elements=num_elements, llv_name_template=llv_name_template)
+        self.field_name_template = f"{field_name}{{0:d}}"
+        super().__init__(num_elements=num_elements, field_name=field_name)
 
     def sal_value_from_llv_dict(self, data_dict):
         return [
-            data_dict[self.llv_name_template.format(i)]
+            data_dict[self.field_name_template.format(i)]
             for i in range(1, self.num_elements + 1)
         ]
 
@@ -227,7 +210,7 @@ class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
                 f"{value=} must contain exactly {self.num_elements} elements"
             )
         return {
-            self.llv_name_template.format(i + 1): item for i, item in enumerate(value)
+            self.field_name_template.format(i + 1): item for i, item in enumerate(value)
         }
 
 
@@ -236,9 +219,9 @@ class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
 #: * ``topic_id`` is the integer identifier of the low-level telemetry topic.
 #: * ``sal_topic_name`` is the SAL telemetry topic name
 #: * ``field_extraction_func_dict`` is a dict of
-#:   ``sal_field_name``: ``field_extraction_func``, where:
+#:   ``field_name``: ``field_extraction_func``, where:
 #:
-#:   * ``sal_field_name`` is the name of the SAL telemetry topic field
+#:   * ``field_name`` is the name of the SAL telemetry topic field
 #:   * ``field_extraction_func`` is an instance of `BaseTelemetryFieldFunctor`
 #:     which can convert between SAL and low-level data for that field.
 TELEMETRY_MAP = dict()
@@ -248,30 +231,20 @@ for topic_id, topic_data in RAW_TELEMETRY_MAP.items():
             f"cannot parse {topic_id=}: {topic_data=} must have two elements"
         )
     sal_topic_name = topic_data[0]
-    field_translation_dict = topic_data[1]
+    field_len_dict = topic_data[1]
     field_extraction_func_dict = dict()
-    for (
-        sal_field_name,
-        num_elements_llv_name_template,
-    ) in field_translation_dict.items():
+    for (field_name, num_elements) in field_len_dict.items():
         try:
-            num_elements, llv_name_template = num_elements_llv_name_template
-            # Make sure the template can handle 1
-            llv_name_template.format(1)
             if num_elements == 1:
-
                 field_extraction_func = ScalarTelemetryFieldFunctor(
-                    num_elements=num_elements, llv_name_template=llv_name_template
+                    num_elements=num_elements, field_name=field_name
                 )
-
             else:
-                num_elements_llv_name_template[1] = re.compile(f"^{llv_name_template}$")
-
                 field_extraction_func = ArrayTelemetryFieldFunctor(
-                    num_elements=num_elements, llv_name_template=llv_name_template
+                    num_elements=num_elements, field_name=field_name
                 )
 
-            field_extraction_func_dict[sal_field_name] = field_extraction_func
+            field_extraction_func_dict[field_name] = field_extraction_func
         except Exception as e:
-            raise ValueError(f"Cannot parse {topic_id=} {sal_field_name=}: {e!r}")
+            raise ValueError(f"Cannot parse {topic_id=} {field_name=}: {e!r}")
     TELEMETRY_MAP[topic_id] = [sal_topic_name, field_extraction_func_dict]
