@@ -48,37 +48,37 @@ TELEMETRY_MAP = yaml.safe_load(
 # to report "azimuthDrives" and "elevationDrives".
 # 6: # fields are in flux
 # - azimuth
-# - actualPosition: angleActual
-#   demandPosition: angleSet
-#   actualVelocity: velocityActual
-#   demandVelocity: velocitySet
-#   actualTorque: torqueActual
+# - actualPosition: actualPosition
+#   demandPosition: demandPosition
+#   actualVelocity: actualVelocity
+#   demandVelocity: demandVelocity
+#   actualTorque: actualTorque
 #   timestamp: timestamp
 
 # 5:
 # - azimuthDrives
-# - current: azCurrent
+# - current: current
 #   timestamp: timestamp
 
 # 15: # fields are in flux
 # - elevation
-# - actualPosition: angleActual
-#   demandPosition: angleSet
-#   actualVelocity: velocityActual
-#   demandVelocity: velocitySet
-#   actualTorque: torqueActual
+# - actualPosition: actualPosition
+#   demandPosition: demandPosition
+#   actualVelocity: actualVelocity
+#   demandVelocity: demandVelocity
+#   actualTorque: actualTorque
 #   timestamp: timestamp
 
 # 14:
 # - elevationDrives
-# - current: elCurrent
+# - current: current
 #   timestamp: timestamp
 
 8:
 - cameraCableWrap
-- actualPosition: angle
-  actualVelocity: speed
-  actualTorquePercentage: torquePercentage
+- actualPosition: actualPosition
+  actualVelocity: actualVelocity
+  actualTorquePercentage: actualTorquePercentage
   timestamp: timestamp
 """
 )
