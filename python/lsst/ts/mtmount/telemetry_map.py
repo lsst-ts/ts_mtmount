@@ -60,47 +60,56 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 
 6: # fields are in flux
 - azimuth
-- actualPosition: [1, angleActual]
-  demandPosition: [1, angleSet]
-  actualVelocity: [1, velocityActual]
-  demandVelocity: [1, velocitySet]
-  actualTorque: [1, torqueActual]
+- actualPosition: [1, actualPosition]
+  demandPosition: [1, demandPosition]
+  actualVelocity: [1, actualVelocity]
+  demandVelocity: [1, demandVelocity]
+  actualTorque: [1, actualTorque]
   timestamp: [1, timestamp]
 
 5:
 - azimuthDrives
-- current: [16, "currentDrive{0:d}"]
+- current: [16, "current{0:d}"]
   timestamp: [1, timestamp]
 
 # 4:
 # - azimuthDrivesThermal
-# - surfaceTemperature: [16, "azimuthSurfaceTemperatureDrive{0:d}"]
-#   temperatureSetPoint: [4, "(azimuthSurfaceTemperatureSetpointGroup){0:d}"]
-#   # what is azimuthValveFeedbackGroup1? do we publish it?
+# - actualSurfaceTemperature: [16, "actualSurfaceTemperature{0:d}"]
+#   demandTemperature: [4, "demandTemperature{0:d}"]
+#   actualValvePosition: [4, "actualValvePosition{0:d}"]
+#   demandValvePosition: [4, "demandValvePosition{0:d}"]
 #   timestamp: [1, timestamp]
 
 15: # fields are in flux
 - elevation
-- actualPosition: [1, angleActual]
-  demandPosition: [1, angleSet]
-  actualVelocity: [1, velocityActual]
-  demandVelocity: [1, velocitySet]
-  actualTorque: [1, torqueActual]
+- actualPosition: [1, actualPosition]
+  demandPosition: [1, demandPosition]
+  actualVelocity: [1, actualVelocity]
+  demandVelocity: [1, demandVelocity]
+  actualTorque: [1, actualTorque]
   timestamp: [1, timestamp]
 
 14:
 - elevationDrives
-- current: [12, "currentDrive{0:d}"]
+- current: [12, "current{0:d}"]
   timestamp: [1, timestamp]
+
+# 13:
+# - elevationDrivesThermal
+# - actualSurfaceTemperature: [12, "actualSurfaceTemperature{0:d}"]
+#   demandTemperature: [2, "demandTemperature{0:d}"]
+#   actualValvePosition: [2, "actualValvePosition{0:d}"]
+#   demandValvePosition: [2, "demandValvePosition{0:d}"]
+#   timestamp: [1, timestamp]
 
 8:
 - cameraCableWrap
   # Note: the low-level controller reports consolidated angle and speed
   # and drive-specific angles and speeds. At present MTMount
   # only reports the consolidated values.
-- actualPosition: [1, angle]
-  actualVelocity: [1, speed]
-  actualTorquePercentage: [2, "torquePercentage{0:d}"]
+- actualPosition: [1, actualPosition]
+  actualVelocity: [1, actualVelocity]
+  actualTorquePercentage: [2, "actualTorquePercentage{0:d}"]
   timestamp: [1, timestamp]
 """
 )
