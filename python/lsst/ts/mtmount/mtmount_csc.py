@@ -1441,7 +1441,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             System.ELEVATION: (self.evt_elevationLimits, 1),
             System.AZIMUTH: (self.evt_azimuthLimits, 1),
             System.CAMERA_CABLE_WRAP: (self.evt_cameraCableWrapLimits, 1),
-        }.get(reply.system, None)
+        }.get(reply.system, (None, 1))
         if topic is None:
             try:
                 reply.system = System(reply.system)
