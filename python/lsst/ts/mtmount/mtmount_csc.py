@@ -753,6 +753,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 (commands.MainAxesPowerSupplyPower(on=True), True),
                 # Disabled for 2022-10 commissioning
                 # (commands.OilSupplySystemPower(on=True), True),
+                # Cannot successfully reset the axes alarms
+                # until the main power supply is on.
+                # Sometimes a second reset is needed for the main axes
+                # (a known bug in the TMA as of 2022-11-03).
+                (commands.BothAxesResetAlarm(), True),
                 (commands.BothAxesResetAlarm(), True),
                 (commands.BothAxesPower(on=True), True),
                 (commands.CameraCableWrapPower(on=True), True),
