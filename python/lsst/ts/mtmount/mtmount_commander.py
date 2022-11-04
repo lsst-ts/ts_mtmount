@@ -26,12 +26,14 @@ import dataclasses
 
 from lsst.ts import salobj, simactuators, utils
 
+# Standard timeout for CSC commands (seconds)
 STD_TIMEOUT = 2
 
-TRACK_INTERVAL = 0.1  # interval between tracking updates (seconds)
+# How far in advance to set the time field of tracking commands (seconds).
+TRACK_ADVANCE_TIME = 0.15
 
-# How far in advance to set the time field of tracking commands (seconds)
-TRACK_ADVANCE_TIME = 0.05
+# Interval between tracking commands (seconds). 0.05 matches MTPtg.
+TRACK_INTERVAL = 0.05
 
 
 @dataclasses.dataclass
@@ -95,9 +97,7 @@ class MTMountCommander(salobj.CscCommander):
         }
         args = RampArgs(**arg_dict)
         self.ramp_count += 1
-        self.tracking_task = asyncio.create_task(
-            self._ramp(ramp_count=self.ramp_count, ramp_args=args)
-        )
+        self.tracking_task = asyncio.create_task(self._ramp(ramp_args=args))
 
     async def do_stop(self, args):
         self.tracking_task.cancel()
@@ -107,7 +107,14 @@ class MTMountCommander(salobj.CscCommander):
         self.tracking_task.cancel()
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
 
-    async def _ramp(self, ramp_count, ramp_args):
+    async def _ramp(self, ramp_args):
+        """Track a "ramp" (a path of constant velocity)
+
+        Parameters
+        ----------
+        ramp_args : `RampArgs`
+            Ramp arguments.
+        """
         try:
             ramp_generator = simactuators.RampGenerator(
                 start_positions=[ramp_args.az_start, ramp_args.el_start],
@@ -116,16 +123,16 @@ class MTMountCommander(salobj.CscCommander):
                 advance_time=TRACK_ADVANCE_TIME,
             )
             print(
-                f"Tracking a ramp from az={ramp_args.az_start}, el={ramp_args.el_start} "
-                f" to az={ramp_args.az_end}, el={ramp_args.el_end} "
-                f" at speed az={ramp_args.az_speed}, el={ramp_args.el_speed}; "
+                f"Track a ramp from az={ramp_args.az_start}, el={ramp_args.el_start} "
+                f"to az={ramp_args.az_end}, el={ramp_args.el_end} deg "
+                f"at speed az={ramp_args.az_speed}, el={ramp_args.el_speed} deg/sec; "
                 f"this will take {ramp_generator.duration:0.2f} seconds"
             )
 
             print("Enable tracking")
             await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
 
-            print("Start the ramp")
+            print("Issue ramp tracking commands")
             isfirst = True
             for positions, velocities, tai in ramp_generator():
                 t0 = utils.current_tai()
@@ -140,13 +147,18 @@ class MTMountCommander(salobj.CscCommander):
                     radesys="ICRS",
                     timeout=STD_TIMEOUT,
                 )
+                dt = utils.current_tai() - t0
                 if isfirst:
-                    isfirst = True
-                    dt = utils.current_tai() - t0
+                    isfirst = False
                     print(f"*** track command delay = {dt:0.3f}")
-                await asyncio.sleep(TRACK_INTERVAL)
+                sleep_duration = max(0, TRACK_INTERVAL - dt)
+                await asyncio.sleep(sleep_duration)
         except asyncio.CancelledError:
+            print("Ramp canceled")
             pass
+        except Exception as e:
+            print(f"Ramp failed: {e!r}")
+            raise
         print("Disable tracking")
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
         print("Ramp done")
