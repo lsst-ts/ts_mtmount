@@ -506,8 +506,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
         desired_tai = utils.current_tai() + self.config.camera_cable_wrap_advance_time
-        dt = rot_data.timestamp - desired_tai
+        dt = desired_tai - rot_data.timestamp
 
+        # Note: with recent rotator improvments, actual position and
+        # velocity closely match desired position and velocity.
+        # Thus the following code may no longer be necessary. 2022-11.
         if (
             abs(rot_data.demandPosition - rot_data.actualPosition)
             > self.config.max_rotator_position_error
@@ -520,12 +523,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     f"max_rotator_position_error={self.config.max_rotator_position_error} deg."
                 )
                 self.rotator_position_error_excessive = True
-            desired_position = rot_data.actualPosition
-            desired_velocity = rot_data.actualVelocity
+            rotator_position = rot_data.actualPosition
+            rotator_velocity = rot_data.actualVelocity
         else:
             self.rotator_position_error_excessive = False
-            desired_position = rot_data.demandPosition
-            desired_velocity = rot_data.demandVelocity
+            rotator_position = rot_data.demandPosition
+            rotator_velocity = rot_data.demandVelocity
+        # Note: the rotator does not report actualAcceleration
+        rotator_acceleration = rot_data.demandAcceleration
+
+        # Compute desired CCW position and velocity by extrapolating
+        # rotator position, velocity, and acceleration (by dt seconds).
+        desired_position = (
+            (0.5 * rotator_acceleration * dt) + rotator_velocity
+        ) * dt + rotator_position
+        desired_velocity = (rotator_acceleration * dt) + rotator_velocity
 
         # List of warning strings about truncated position and velocity
         # (in that order).
@@ -541,12 +553,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if warning_message:
             truncation_warnings.append(warning_message)
 
-        # Adjust the desired position for the time offset,
-        # then truncate it to be in bounds.
-        adjusted_desired_position = desired_position + desired_velocity * dt
-
-        adjusted_desired_position, warning_message = truncate_value(
-            value=adjusted_desired_position,
+        desired_position, warning_message = truncate_value(
+            value=desired_position,
             min_value=ccw_settings_data.minCmdPosition + self.limits_margin,
             max_value=ccw_settings_data.maxCmdPosition - self.limits_margin,
             descr="position",
@@ -560,7 +568,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 + " and ".join(truncation_warnings)
             )
 
-        return (adjusted_desired_position, desired_velocity, desired_tai)
+        return (desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
         """Connect to the low-level controller and start the telemetry
