@@ -749,7 +749,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 (commands.MainCabinetThermalResetAlarm(), False),
                 # Disabled for 2022-10 commissioning
                 # (commands.TopEndChillerResetAlarm(), False),
-                # (commands.OilSupplySystemResetAlarm(), False),
+                (commands.OilSupplySystemResetAlarm(), False),
                 (commands.MainAxesPowerSupplyResetAlarm(), False),
                 (commands.MirrorCoverLocksResetAlarm(), False),
                 (commands.MirrorCoversResetAlarm(), False),
@@ -760,7 +760,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 #     on=True, temperature=0), True),
                 (commands.MainAxesPowerSupplyPower(on=True), True),
                 # Disabled for 2022-10 commissioning
-                # (commands.OilSupplySystemPower(on=True), True),
+                (commands.OilSupplySystemSetMode(auto=True), False),
+                (commands.OilSupplySystemPower(on=True), True),
                 # Cannot successfully reset the axes alarms
                 # until the main power supply is on.
                 # Sometimes a second reset is needed for the main axes

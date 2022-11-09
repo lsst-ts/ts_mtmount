@@ -165,73 +165,195 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             power_on_min_timeout=None,
         )
 
-    async def test_oil_supply_system(self):
+    async def test_oil_supply_system_auto(self):
+        """Test the OSS main power command, which requires auto mode."""
         device = self.controller.device_dict[System.OIL_SUPPLY_SYSTEM]
         self.check_device_repr(device)
 
-        # Test the OilSupplySystemPower command
         assert not device.power_on
         assert not device.cooling_on
-        assert not device.oil_on
+        assert not device.circulation_pump_on
         assert not device.main_pump_on
+        assert not device.auto_mode
+
+        # You must be in auto mode to use the OilSupplySystemPower
+        with pytest.raises(RuntimeError):
+            await self.run_command(
+                command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0
+            )
+        with pytest.raises(RuntimeError):
+            await self.run_command(
+                command=mtmount.commands.OilSupplySystemPower(on=True),
+                min_timeout=900,
+            )
+        assert not device.power_on
+        assert not device.cooling_on
+        assert not device.circulation_pump_on
+        assert not device.main_pump_on
+        assert not device.auto_mode
+
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemSetMode(auto=True)
+        )
+        assert not device.power_on
+        assert not device.cooling_on
+        assert not device.circulation_pump_on
+        assert not device.main_pump_on
+        assert device.auto_mode
 
         await self.run_command(
             command=mtmount.commands.OilSupplySystemPower(on=True), min_timeout=900
         )
         assert device.power_on
         assert device.cooling_on
-        assert device.oil_on
+        assert device.circulation_pump_on
         assert device.main_pump_on
+        assert device.auto_mode
 
         await self.run_command(
             command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0
         )
         assert not device.power_on
         assert not device.cooling_on
-        assert not device.oil_on
+        assert not device.circulation_pump_on
         assert not device.main_pump_on
+        assert device.auto_mode
 
-        # Test the subsystem power commands.
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemSetMode(auto=False)
+        )
+        assert not device.power_on
+        assert not device.cooling_on
+        assert not device.circulation_pump_on
+        assert not device.main_pump_on
+        assert not device.auto_mode
+
+    async def test_oil_supply_system_manual(self):
+        """Test the OSS subsystem power commands, which require manual mode."""
+        device = self.controller.device_dict[System.OIL_SUPPLY_SYSTEM]
+        self.check_device_repr(device)
+
+        # Specify the commands are in the order in which the subsystems
+        # must be turned on.
         subsystem_command_dict = {
             "cooling": mtmount.commands.OilSupplySystemPowerCooling,
-            "oil": mtmount.commands.OilSupplySystemPowerOil,
+            "circulation_pump": mtmount.commands.OilSupplySystemPowerCirculationPump,
             "main_pump": mtmount.commands.OilSupplySystemPowerMainPump,
         }
 
-        def get_value_dict():
-            """Get the current value of all subsystem attributes.
+        # All of these commands are rejected if in auto mode
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemSetMode(auto=True)
+        )
+        assert device.auto_mode
+        for command in subsystem_command_dict.values():
+            with pytest.raises(RuntimeError):
+                await self.run_command(command(on=False))
+            with pytest.raises(RuntimeError):
+                await self.run_command(command(on=True))
 
-            The returned data is a dict of name: value,
-            where the name entries are the keys of subsystem_command_dict.
-            """
-            return {
-                name: getattr(device, f"{name}_on") for name in subsystem_command_dict
-            }
+        assert not device.power_on
+        assert not device.cooling_on
+        assert not device.circulation_pump_on
+        assert not device.main_pump_on
+        assert device.auto_mode
 
-        for name, command_class in subsystem_command_dict.items():
-            expected_values = get_value_dict()
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemSetMode(auto=False)
+        )
+        assert not device.power_on
+        assert not device.cooling_on
+        assert not device.circulation_pump_on
+        assert not device.main_pump_on
+        assert not device.auto_mode
 
-            # Turn this subsystem on
-            expected_values[name] = True
-            min_timeout = (
-                900
-                if command_class is mtmount.commands.OilSupplySystemPowerCooling
-                else None
+        # Cannot turn on circulation or main pump if cooling off
+        for command in (
+            mtmount.commands.OilSupplySystemPowerCirculationPump,
+            mtmount.commands.OilSupplySystemPowerMainPump,
+        ):
+            with pytest.raises(RuntimeError):
+                await self.run_command(command=command(on=True))
+
+        # Turn on cooling
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemPowerCooling(on=True),
+            min_timeout=900,
+        )
+        assert device.cooling_on
+        assert not device.circulation_pump_on
+        assert not device.main_pump_on
+        assert not device.auto_mode
+
+        # Cannot turn on main pump if circulation pump off
+        with pytest.raises(RuntimeError):
+            await self.run_command(
+                command=mtmount.commands.OilSupplySystemPowerMainPump(on=True)
             )
-            await self.run_command(command_class(on=True), min_timeout=min_timeout)
-            values = get_value_dict()
-            assert values == expected_values
 
-            # Turn this subsystem off
-            expected_values[name] = False
-            min_timeout = (
-                0
-                if command_class is mtmount.commands.OilSupplySystemPowerCooling
-                else None
+        # Turn on circulation pump
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemPowerCirculationPump(on=True)
+        )
+        assert device.cooling_on
+        assert device.circulation_pump_on
+        assert not device.main_pump_on
+        assert not device.auto_mode
+
+        # Cannot turn off cooling if circulation pump is on
+        with pytest.raises(RuntimeError):
+            await self.run_command(
+                command=mtmount.commands.OilSupplySystemPowerCooling(on=False)
             )
-            await self.run_command(command_class(on=False), min_timeout=min_timeout)
-            values = get_value_dict()
-            assert values == expected_values
+
+        # Turn on main pump
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemPowerMainPump(on=True)
+        )
+        assert device.cooling_on
+        assert device.circulation_pump_on
+        assert device.main_pump_on
+        assert not device.auto_mode
+
+        # Cannot turn off chiller or circulation pump with main pump on
+        for command in (
+            mtmount.commands.OilSupplySystemPowerCooling,
+            mtmount.commands.OilSupplySystemPowerCirculationPump,
+        ):
+            with pytest.raises(RuntimeError):
+                await self.run_command(command=command(on=False))
+
+        # Now turn the subsystems off one at a time, in t he proper order.
+        # We have already tested forbidden commands in all the resulting
+        # states, so don't test that again.
+
+        # Turn off main pump
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemPowerMainPump(on=False)
+        )
+        assert device.cooling_on
+        assert device.circulation_pump_on
+        assert not device.main_pump_on
+        assert not device.auto_mode
+
+        # Turn off circulation pump
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemPowerCirculationPump(on=False)
+        )
+        assert device.cooling_on
+        assert not device.circulation_pump_on
+        assert not device.main_pump_on
+        assert not device.auto_mode
+
+        # Turn off chiller
+        await self.run_command(
+            command=mtmount.commands.OilSupplySystemPowerCooling(on=False),
+            min_timeout=0,
+        )
+        assert not device.cooling_on
+        assert not device.circulation_pump_on
+        assert not device.main_pump_on
+        assert not device.auto_mode
 
     async def test_top_end_chiller(self):
         device = self.controller.device_dict[System.TOP_END_CHILLER]
@@ -847,6 +969,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 await self.run_command(power_command_on, min_timeout=min_on_timeout)
             self.controller.main_axes_power_supply.power_on = True
 
+        if device.system_id == System.OIL_SUPPLY_SYSTEM:
+            # The oil supply system must be in auto mode to turn it on
+            # using the standard power command.
+            await self.run_command(
+                command=mtmount.commands.OilSupplySystemSetMode(auto=True)
+            )
+            assert device.auto_mode
         await self.run_command(power_command_on, min_timeout=min_on_timeout)
         assert device.power_on
         assert not device.alarm_on

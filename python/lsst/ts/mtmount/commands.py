@@ -76,10 +76,11 @@ __all__ = [
     "MirrorCoversResetAlarm",
     "MirrorCoversStop",
     "OilSupplySystemPower",
+    "OilSupplySystemPowerCirculationPump",
     "OilSupplySystemPowerCooling",
     "OilSupplySystemPowerMainPump",
-    "OilSupplySystemPowerOil",
     "OilSupplySystemResetAlarm",
+    "OilSupplySystemSetMode",
     "SafetyReset",
     "StateInfo",
     "TopEndChillerPower",
@@ -679,6 +680,13 @@ class OilSupplySystemPower(Command):
     )
 
 
+class OilSupplySystemPowerCirculationPump(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_CIRCULATION_PUMP,
+        _OnOffParameters,
+    )
+
+
 class OilSupplySystemPowerCooling(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_COOLING,
@@ -693,16 +701,20 @@ class OilSupplySystemPowerMainPump(Command):
     )
 
 
-class OilSupplySystemPowerOil(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_OIL,
-        _OnOffParameters,
-    )
-
-
 class OilSupplySystemResetAlarm(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_RESET_ALARM,
+    )
+
+
+class OilSupplySystemSetMode(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_SET_MODE,
+        (
+            field_info.BoolFieldInfo(
+                name="auto", doc="Automatic mode = true, manual mode = false"
+            ),
+        ),
     )
 
 
@@ -798,10 +810,11 @@ Commands = (
     MirrorCoversResetAlarm,
     MirrorCoversStop,
     OilSupplySystemPower,
+    OilSupplySystemPowerCirculationPump,
     OilSupplySystemPowerCooling,
     OilSupplySystemPowerMainPump,
-    OilSupplySystemPowerOil,
     OilSupplySystemResetAlarm,
+    OilSupplySystemSetMode,
     SafetyReset,
     StateInfo,
     TopEndChillerPower,
