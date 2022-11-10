@@ -1489,6 +1489,26 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         else:
             await topic_info.topic.set_write(powerState=reply.powerState)
+        if (
+            reply.powerState == PowerState.FAULT
+            and self.summary_state == salobj.State.ENABLED
+        ):
+            # Send the CSC to fault if the CSC is enabled and:
+            # * the axis is azimuth and elevation
+            # * the axis is camera cable wrap and CCW following is enabled
+            if (
+                reply.system == System.AZIMUTH
+                or reply.system == System.ELEVATION
+                or (
+                    reply.system == System.CAMERA_CABLE_WRAP
+                    and self.camera_cable_wrap_following_enabled
+                )
+            ):
+                axis_name = System(reply.system).name.lower().replace("_", " ")
+                await self.fault(
+                    code=enums.CscErrorCode.AXIS_FAULT,
+                    report=f"The {axis_name} axis faulted.",
+                )
 
     async def handle_safety_interlocks(self, reply):
         """Handle a `ReplyId.SAFETY_INTERLOCKS` reply."""
