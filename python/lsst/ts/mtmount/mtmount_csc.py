@@ -410,17 +410,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.disable_task.cancel()
         self.enable_task.cancel()
         await super().begin_enable(data)
-        if not self.has_control:
-            try:
-                self.log.info("Ask for permission to command the mount.")
-                await self.send_command(
-                    commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
-                )
-                self.has_control = True
-            except Exception as e:
-                raise salobj.ExpectedError(
-                    f"The CSC was not allowed to command the mount: {e!r}"
-                )
+        try:
+            self.log.info("Ask for permission to command the mount.")
+            await self.send_command(
+                commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
+            )
+            self.has_control = True
+        except Exception as e:
+            raise salobj.ExpectedError(
+                f"The CSC was not allowed to command the mount: {e!r}"
+            )
 
         self.enable_task = asyncio.create_task(self.enable_devices())
         try:
@@ -698,6 +697,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
         because that should remain running until the CSC quits.
         """
         self.should_be_connected = False
+
+        # TODO DM-35194: remove this code block when it is OK to drop control
+        # (e.g. without shutting down the OSS).
+        if self.has_control:
+            self.log.info("Try to give up command of the mount.")
+            try:
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.EUI), do_lock=True
+                )
+                self.has_control = False
+            except Exception as e:
+                self.log.warning(
+                    f"Failed to give up command of the mount; continuing to disconnect: {e!r}"
+                )
 
         self.monitor_telemetry_client_task.cancel()
 
