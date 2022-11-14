@@ -36,5 +36,4 @@ For more information::
 
 from lsst.ts.mtmount import command_tma
 
-
 command_tma()

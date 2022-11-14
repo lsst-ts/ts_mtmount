@@ -22,18 +22,15 @@
 import asyncio
 import contextlib
 import itertools
-import pathlib
 import logging
 import math
+import pathlib
 import time
 import unittest
 
 import numpy.testing
 import pytest
-
-from lsst.ts import utils
-from lsst.ts import salobj
-from lsst.ts import mtmount
+from lsst.ts import mtmount, salobj, utils
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,

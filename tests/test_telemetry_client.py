@@ -27,10 +27,7 @@ import time
 import unittest
 
 import numpy as np
-
-from lsst.ts import salobj
-from lsst.ts import tcpip
-from lsst.ts import mtmount
+from lsst.ts import mtmount, salobj, tcpip
 
 # Standard timeout for TCP/IP messages (sec).
 STD_TIMEOUT = 5

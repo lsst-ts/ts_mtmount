@@ -29,27 +29,23 @@ import logging
 import signal
 
 import astropy.time
-
-from lsst.ts import utils
-from lsst.ts import salobj
-from lsst.ts import tcpip
+from lsst.ts import salobj, tcpip, utils
 from lsst.ts.idl.enums.MTMount import (
     DeployableMotionState,
     ElevationLockingPinMotionState,
     PowerState,
     System,
 )
+
+from .. import commands, constants, enums
 from ..exceptions import CommandSupersededException
-from .. import commands
-from .. import constants
-from .. import enums
 
 # from . import device
 from .axis_device import AxisDevice
 from .detailed_settings import detailed_settings
 from .main_axes_power_supply_device import MainAxesPowerSupplyDevice
-from .mirror_covers_device import MirrorCoversDevice
 from .mirror_cover_locks_device import MirrorCoverLocksDevice
+from .mirror_covers_device import MirrorCoversDevice
 from .oil_supply_system_device import OilSupplySystemDevice
 from .top_end_chiller_device import TopEndChillerDevice
 

@@ -30,13 +30,9 @@ import unittest
 import unittest.mock
 import warnings
 
-import pytest
-
 import numpy.testing
-
-from lsst.ts import utils
-from lsst.ts import salobj
-from lsst.ts import mtmount
+import pytest
+from lsst.ts import mtmount, salobj, utils
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,

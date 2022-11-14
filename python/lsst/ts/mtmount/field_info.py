@@ -36,6 +36,7 @@ import abc
 import enum
 
 from lsst.ts import utils
+
 from . import enums
 
 

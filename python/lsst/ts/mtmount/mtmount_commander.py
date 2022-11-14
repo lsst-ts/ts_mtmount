@@ -24,9 +24,7 @@ __all__ = ["MTMountCommander", "command_mtmount"]
 import asyncio
 import dataclasses
 
-from lsst.ts import utils
-from lsst.ts import salobj
-from lsst.ts import simactuators
+from lsst.ts import salobj, simactuators, utils
 
 STD_TIMEOUT = 2
 

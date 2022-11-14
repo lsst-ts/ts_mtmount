@@ -92,9 +92,8 @@ __all__ = [
 ]
 
 from lsst.ts import utils
-from . import base_message
-from . import enums
-from . import field_info
+
+from . import base_message, enums, field_info
 from .utils import wrap_parameter_doc
 
 MAX_SEQUENCE_ID = (1 << 31) - 1

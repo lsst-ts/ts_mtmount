@@ -31,16 +31,12 @@ import signal
 import subprocess
 import types
 
-from lsst.ts import utils
-from lsst.ts import salobj
+from lsst.ts import salobj, utils
 from lsst.ts.idl.enums.MTMount import AxisMotionState, PowerState, System
+
+from . import __version__, command_futures, commands, constants, enums
 from .config_schema import CONFIG_SCHEMA
 from .utils import truncate_value
-from . import constants
-from . import command_futures
-from . import commands
-from . import enums
-from . import __version__
 
 # Extra time to wait for commands to be done (sec)
 TIMEOUT_BUFFER = 5

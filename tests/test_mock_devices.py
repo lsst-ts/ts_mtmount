@@ -24,9 +24,7 @@ import logging
 import unittest
 
 import pytest
-
-from lsst.ts import utils
-from lsst.ts import mtmount
+from lsst.ts import mtmount, utils
 from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState, System
 
 STD_TIMEOUT = 2  # Timeout for short operations (sec)

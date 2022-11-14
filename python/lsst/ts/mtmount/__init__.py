@@ -25,19 +25,15 @@ try:
 except ImportError:
     __version__ = "?"
 
+from . import base_message, commands, field_info, mock, testutils
+from .command_futures import *
 from .config_schema import *
 from .constants import *
-from .exceptions import *
 from .enums import *
-from .utils import *
-from . import field_info
-from . import base_message
-from . import commands
-from .command_futures import *
-from .telemetry_map import *
-from .telemetry_client import *
+from .exceptions import *
 from .mtmount_commander import *
 from .mtmount_csc import *
+from .telemetry_client import *
+from .telemetry_map import *
 from .tma_commander import *
-from . import mock
-from . import testutils
+from .utils import *

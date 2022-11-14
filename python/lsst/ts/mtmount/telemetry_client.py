@@ -33,6 +33,7 @@ import logging
 import signal
 
 from lsst.ts import salobj
+
 from . import constants
 from .telemetry_map import TELEMETRY_MAP
 

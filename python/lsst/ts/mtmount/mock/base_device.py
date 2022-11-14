@@ -22,8 +22,8 @@
 __all__ = ["BaseDevice"]
 
 from lsst.ts.idl.enums.MTMount import System
-from .. import enums
-from .. import commands
+
+from .. import commands, enums
 
 
 class BaseDevice:

@@ -19,13 +19,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from .axis_device import *
+from .controller import *
+from .deployable_device import *
 from .detailed_settings import *
 from .limits import *
-from .axis_device import *
-from .deployable_device import *
 from .main_axes_power_supply_device import *
 from .mirror_cover_locks_device import *
 from .mirror_covers_device import *
 from .oil_supply_system_device import *
 from .top_end_chiller_device import *
-from .controller import *
