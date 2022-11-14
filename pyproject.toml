@@ -23,6 +23,7 @@ monitor_mtmount_telemetry = "lsst.ts.mtmount.monitor_mtmount_telemetry:monitor_m
 run_mock_tma = "lsst.ts.mtmount.mock:run_mock_tma"
 run_mtmount = "lsst.ts.mtmount:run_mtmount"
 run_mtmount_telemetry_client = "lsst.ts.mtmount:run_mtmount_telemetry_client"
+run_tma_telemetry_config_parser = "lsst.ts.mtmount:run_tma_telemetry_config_parser"
 
 [tool.setuptools_scm]
 write_to = "python/lsst/ts/mtmount/version.py"
