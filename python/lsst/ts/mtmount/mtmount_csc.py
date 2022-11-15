@@ -25,6 +25,7 @@ import asyncio
 import functools
 import inspect
 import json
+import logging
 import math
 import re
 import signal
@@ -38,28 +39,15 @@ from . import __version__, command_futures, commands, constants, enums
 from .config_schema import CONFIG_SCHEMA
 from .utils import truncate_value
 
-# Extra time to wait for commands to be done (sec)
+# Extra time to wait for commands to be done (sec).
 TIMEOUT_BUFFER = 5
 
-# Maximum time (second) between rotator application telemetry topics,
-# beyond which rotator velocity will not be estimated.
-MAX_ROTATOR_APPLICATION_GAP = 1.0
+# Interval between sending heartbeat commands
+# to the low-level controller (seconds).
+LLV_HEARTBEAT_INTERVAL = 1
 
-# Timeout for starting the mock controller
-# and seeing the "running" message (sec).
-MOCK_CTRL_START_TIMEOUT = 30
-
-# Timeout for seeing telemetry from the telemetry client (sec).
-TELEMETRY_START_TIMEOUT = 30
-
-# Maximum time to wait for rotator telemetry (seconds).
-# Must be significantly greater than the interval between rotator
-# telemetry updates, which should not be longer than 0.2 seconds.
-# For minimum confusion when CCW following fails, this should also be
-# significantly less than the maximum time the low-level controller waits
-# for a tracking command, which is controlled by setting "Tracking Wait time
-# for check setpoint"; on 2020-02-01 the value was 5 seconds.
-ROTATOR_TELEMETRY_TIMEOUT = 1
+# Log level for commands and command replies.
+LOG_LEVEL_COMMANDS = (logging.DEBUG + logging.INFO) // 2
 
 # Maximum time (seconds) to fully deploy or retract the mirror covers,
 # including dealing with the mirror cover locks.
@@ -70,8 +58,21 @@ ROTATOR_TELEMETRY_TIMEOUT = 1
 # by the low-level controller, which is likely to be more accurate.
 MIRROR_COVER_TIMEOUT = 60
 
-# Interval between sending heartbeat commands to the TMA (seconds)
-TMA_HEARTBEAT_INTERVAL = 1
+# Timeout for starting the mock controller
+# and seeing the "running" message (sec).
+MOCK_CTRL_START_TIMEOUT = 30
+
+# Maximum time to wait for rotator telemetry (seconds).
+# Must be significantly greater than the interval between rotator
+# telemetry updates, which should not be longer than 0.2 seconds.
+# For minimum confusion when CCW following fails, this should also be
+# significantly less than the maximum time the low-level controller waits
+# for a tracking command, which is controlled by setting "Tracking Wait time
+# for check setpoint"; on 2020-02-01 the value was 5 seconds.
+ROTATOR_TELEMETRY_TIMEOUT = 1
+
+# Timeout for seeing telemetry from the telemetry client (sec).
+TELEMETRY_START_TIMEOUT = 30
 
 
 class SystemStateInfo:
@@ -268,7 +269,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.camera_cable_wrap_follow_loop_task = utils.make_done_future()
 
         self.read_loop_task = utils.make_done_future()
-        self.send_heartbeat_loop_task = utils.make_done_future()
+        self.llv_heartbeat_loop_task = utils.make_done_future()
 
         # Is camera rotator actual position - demand position
         # greater than config.max_rotator_position_error?
@@ -469,7 +470,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
         self.read_loop_task.cancel()
-        self.send_heartbeat_loop_task.cancel()
+        self.llv_heartbeat_loop_task.cancel()
 
         await self.disconnect()
         processes = self.terminate_background_processes()
@@ -606,9 +607,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 connect_coro, timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
-            self.send_heartbeat_loop_task.cancel()
-            self.send_heartbeat_loop_task = asyncio.create_task(
-                self.send_heartbeat_loop()
+            self.llv_heartbeat_loop_task.cancel()
+            self.llv_heartbeat_loop_task = asyncio.create_task(
+                self.llv_heartbeat_loop()
             )
             self.read_loop_task.cancel()
             self.read_loop_task = asyncio.create_task(self.read_loop())
@@ -683,7 +684,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 raise RuntimeError("Mock controller process failed")
             line_bytes = await self.mock_controller_process.stdout.readline()
             line_str = line_bytes.decode().strip()
-            self.log.debug("Mock controller: %s", line_str)
+            self.log.debug("Mock controller first output: %s", line_str)
             match = running_regex.search(line_str)
             if match is not None:
                 return int(match[1]), int(match[2])
@@ -792,7 +793,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
                     else:
                         self.log.info(
-                            f"Reset command {command} failed; the subsystem is probably already on"
+                            f"Reset command {command} failed; this is normal "
+                            "if the subsystem is already on"
                         )
         except Exception as e:
             self.log.error(f"Failed to power on one or more devices: {e!r}")
@@ -926,7 +928,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         futures = command_futures.CommandFutures()
         self.command_dict[command.sequence_id] = futures
-        self.writer.write(command.encode())
+        command_bytes = command.encode()
+        self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
+        self.writer.write(command_bytes)
         await self.writer.drain()
         timeout = await asyncio.wait_for(futures.ack, self.config.ack_timeout)
         if timeout < 0:
@@ -1329,6 +1333,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def handle_command_reply(self, reply):
         """Handle a ReplyId.CMD_x reply."""
+        self.log.log(LOG_LEVEL_COMMANDS, "Handle command reply %s", reply)
         reply_id = reply.id
         sequence_id = reply.sequenceId
         if reply_id == enums.ReplyId.CMD_ACKNOWLEDGED:
@@ -1489,7 +1494,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 reply.system = System(reply.system)
             except ValueError:
                 pass
-            self.log.info(f"Unsupported system={reply.system!r} in handle_limits")
+            self.log.info(f"Ignoring limits for unsupported system={reply.system!r}")
         else:
             if nelts > 1:
                 await topic.set_write(limits=reply.limits)
@@ -1627,21 +1632,25 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         )
         self.log.debug("Read loop ends")
 
-    async def send_heartbeat_loop(self):
+    async def llv_heartbeat_loop(self):
         """Send a regular heartbeat "command" to the low-level controller.
 
         The command is not acknowledged in any way.
         """
-        heartbeat_bytes = commands.Heartbeat().encode()
+        self.log.debug("Heartbeat loop begins")
         try:
             while self.connected:
-                self.writer.write(heartbeat_bytes)
+                command_bytes = commands.Heartbeat().encode()
+                self.log.log(
+                    LOG_LEVEL_COMMANDS, "Send heartbeat command %s", command_bytes
+                )
+                self.writer.write(command_bytes)
                 await self.writer.drain()
-                await asyncio.sleep(TMA_HEARTBEAT_INTERVAL)
+                await asyncio.sleep(LLV_HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass
         except Exception:
-            self.log.exception("send heartbeat loop failed")
+            self.log.exception("Heartbeat loop failed")
 
     def signal_handler(self):
         """Handle signals such as SIGTERM."""
