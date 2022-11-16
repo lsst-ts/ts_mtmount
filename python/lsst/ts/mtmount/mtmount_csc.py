@@ -415,6 +415,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.send_command(
                 commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
             )
+            self.llv_heartbeat_loop_task.cancel()
+            self.llv_heartbeat_loop_task = asyncio.create_task(
+                self.llv_heartbeat_loop()
+            )
             self.has_control = True
         except Exception as e:
             raise salobj.ExpectedError(
@@ -607,10 +611,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 connect_coro, timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
-            self.llv_heartbeat_loop_task.cancel()
-            self.llv_heartbeat_loop_task = asyncio.create_task(
-                self.llv_heartbeat_loop()
-            )
             self.read_loop_task.cancel()
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
