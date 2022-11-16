@@ -1529,14 +1529,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # Send the CSC to fault if the CSC is enabled and:
             # * the axis is azimuth and elevation
             # * the axis is camera cable wrap and CCW following is enabled
-            if (
-                reply.system == System.AZIMUTH
-                or reply.system == System.ELEVATION
-                or (
-                    reply.system == System.CAMERA_CABLE_WRAP
-                    and self.camera_cable_wrap_following_enabled
-                )
-            ):
+            if reply.system in {
+                System.AZIMUTH,
+                System.ELEVATION,
+                System.CAMERA_CABLE_WRAP,
+            }:
                 axis_name = System(reply.system).name.lower().replace("_", " ")
                 await self.fault(
                     code=enums.CscErrorCode.AXIS_FAULT,
