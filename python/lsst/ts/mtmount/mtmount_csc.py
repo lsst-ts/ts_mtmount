@@ -70,6 +70,9 @@ ROTATOR_TELEMETRY_TIMEOUT = 1
 # by the low-level controller, which is likely to be more accurate.
 MIRROR_COVER_TIMEOUT = 60
 
+# Interval between sending heartbeat commands to the TMA (seconds)
+TMA_HEARTBEAT_INTERVAL = 1
+
 
 class SystemStateInfo:
     """Information about a system state topic.
@@ -603,9 +606,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 connect_coro, timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
+            self.send_heartbeat_loop_task.cancel()
             self.send_heartbeat_loop_task = asyncio.create_task(
                 self.send_heartbeat_loop()
             )
+            self.read_loop_task.cancel()
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
             await self.send_command(commands.StateInfo(), do_lock=True)
@@ -1632,7 +1637,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             while self.connected:
                 self.writer.write(heartbeat_bytes)
                 await self.writer.drain()
-                await asyncio.sleep(1)
+                await asyncio.sleep(TMA_HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass
         except Exception:
