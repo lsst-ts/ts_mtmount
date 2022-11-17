@@ -6,18 +6,35 @@
 Version History
 ###############
 
-fall22
-------
+v0.23.0
+-------
 
-This branch is for commissioning the TMA in fall of 2022.
-The primary change is to not try to enable the oil supply system (OSS) or top-end chiller (TEC).
-These may not be controllable by the TMA, and can be controlled manually for now.
+* Publish the ``connected`` and ``telemetryConnected`` events.
+  This requires ts_xml 13.
+* `MTMountCSC`:
 
-Other changes:
+    * Enable the oil supply system as part of enabling subsystems, now that the TMA can control it.
+    * Only issue the low-level heartbeat command when the CSC has control of the TMA.
+    * Change the ``startTracking``, ``stop``, and ``stopTracking`` commands to report an in-progress ACK.
+      This means a normal timeout should be sufficient for these commands.
+    * Give control of the TMA to the EUI when going to fault state, to avoid turning off the oil supply system and main power supply (which are slow to turn back on).
+    * Go to fault if telemetry stops arriving from the TMA.
+    * Go to fault if the azimuth, elevation, or camera cable wrap axis faults, with new error code ``CscErrorCode.AXIS_FAULT``.
+    * Log commands sent and command replies received at level 15 (halfway between info and debug).
+    * Add support for the GetActualSettings command. But don't use it yet, because it is broken in the TMA.
+    * Fix a bug in the ``monitor_telemetry_client`` method.
+    * Fix a bug in the camera cable wrap following code.
+    * Fix a bug in handling the TMA limits event for some systems.
 
-* `MTMountCSC` fix a bug in the ``monitor_telemetry_client`` method.
-* Publish the ``connected`` and ``telemetryConnected`` events from ts_xml 13, if present.
-* `TelemetryClient`: fail if no telemetry received in a few seconds.
+* `MTMountCommander`: improve uniformity and advance time of tracking commands sent by the ramp command.
+* `TelemetryClient`:
+
+    * Simplify the code by assuming that the field names reported by the TMA match those in SAL.
+      This works because we can specify the field names reported by the TMA.
+    * Fail if no telemetry received from the TMA for long enough.
+
+* Add bin/run_tma_telemetry_config_parser to generate MTMount_Telemetry.xml from the TMA telemetry config file.
+* Sort imports with isort, and enforce with pre-commit.
 * ``test_mock_devices.py``: fix deprecation warnings caused by no running event loop when constructing mock devices.
 
 Requires:
@@ -26,7 +43,7 @@ Requires:
 * ts_simactuators 2
 * ts_tcpip 0.3.7
 * ts_idl 3.2
-* IDL files for MTMount and MTRotator from ts_xml 12
+* IDL files for MTMount and MTRotator from ts_xml 13
 
 v0.22.2
 -------
