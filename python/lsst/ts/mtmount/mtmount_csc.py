@@ -703,8 +703,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # TODO DM-35194: remove this code block when it is OK to drop control
         # (e.g. without shutting down the OSS).
         if self.has_control:
-            self.log.info("Try to give up command of the mount.")
+            self.log.info("In disconnect: try to give up command of the mount.")
             try:
+                self.llv_heartbeat_loop_task.cancel()
                 await self.send_command(
                     commands.AskForCommand(commander=enums.Source.EUI), do_lock=True
                 )
@@ -833,6 +834,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         try:
             self.log.info("Give up command of the mount.")
+            self.llv_heartbeat_loop_task.cancel()
             await self.send_command(
                 # Give control to EUI so the TMA keeps receiving heartbeats;
                 # this prevents it from shutting off the oil supply system,
