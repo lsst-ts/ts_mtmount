@@ -39,9 +39,6 @@ from . import __version__, command_futures, commands, constants, enums
 from .config_schema import CONFIG_SCHEMA
 from .utils import truncate_value
 
-# Extra time to wait for commands to be done (sec).
-TIMEOUT_BUFFER = 5
-
 # Interval between sending heartbeat commands
 # to the low-level controller (seconds).
 LLV_HEARTBEAT_INTERVAL = 1
@@ -71,8 +68,18 @@ MOCK_CTRL_START_TIMEOUT = 30
 # for check setpoint"; on 2020-02-01 the value was 5 seconds.
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
+# Maximum time (seconds) to for the startTracking command.
+START_TRACKING_TIMEOUT = 7
+
+# Maximum time (seconds) to for the stop and stopTracking commands.
+STOP_TIMEOUT = 5
+
 # Timeout for seeing telemetry from the telemetry client (sec).
 TELEMETRY_START_TIMEOUT = 30
+
+# Extra time to wait for low-level commands to be done;
+# added to the time estimate reported by the low-level controller (sec).
+TIMEOUT_BUFFER = 5
 
 
 class SystemStateInfo:
@@ -1251,11 +1258,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled()
+        await self.cmd_startTracking.ack_in_progress(
+            data, timeout=START_TRACKING_TIMEOUT
+        )
         await self.send_command(commands.BothAxesEnableTracking(), do_lock=True)
 
     async def do_stop(self, data):
         """Handle the stop command."""
         self.assert_enabled()
+        await self.cmd_startTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_commands(
             commands.BothAxesStop(),
             commands.CameraCableWrapStop(),
@@ -1267,6 +1278,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stopTracking(self, data):
         """Handle the stopTracking command."""
         self.assert_enabled()
+        await self.cmd_startTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
     async def handle_available_settings(self, reply):
