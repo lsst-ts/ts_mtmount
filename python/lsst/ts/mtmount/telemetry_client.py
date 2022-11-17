@@ -60,9 +60,6 @@ class TelemetryTopicHandler:
         self.topic = topic
         self.field_dict = field_dict
         self.preprocessor = preprocessor
-        # TODO DM-36445: remove this flag and assume
-        # evt_telemetryConnected exists.
-        self.has_telemetry_connected_evt = False
 
     async def __call__(self, llv_data):
         """Process one low-level message.
@@ -174,13 +171,7 @@ class TelemetryClient:
     async def start(self):
         """Connect to the telemetry port and start the read loop."""
         await self.controller.start_task
-        self.has_telemetry_connected_evt = hasattr(
-            self.controller, "evt_telemetryConnected"
-        )
-        if self.has_telemetry_connected_evt:
-            await self.controller.evt_telemetryConnected.set_write(
-                connected=self.connected
-            )
+        await self.controller.evt_telemetryConnected.set_write(connected=self.connected)
         self.log.debug("connecting")
         if self.connected:
             raise RuntimeError("Already connected")
@@ -189,10 +180,9 @@ class TelemetryClient:
             self.reader, self.writer = await asyncio.wait_for(
                 connect_coro, timeout=self.connection_timeout
             )
-            if self.has_telemetry_connected_evt:
-                await self.controller.evt_telemetryConnected.set_write(
-                    connected=self.connected
-                )
+            await self.controller.evt_telemetryConnected.set_write(
+                connected=self.connected
+            )
         except Exception as e:
             err_msg = f"Could not open connection to host={self.host}, port={self.port}"
             self.log.exception(err_msg)
@@ -233,10 +223,7 @@ class TelemetryClient:
                 self.log.warning(
                     "Timed out waiting for the writer to close; continuing"
                 )
-        if self.has_telemetry_connected_evt:
-            await self.controller.evt_telemetryConnected.set_write(
-                connected=self.connected
-            )
+        await self.controller.evt_telemetryConnected.set_write(connected=self.connected)
         self.log.info("done")
         await self.controller.close()
         if not self.done_task.done():

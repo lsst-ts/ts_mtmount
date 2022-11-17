@@ -267,24 +267,18 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 cscVersion=mtmount.__version__,
                 subsystemVersions="",
             )
-            # TODO DM-36445: remove this hasattr test
-            # and assume evt_connected has a "connected" field
-            if hasattr(self.remote.evt_connected.DataType(), "connected"):
-                await self.assert_next_sample(
-                    topic=self.remote.evt_connected, connected=False
-                )
-                await self.assert_next_sample(
-                    topic=self.remote.evt_connected, connected=True
-                )
-            # TODO DM-36445: remove this hasattr test
-            # and assume Remote has an evt_telemetryConnected topic
-            if hasattr(self.remote, "evt_telemetryConnected"):
-                await self.assert_next_sample(
-                    topic=self.remote.evt_telemetryConnected, connected=False
-                )
-                await self.assert_next_sample(
-                    topic=self.remote.evt_telemetryConnected, connected=True
-                )
+            await self.assert_next_sample(
+                topic=self.remote.evt_connected, connected=False
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_connected, connected=True
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_telemetryConnected, connected=False
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_telemetryConnected, connected=True
+            )
             for axis_name in ("Azimuth", "Elevation"):
                 system_id = getattr(System, axis_name.upper())
                 topic = getattr(
@@ -1218,24 +1212,18 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def test_telemetry_timeout(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
             await self.assert_next_summary_state(salobj.State.ENABLED)
-            # TODO DM-36445: remove this hasattr test
-            # and assume Remote has an evt_telemetryConnected topic
-            if hasattr(self.remote, "evt_telemetryConnected"):
-                await self.assert_next_sample(
-                    self.remote.evt_telemetryConnected, connected=False
-                )
-                await self.assert_next_sample(
-                    self.remote.evt_telemetryConnected, connected=True
-                )
+            await self.assert_next_sample(
+                self.remote.evt_telemetryConnected, connected=False
+            )
+            await self.assert_next_sample(
+                self.remote.evt_telemetryConnected, connected=True
+            )
             # Kill the low-level telemetry publishing loop
             # and wait for things to go sour.
             self.mock_controller.telemetry_loop_task.cancel()
-            # TODO DM-36445: remove this hasattr test
-            # and assume Remote has an evt_telemetryConnected topic
-            if hasattr(self.remote, "evt_telemetryConnected"):
-                await self.assert_next_sample(
-                    self.remote.evt_telemetryConnected, connected=False
-                )
+            await self.assert_next_sample(
+                self.remote.evt_telemetryConnected, connected=False
+            )
             await self.assert_next_summary_state(salobj.State.FAULT)
 
     async def test_tracking(self):
