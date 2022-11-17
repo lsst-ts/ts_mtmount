@@ -46,6 +46,10 @@ MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
 # timeout for reading telemetry that should not appear (sec)
 NOTELEMETRY_TIMEOUT = 2
 
+# Timeout for the CSC to react to a fault report
+# from the low-level controller (seconds).
+FAULT_TIMEOUT = 2
+
 # timeout for constructing several remotes and controllers (sec)
 LONG_TIMEOUT = 60
 
@@ -196,6 +200,41 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         ):
             value = getattr(data, field_name)
             assert math.isnan(value)
+
+    async def test_axis_fault(self):
+        """Test that azimuth, elevation, or camera cable wrap fault sends
+        the CSC to fault.
+        """
+        async with self.make_csc(
+            initial_state=salobj.State.ENABLED, internal_mock_controller=False
+        ):
+            await self.assert_next_summary_state(salobj.State.ENABLED)
+            for system in (
+                System.MIRROR_COVERS,
+                System.MIRROR_COVER_LOCKS,
+            ):
+                device = self.mock_controller.device_dict[system]
+                device.power_on = False
+                device.alarm_on = True
+            # Give the CSC time to notice the change and NOT react to it.
+            await asyncio.sleep(FAULT_TIMEOUT)
+            assert self.csc.summary_state == salobj.State.ENABLED
+
+        for system in (
+            System.AZIMUTH,
+            System.ELEVATION,
+            System.CAMERA_CABLE_WRAP,
+        ):
+            with self.subTest(system=system):
+                salobj.set_random_lsst_dds_partition_prefix()
+                async with self.make_csc(
+                    initial_state=salobj.State.ENABLED, internal_mock_controller=False
+                ):
+                    await self.assert_next_summary_state(salobj.State.ENABLED)
+                    device = self.mock_controller.device_dict[system]
+                    device.power_on = False
+                    device.alarm_on = True
+                    await self.assert_next_summary_state(salobj.State.FAULT)
 
     async def test_bin_script(self):
         await self.check_bin_script(
