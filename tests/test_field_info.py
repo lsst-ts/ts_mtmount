@@ -23,9 +23,7 @@ import enum
 import unittest
 
 import pytest
-
-from lsst.ts import utils
-from lsst.ts import mtmount
+from lsst.ts import mtmount, utils
 
 
 class ExampleEnum(enum.Enum):

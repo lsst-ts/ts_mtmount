@@ -24,6 +24,7 @@ __all__ = ["MainAxesPowerSupplyDevice"]
 
 from lsst.ts import utils
 from lsst.ts.idl.enums.MTMount import System
+
 from .base_device import BaseDevice
 
 

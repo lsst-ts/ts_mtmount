@@ -27,10 +27,7 @@ import time
 import unittest
 
 import numpy as np
-
-from lsst.ts import salobj
-from lsst.ts import tcpip
-from lsst.ts import mtmount
+from lsst.ts import mtmount, salobj, tcpip
 
 # Standard timeout for TCP/IP messages (sec).
 STD_TIMEOUT = 5
@@ -44,13 +41,10 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger()
         self.log.setLevel(logging.INFO)
         self.log.addHandler(logging.StreamHandler())
-
-        # List of (server name, is connected). A new item is appended
-        # each time self.connect_callback is called.
-        self.connect_callback_data = []
+        salobj.set_random_lsst_dds_partition_prefix()
 
     @contextlib.asynccontextmanager
-    async def make_all(self):
+    async def make_all(self, fail_if_end_early):
         r"""Make a telemetry server, client, and remote.
 
         The client is run as a background process.
@@ -70,34 +64,35 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             connect_callback=None,
         )
         # Wait for the server to start so the port is set
-        await self.server.start_task
+        await asyncio.wait_for(self.server.start_task, timeout=STD_TIMEOUT)
 
         args = [
             "run_mtmount_telemetry_client",
             f"--host={salobj.LOCAL_HOST}",
             f"--port={self.server.port}",
         ]
-        telemetry_client_process = await asyncio.create_subprocess_exec(*args)
         domain = salobj.Domain()
         self.remote = salobj.Remote(domain=domain, name="MTMount")
-        await asyncio.gather(self.server.connected_task, self.remote.start_task)
+        await asyncio.wait_for(self.remote.start_task, timeout=STD_TIMEOUT)
+        self.telemetry_client_process = await asyncio.create_subprocess_exec(*args)
+        await asyncio.wait_for(self.server.connected_task, timeout=STD_TIMEOUT)
         try:
             yield
         finally:
-            process_ended_early = telemetry_client_process.returncode is not None
+            process_ended_early = self.telemetry_client_process.returncode is not None
             if not process_ended_early:
-                telemetry_client_process.terminate()
+                self.telemetry_client_process.terminate()
             await asyncio.gather(
                 self.remote.close(),
                 self.server.close(),
                 domain.close(),
             )
-            if process_ended_early:
+            if process_ended_early and fail_if_end_early:
                 self.fail("telemetry client exited early")
 
-    async def test_telemetry(self):
+    async def test_telemetry_x(self):
         """Test all telemetry topics."""
-        async with self.make_all():
+        async with self.make_all(fail_if_end_early=True):
             # Arbitrary values that are suitable for both
             # the elevation and azimuth telemetry topics.
             desired_elaz_dds_data = dict(
@@ -163,6 +158,13 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                 self.remote.tel_cameraCableWrap, desired_ccw_dds_data
             )
 
+    async def test_timeout(self):
+        async with self.make_all(fail_if_end_early=False):
+            await asyncio.wait_for(
+                self.telemetry_client_process.wait(),
+                timeout=mtmount.TELEMETRY_TIMEOUT + STD_TIMEOUT,
+            )
+
     async def assert_next_telemetry(
         self, topic, desired_data, delta=1e-7, timeout=STD_TIMEOUT
     ):
@@ -225,34 +227,9 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         llv_data = dict(topicID=topic_id)
         field_dict = mtmount.TELEMETRY_MAP[topic_id][1]
         for key, value in dds_data.items():
-            llv_key = field_dict[key]
-            self.convert_dds_item_to_llv(
-                llv_data=llv_data,
-                llv_key=llv_key,
-                value=value,
-            )
-        llv_data["topicID"] = topic_id
+            func = field_dict[key]
+            llv_data.update(func.llv_dict_from_sal_value(value))
         return llv_data
-
-    def convert_dds_item_to_llv(self, llv_data, llv_key, value):
-        """Convert one telemetry item from DDS to low-level controller format.
-
-        This usually adds a prefix and in some cases modifies the value.
-
-        Parameters
-        ----------
-        llv_data : dict
-            Dict of low-level data. Modified in place.
-        llv_key : `str`
-            Low-level field name (or field name prefix for array values).
-        value : `str`
-            DDS value.
-        """
-        if isinstance(value, list):
-            for i, item in enumerate(value):
-                llv_data[llv_key + str(i + 1)] = item
-        else:
-            llv_data[llv_key] = value
 
     def make_elaz_drives_dds_data(self, naxes):
         """Make telemetry data for elevation or azimuth drives.

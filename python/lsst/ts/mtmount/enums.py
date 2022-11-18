@@ -115,9 +115,10 @@ class CommandCode(enum.IntEnum):
     ENCODER_INTERFACE_BOX_EXIT = 706
     OIL_SUPPLY_SYSTEM_POWER = 801
     OIL_SUPPLY_SYSTEM_POWER_COOLING = 802
-    OIL_SUPPLY_SYSTEM_POWER_OIL = 803
+    OIL_SUPPLY_SYSTEM_POWER_CIRCULATION_PUMP = 803
     OIL_SUPPLY_SYSTEM_POWER_MAIN_PUMP = 804
     OIL_SUPPLY_SYSTEM_RESET_ALARM = 805
+    OIL_SUPPLY_SYSTEM_SET_MODE = 806
     MIRROR_COVERS_POWER = 901
     MIRROR_COVERS_STOP = 902
     MIRROR_COVERS_MOVE = 903
@@ -184,6 +185,7 @@ class CommandCode(enum.IntEnum):
     TRANSFER_FUNCTION_ELEVATION_EXCITATION = 2302
     # Get actual set of settings to send them to TCS.
     ASK_FOR_SET_OF_SETTINGS = 2401
+    GET_ACTUAL_SETTINGS = 2402
     APPLY_SETTINGS_SET = 2403
     STATE_INFO = 2502
     # Send this once a second or so. It will get no ack of any kind.
@@ -195,7 +197,8 @@ class CommandCode(enum.IntEnum):
 class CscErrorCode(enum.IntEnum):
     COULD_NOT_CONNECT = 1  # Could not connect to low-level controller
     CONNECTION_LOST = 2  # Lost connection to low-level controller
-    TELEMETRY_CLIENT_ERROR = 3  # Could not start telemetry client
+    TELEMETRY_CLIENT_ERROR = 3  # Telemetry client failed
+    AXIS_FAULT = 4  # One or more axes faulted
     MOCK_CONTROLLER_ERROR = 98
     INTERNAL_ERROR = 99
 

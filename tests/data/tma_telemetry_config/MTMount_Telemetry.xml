@@ -1,0 +1,511 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="http://lsst-sal.tuc.noao.edu/schema/SALTelemetrySet.xsl"?>
+<SALTelemetrySet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://lsst-sal.tuc.noao.edu/schema/SALTelemetrySet.xsd">
+  <SALTelemetry>
+    <Subsystem>MTMount</Subsystem>
+    <EFDB_Topic>MTMount_azimuth</EFDB_Topic>
+    <item>
+      <EFDB_Name>actualPosition</EFDB_Name>
+      <Description>Actual position</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>actualTorque</EFDB_Name>
+      <Description>Actual torque</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>N m</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>actualVelocity</EFDB_Name>
+      <Description>Actual velocity</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg/s</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>demandPosition</EFDB_Name>
+      <Description>Demand position</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>demandVelocity</EFDB_Name>
+      <Description>Demand velocity</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg/s</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>timestamp</EFDB_Name>
+      <Description>Time at which the data was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+  </SALTelemetry>
+  <SALTelemetry>
+    <Subsystem>MTMount</Subsystem>
+    <EFDB_Topic>MTMount_azimuthDrives</EFDB_Topic>
+    <item>
+      <EFDB_Name>current</EFDB_Name>
+      <Description>Actual current of each drive</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>A</Units>
+      <Count>16</Count>
+    </item>
+    <item>
+      <EFDB_Name>timestamp</EFDB_Name>
+      <Description>Time at which the data was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+  </SALTelemetry>
+  <SALTelemetry>
+    <Subsystem>MTMount</Subsystem>
+    <EFDB_Topic>MTMount_azimuthDrivesThermal</EFDB_Topic>
+    <item>
+      <EFDB_Name>actualTemperature</EFDB_Name>
+      <Description>Actual surface temperature of each drive</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>16</Count>
+    </item>
+    <item>
+      <EFDB_Name>actualValvePositionAzimuth</EFDB_Name>
+      <Description>Actual position (% open) for the mixing valve of each azimuth temperature controller</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>4</Count>
+    </item>
+    <item>
+      <EFDB_Name>setpointTemperature</EFDB_Name>
+      <Description>Setpoint surface temperature for each temperature controller</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>4</Count>
+    </item>
+    <item>
+      <EFDB_Name>setpointValvePositionAzimuth</EFDB_Name>
+      <Description>Setpoint position (% open) for the mixing valve of each azimuth temperature controller</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>4</Count>
+    </item>
+    <item>
+      <EFDB_Name>timestamp</EFDB_Name>
+      <Description>Time at which the data was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+  </SALTelemetry>
+  <SALTelemetry>
+    <Subsystem>MTMount</Subsystem>
+    <EFDB_Topic>MTMount_mirrorCover</EFDB_Topic>
+    <item>
+      <EFDB_Name>actualPosition</EFDB_Name>
+      <Description>Actual position reported by each drive</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg</Units>
+      <Count>4</Count>
+    </item>
+    <item>
+      <EFDB_Name>actualTorquePercentage</EFDB_Name>
+      <Description>Actual torque (percent) of each drive</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>4</Count>
+    </item>
+    <item>
+      <EFDB_Name>timestamp</EFDB_Name>
+      <Description>Time at which the data was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+  </SALTelemetry>
+  <SALTelemetry>
+    <Subsystem>MTMount</Subsystem>
+    <EFDB_Topic>MTMount_topEndChiller</EFDB_Topic>
+    <item>
+      <EFDB_Name>actualTemperatureAmbient</EFDB_Name>
+      <Description>Actual ambient temperature (?)</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>actualTemperatureArea</EFDB_Name>
+      <Description>Actual temperature in each area</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>5</Count>
+    </item>
+    <item>
+      <EFDB_Name>ambientRelativeHumiditySensor0501</EFDB_Name>
+      <Description>Ambient relative humidity measured by sensor 0501</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ambientRelativeHumiditySensor0502</EFDB_Name>
+      <Description>Ambient relative humidity measured by sensor 0502</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ambientRelativeHumiditySensor0504</EFDB_Name>
+      <Description>Ambient relative humidity measured by sensor 0504</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ambientRelativeHumiditySensor0505</EFDB_Name>
+      <Description>Ambient relative humidity measured by sensor 0505</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ambientTemperature</EFDB_Name>
+      <Description>Ambient temperature (measured? commanded?)</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ambientTemperatureSensor0502</EFDB_Name>
+      <Description>Ambient temperature measured by sensor 0502</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ambientTemperatureSensor0504</EFDB_Name>
+      <Description>Ambient temperature measured by sensor 0504</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ambientTemperatureSensor0505</EFDB_Name>
+      <Description>Ambient temperature measured by sensor 0505</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ductTemperatureSensor0506</EFDB_Name>
+      <Description>Duct temperature measured by sensor 0506</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>ductTemperatureSensor0507</EFDB_Name>
+      <Description>Duct temperature measured by sensor 0507</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>externalTemperatureElectricalCabinet</EFDB_Name>
+      <Description>External temperature of each electrical cabinet</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>4</Count>
+    </item>
+    <item>
+      <EFDB_Name>heatExchangerSupplyTemperature</EFDB_Name>
+      <Description>Temperature of HX supply</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>internalTemperatureElectricalCabinet</EFDB_Name>
+      <Description>Internal temperature of each electrical cabinet</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>4</Count>
+    </item>
+    <item>
+      <EFDB_Name>temperatureSensor0501</EFDB_Name>
+      <Description>Ambient temperature measured by sensor 0501</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>threeWayValvePosition201</EFDB_Name>
+      <Description>Position of three-way valve 201</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>threeWayValvePosition202</EFDB_Name>
+      <Description>Position of three-way valve 202</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>%</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>timestamp</EFDB_Name>
+      <Description>Time at which the data was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+  </SALTelemetry>
+  <SALTelemetry>
+    <Subsystem>MTMount</Subsystem>
+    <EFDB_Topic>MTMount_cooling</EFDB_Topic>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0001</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0001</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0002</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0002</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0003</EFDB_Name>
+      <Description>Glycol water pressure at </Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0004</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0004</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0005</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0005</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0006</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0006</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0007</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0007</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0008</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0008</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0009</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0009</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0010</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0010</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0011</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0011</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0012</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0012</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0013</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0013</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0014</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0014</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0015</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0015</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0016</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0016</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0017</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0017</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0018</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0018</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0019</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-001</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0020</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0020</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0021</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0021</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureAzimuth0022</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0022</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureElevation0001</EFDB_Name>
+      <Description>Glycol water pressure from azimuth gauge TMA-EL-GW-CPM-0001</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressureElevation0002</EFDB_Name>
+      <Description>Glycol water pressure from elevation gauge TMA-EL-GW-CPM-0002</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressurePier0101</EFDB_Name>
+      <Description>Glycol water pressure from pier gauge TMA-PI-GW-CPM-0101</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolPressurePier0102</EFDB_Name>
+      <Description>Glycol water pressure from pier gauge TMA-PI-GW-CPM-0102</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolTemperatureAzimuth0001</EFDB_Name>
+      <Description>Glycol water temperature from azimuth gauge TMA-AZ-GW-CTM-0001</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolTemperatureAzimuth0002</EFDB_Name>
+      <Description>Glycol water temperature from azimuth gauge TMA-AZ-GW-CTM-0002</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolTemperatureAzimuth0021</EFDB_Name>
+      <Description>Glycol water temperature from azimuth gauge TMA-AZ-GW-CTM-0021</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolTemperatureAzimuth0022</EFDB_Name>
+      <Description>Glycol water temperature from azimuth gauge TMA-AZ-GW-CTM-0022</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolTemperatureElevation0001</EFDB_Name>
+      <Description>Glycol water pressure from elevation gauge TMA-EL-GW-CTM-0001</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolTemperaturePier0101</EFDB_Name>
+      <Description>Glycol water temperature from pier gauge TMA-PI-GW-CTM-0101</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>glycolTemperaturePier0102</EFDB_Name>
+      <Description>Glycol water temperature from pier gauge TMA-PI-GW-CTM-0102</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>timestamp</EFDB_Name>
+      <Description>Time at which the data was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+  </SALTelemetry>
+</SALTelemetrySet>

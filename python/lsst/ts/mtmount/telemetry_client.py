@@ -19,18 +19,27 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["TelemetryTopicHandler", "TelemetryClient", "run_mtmount_telemetry_client"]
+__all__ = [
+    "TELEMETRY_TIMEOUT",
+    "TelemetryTopicHandler",
+    "TelemetryClient",
+    "run_mtmount_telemetry_client",
+]
 
 import argparse
 import asyncio
 import json
 import logging
-import math
 import signal
 
 from lsst.ts import salobj
+
 from . import constants
 from .telemetry_map import TELEMETRY_MAP
+
+# Timeout to read telemetry (seconds). If no telemetry is seen
+# in this time, the telemetry client logs an error and quits.
+TELEMETRY_TIMEOUT = 2
 
 
 class TelemetryTopicHandler:
@@ -64,8 +73,8 @@ class TelemetryTopicHandler:
         if self.preprocessor is not None:
             self.preprocessor(llv_data)
         sal_data = {
-            sal_name: llv_data[llv_name]
-            for sal_name, llv_name in self.field_dict.items()
+            sal_name: func.sal_value_from_llv_dict(llv_data)
+            for sal_name, func in self.field_dict.items()
         }
         await self.topic.set_write(**sal_data)
 
@@ -162,6 +171,7 @@ class TelemetryClient:
     async def start(self):
         """Connect to the telemetry port and start the read loop."""
         await self.controller.start_task
+        await self.controller.evt_telemetryConnected.set_write(connected=self.connected)
         self.log.debug("connecting")
         if self.connected:
             raise RuntimeError("Already connected")
@@ -169,6 +179,9 @@ class TelemetryClient:
             connect_coro = asyncio.open_connection(host=self.host, port=self.port)
             self.reader, self.writer = await asyncio.wait_for(
                 connect_coro, timeout=self.connection_timeout
+            )
+            await self.controller.evt_telemetryConnected.set_write(
+                connected=self.connected
             )
         except Exception as e:
             err_msg = f"Could not open connection to host={self.host}, port={self.port}"
@@ -199,7 +212,6 @@ class TelemetryClient:
         self.log.info("disconnecting")
         self.start_task.cancel()
         self.read_task.cancel()
-        await self.controller.close()
         writer = self.writer
         self.reader = None
         self.writer = None
@@ -211,7 +223,9 @@ class TelemetryClient:
                 self.log.warning(
                     "Timed out waiting for the writer to close; continuing"
                 )
+        await self.controller.evt_telemetryConnected.set_write(connected=self.connected)
         self.log.info("done")
+        await self.controller.close()
         if not self.done_task.done():
             self.done_task.set_result(None)
 
@@ -228,71 +242,40 @@ class TelemetryClient:
     async def read_loop(self):
         """Read and process status from the low-level controller."""
         self.log.info("telemetry client read loop begins")
-        while True:
-            try:
-                data = await self.reader.readuntil(constants.LINE_TERMINATOR)
-            except asyncio.CancelledError:
-                self.log.info("telemetry client read loop cancelled")
-                return
-            except (ConnectionResetError, asyncio.IncompleteReadError):
-                asyncio.ensure_future(self.close())
-                self.log.info("Reader disconnected; giving up.")
-                return
-            except Exception:
-                asyncio.ensure_future(self.close())
-                self.log.exception("read_loop failed; giving up.")
-                return
-            try:
-                decoded_data = data.decode()
-                llv_data = json.loads(decoded_data)
-                topic_id = llv_data["topicID"]
-                topic_handler = self.topic_handlers.get(topic_id)
-                if topic_handler is None:
-                    if topic_id not in self.unsupported_topic_ids:
-                        self.unsupported_topic_ids.add(topic_id)
-                        self.log.info(
-                            f"Ignoring unsupported topic ID {topic_id}; data={data}"
-                        )
-                    continue
-                await topic_handler(llv_data)
-            except Exception:
-                self.log.exception(f"read_loop could not handle {data}; continuing.")
-
-    def _convert_drive_measurements(self, llv_data, keys, ndrives):
-        """Convert per-drive measurements or other items numbered from 1
-
-        Parameters
-        ----------
-        llv_data : dict
-            Data from the low-level controller. Modified in place.
-        keys : list [str]
-            Prefix for named items; full names have the drive number appended.
-            For example "azCurrent" refers to "azCurrent1" - "azCurrent16".
-        ndrives : int
-            The number of drives.
-        """
-        for key in keys:
-            llv_data[key] = [
-                llv_data.pop(f"{key}{n}", math.nan) for n in range(1, ndrives + 1)
-            ]
-
-    def _preprocess_azimuthDrives(self, llv_data):
-        """Preprocess status for the tel_azimuthDrives topic."""
-        self._convert_drive_measurements(
-            llv_data=llv_data, keys=["azCurrent"], ndrives=16
-        )
-
-    def _preprocess_elevationDrives(self, llv_data):
-        """Preprocess status for the tel_elevationDrives topic."""
-        self._convert_drive_measurements(
-            llv_data=llv_data, keys=["elCurrent"], ndrives=12
-        )
-
-    def _preprocess_cameraCableWrap(self, llv_data):
-        """Preprocess status for the tel_cameraCableWrap topic."""
-        self._convert_drive_measurements(
-            llv_data=llv_data, keys=["torquePercentage"], ndrives=2
-        )
+        try:
+            while True:
+                data = await asyncio.wait_for(
+                    self.reader.readuntil(constants.LINE_TERMINATOR),
+                    timeout=TELEMETRY_TIMEOUT,
+                )
+                try:
+                    decoded_data = data.decode()
+                    llv_data = json.loads(decoded_data)
+                    topic_id = llv_data["topicID"]
+                    topic_handler = self.topic_handlers.get(topic_id)
+                    if topic_handler is None:
+                        if topic_id not in self.unsupported_topic_ids:
+                            self.unsupported_topic_ids.add(topic_id)
+                            self.log.info(
+                                f"Ignoring unsupported topic ID {topic_id}; data={data}"
+                            )
+                        continue
+                    await topic_handler(llv_data)
+                except Exception:
+                    self.log.exception(
+                        f"read_loop could not handle {data}; continuing."
+                    )
+        except asyncio.CancelledError:
+            self.log.info("telemetry client read loop cancelled")
+        except asyncio.TimeoutError:
+            self.log.error("Timed out waiting for telemetry; giving up.")
+            asyncio.ensure_future(self.close())
+        except (ConnectionResetError, asyncio.IncompleteReadError):
+            self.log.info("Reader disconnected; giving up.")
+            asyncio.ensure_future(self.close())
+        except Exception:
+            self.log.exception("read_loop failed; giving up.")
+            asyncio.ensure_future(self.close())
 
 
 def run_mtmount_telemetry_client():

@@ -25,45 +25,26 @@ import asyncio
 import functools
 import inspect
 import json
+import logging
 import math
 import re
 import signal
 import subprocess
 import types
 
-from lsst.ts import utils
-from lsst.ts import salobj
+from lsst.ts import salobj, utils
 from lsst.ts.idl.enums.MTMount import AxisMotionState, PowerState, System
+
+from . import __version__, command_futures, commands, constants, enums
 from .config_schema import CONFIG_SCHEMA
 from .utils import truncate_value
-from . import constants
-from . import command_futures
-from . import commands
-from . import enums
-from . import __version__
 
-# Extra time to wait for commands to be done (sec)
-TIMEOUT_BUFFER = 5
+# Interval between sending heartbeat commands
+# to the low-level controller (seconds).
+LLV_HEARTBEAT_INTERVAL = 1
 
-# Maximum time (second) between rotator application telemetry topics,
-# beyond which rotator velocity will not be estimated.
-MAX_ROTATOR_APPLICATION_GAP = 1.0
-
-# Timeout for starting the mock controller
-# and seeing the "running" message (sec).
-MOCK_CTRL_START_TIMEOUT = 30
-
-# Timeout for seeing telemetry from the telemetry client (sec).
-TELEMETRY_START_TIMEOUT = 30
-
-# Maximum time to wait for rotator telemetry (seconds).
-# Must be significantly greater than the interval between rotator
-# telemetry updates, which should not be longer than 0.2 seconds.
-# For minimum confusion when CCW following fails, this should also be
-# significantly less than the maximum time the low-level controller waits
-# for a tracking command, which is controlled by setting "Tracking Wait time
-# for check setpoint"; on 2020-02-01 the value was 5 seconds.
-ROTATOR_TELEMETRY_TIMEOUT = 1
+# Log level for commands and command replies.
+LOG_LEVEL_COMMANDS = (logging.DEBUG + logging.INFO) // 2
 
 # Maximum time (seconds) to fully deploy or retract the mirror covers,
 # including dealing with the mirror cover locks.
@@ -73,6 +54,33 @@ ROTATOR_TELEMETRY_TIMEOUT = 1
 # then this will no longer be necessary; we can use the timeout provided
 # by the low-level controller, which is likely to be more accurate.
 MIRROR_COVER_TIMEOUT = 60
+
+# Timeout for starting the mock controller
+# and seeing the "running" message (sec).
+MOCK_CTRL_START_TIMEOUT = 30
+
+# Maximum time to wait for rotator telemetry (seconds).
+# Must be significantly greater than the interval between rotator
+# telemetry updates, which should not be longer than 0.2 seconds.
+# For minimum confusion when camera cable wrap following fails,
+# this should also be significantly less than the maximum time
+# the low-level controller waits for a tracking command,
+# which is controlled by setting "Tracking Wait time for check setpoint";
+# on 2020-02-01 the value was 5 seconds.
+ROTATOR_TELEMETRY_TIMEOUT = 1
+
+# Maximum time (seconds) to for the startTracking command.
+START_TRACKING_TIMEOUT = 7
+
+# Maximum time (seconds) to for the stop and stopTracking commands.
+STOP_TIMEOUT = 5
+
+# Timeout for seeing telemetry from the telemetry client (sec).
+TELEMETRY_START_TIMEOUT = 30
+
+# Extra time to wait for low-level commands to be done;
+# added to the time estimate reported by the low-level controller (sec).
+TIMEOUT_BUFFER = 5
 
 
 class SystemStateInfo:
@@ -266,7 +274,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.camera_cable_wrap_follow_loop_task = utils.make_done_future()
 
         self.read_loop_task = utils.make_done_future()
-        self.send_heartbeat_loop_task = utils.make_done_future()
+        self.llv_heartbeat_loop_task = utils.make_done_future()
 
         # Is camera rotator actual position - demand position
         # greater than config.max_rotator_position_error?
@@ -286,6 +294,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
             config_dir=config_dir,
             initial_state=initial_state,
             simulation_mode=simulation_mode,
+        )
+
+        # TODO DM-36879: remove this and rely on GetActualSettings
+        # to return the data.
+        self.evt_cameraCableWrapControllerSettings.set(
+            maxCmdVelocity=5.6,
+            minCmdPosition=-90,
+            maxCmdPosition=90,
         )
 
         # Dict of system ID: SystemStateInfo;
@@ -399,17 +415,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.disable_task.cancel()
         self.enable_task.cancel()
         await super().begin_enable(data)
-        if not self.has_control:
-            try:
-                self.log.info("Ask for permission to command the mount.")
-                await self.send_command(
-                    commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
-                )
-                self.has_control = True
-            except Exception as e:
-                raise salobj.ExpectedError(
-                    f"The CSC was not allowed to command the mount: {e!r}"
-                )
+        try:
+            self.log.info("Ask for permission to command the mount.")
+            await self.send_command(
+                commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
+            )
+            self.llv_heartbeat_loop_task.cancel()
+            self.llv_heartbeat_loop_task = asyncio.create_task(
+                self.llv_heartbeat_loop()
+            )
+            self.has_control = True
+        except Exception as e:
+            raise salobj.ExpectedError(
+                f"The CSC was not allowed to command the mount: {e!r}"
+            )
 
         self.enable_task = asyncio.create_task(self.enable_devices())
         try:
@@ -460,7 +479,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
         self.read_loop_task.cancel()
-        self.send_heartbeat_loop_task.cancel()
+        self.llv_heartbeat_loop_task.cancel()
 
         await self.disconnect()
         processes = self.terminate_background_processes()
@@ -495,8 +514,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
         desired_tai = utils.current_tai() + self.config.camera_cable_wrap_advance_time
-        dt = rot_data.timestamp - desired_tai
+        dt = desired_tai - rot_data.timestamp
 
+        # Note: with recent rotator improvements, actual position and
+        # velocity closely match desired position and velocity.
+        # Thus the following code may no longer be necessary. 2022-11.
         if (
             abs(rot_data.demandPosition - rot_data.actualPosition)
             > self.config.max_rotator_position_error
@@ -509,12 +531,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     f"max_rotator_position_error={self.config.max_rotator_position_error} deg."
                 )
                 self.rotator_position_error_excessive = True
-            desired_position = rot_data.actualPosition
-            desired_velocity = rot_data.actualVelocity
+            rotator_position = rot_data.actualPosition
+            rotator_velocity = rot_data.actualVelocity
         else:
             self.rotator_position_error_excessive = False
-            desired_position = rot_data.demandPosition
-            desired_velocity = rot_data.demandVelocity
+            rotator_position = rot_data.demandPosition
+            rotator_velocity = rot_data.demandVelocity
+        # Note: the rotator does not report actualAcceleration
+        rotator_acceleration = rot_data.demandAcceleration
+
+        # Compute desired camera cable wrap position and velocity
+        # by extrapolating rotator position, velocity, and acceleration
+        # by dt seconds.
+        desired_position = (
+            (0.5 * rotator_acceleration * dt) + rotator_velocity
+        ) * dt + rotator_position
+        desired_velocity = (rotator_acceleration * dt) + rotator_velocity
 
         # List of warning strings about truncated position and velocity
         # (in that order).
@@ -530,12 +562,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if warning_message:
             truncation_warnings.append(warning_message)
 
-        # Adjust the desired position for the time offset,
-        # then truncate it to be in bounds.
-        adjusted_desired_position = desired_position + desired_velocity * dt
-
-        adjusted_desired_position, warning_message = truncate_value(
-            value=adjusted_desired_position,
+        desired_position, warning_message = truncate_value(
+            value=desired_position,
             min_value=ccw_settings_data.minCmdPosition + self.limits_margin,
             max_value=ccw_settings_data.maxCmdPosition - self.limits_margin,
             descr="position",
@@ -549,12 +577,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 + " and ".join(truncation_warnings)
             )
 
-        return (adjusted_desired_position, desired_velocity, desired_tai)
+        return (desired_position, desired_velocity, desired_tai)
 
     async def connect(self):
         """Connect to the low-level controller and start the telemetry
         client.
         """
+        await self.evt_connected.set_write(connected=self.connected)
+
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
@@ -586,12 +616,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 connect_coro, timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
-            self.send_heartbeat_loop_task = asyncio.create_task(
-                self.send_heartbeat_loop()
-            )
+            self.read_loop_task.cancel()
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
             await self.send_command(commands.StateInfo(), do_lock=True)
+            # TODO DM-36879: enable this when the TMA command works:
+            if False:
+                await self.send_command(commands.GetActualSettings(), do_lock=True)
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
             err_msg = "Could not connect to the low-level controller: "
@@ -601,6 +632,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e!r}"
             )
             return
+
+        await self.evt_connected.set_write(connected=self.connected)
 
         # Run the telemetry client as a background process.
         args = [
@@ -655,7 +688,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 raise RuntimeError("Mock controller process failed")
             line_bytes = await self.mock_controller_process.stdout.readline()
             line_str = line_bytes.decode().strip()
-            self.log.debug("Mock controller: %s", line_str)
+            self.log.debug("Mock controller first output: %s", line_str)
             match = running_regex.search(line_str)
             if match is not None:
                 return int(match[1]), int(match[2])
@@ -671,6 +704,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         self.should_be_connected = False
 
+        # TODO DM-35194: remove this code block when it is OK to drop control
+        # (e.g. without shutting down the OSS).
+        if self.has_control:
+            self.log.info("In disconnect: try to give up command of the mount.")
+            try:
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.EUI), do_lock=False
+                )
+                self.llv_heartbeat_loop_task.cancel()
+                self.has_control = False
+            except Exception as e:
+                self.log.warning(
+                    f"Failed to give up command of the mount; continuing to disconnect: {e!r}"
+                )
+
         self.monitor_telemetry_client_task.cancel()
 
         if self.writer is not None:
@@ -685,6 +733,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.warning(
                     "Timed out waiting for the writer to close; continuing"
                 )
+
+        await self.evt_connected.set_write(connected=self.connected)
 
         await self.clear_target()
 
@@ -716,16 +766,26 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # to decide whether to reset alarms.
             for command, must_succeed in (
                 (commands.MainCabinetThermalResetAlarm(), False),
-                (commands.TopEndChillerResetAlarm(), False),
+                # Disabled for 2022-10 commissioning
+                # (commands.TopEndChillerResetAlarm(), False),
                 (commands.OilSupplySystemResetAlarm(), False),
                 (commands.MainAxesPowerSupplyResetAlarm(), False),
                 (commands.MirrorCoverLocksResetAlarm(), False),
                 (commands.MirrorCoversResetAlarm(), False),
                 (commands.CameraCableWrapResetAlarm(), False),
-                (commands.TopEndChillerPower(on=True), True),
-                (commands.TopEndChillerTrackAmbient(on=True, temperature=0), True),
+                # Disabled for 2022-10 commissioning
+                # (commands.TopEndChillerPower(on=True), True),
+                # (commands.TopEndChillerTrackAmbient(
+                #     on=True, temperature=0), True),
                 (commands.MainAxesPowerSupplyPower(on=True), True),
+                # Disabled for 2022-10 commissioning
+                (commands.OilSupplySystemSetMode(auto=True), False),
                 (commands.OilSupplySystemPower(on=True), True),
+                # Cannot successfully reset the axes alarms
+                # until the main power supply is on.
+                # Sometimes a second reset is needed for the main axes
+                # (a known bug in the TMA as of 2022-11-03).
+                (commands.BothAxesResetAlarm(), True),
                 (commands.BothAxesResetAlarm(), True),
                 (commands.BothAxesPower(on=True), True),
                 (commands.CameraCableWrapPower(on=True), True),
@@ -737,7 +797,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
                     else:
                         self.log.info(
-                            f"Reset command {command} failed; the subsystem is probably already on"
+                            f"Reset command {command} failed; this is normal "
+                            "if the subsystem is already on"
                         )
         except Exception as e:
             self.log.error(f"Failed to power on one or more devices: {e!r}")
@@ -776,16 +837,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         try:
             self.log.info("Give up command of the mount.")
+            # Give control to EUI so the TMA keeps receiving heartbeats;
+            # this prevents it from shutting off the oil supply system,
+            # main axes power supply, and top-end chiller.
+            # TODO DM-35194: if we get Tekniker to change the behavior when
+            # there is no heartbeat, change this to enums.Source.NONE.
             await self.send_command(
-                # Give control to EUI so the TMA keeps receiving heartbeats;
-                # this prevents it from shutting off the oil supply system,
-                # main axes power supply, and top-end chiller.
-                # TODO DM-35194: if we get Tekniker to change the behavior when
-                # there is no heartbeat, change this to enums.Source.NONE.
-                commands.AskForCommand(commander=enums.Source.EUI),
-                do_lock=True,
-                wait_done=True,
+                commands.AskForCommand(commander=enums.Source.EUI), do_lock=False
             )
+            self.llv_heartbeat_loop_task.cancel()
             self.has_control = False
         except Exception as e:
             self.log.warning(
@@ -871,7 +931,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         futures = command_futures.CommandFutures()
         self.command_dict[command.sequence_id] = futures
-        self.writer.write(command.encode())
+        command_bytes = command.encode()
+        self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
+        self.writer.write(command_bytes)
         await self.writer.drain()
         timeout = await asyncio.wait_for(futures.ack, self.config.ack_timeout)
         if timeout < 0:
@@ -1022,10 +1084,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             "Rotator data not available; stopping the camera "
                             "cable wrap until rotator data is available"
                         )
+                        print(
+                            "pausing camera cable wrap following: stopping camera cable wrap"
+                        )
                         await self.send_command(
                             commands.CameraCableWrapStop(), do_lock=False
                         )
+                    else:
+                        print("get_camera_cable_wrap_demand timed out while paused")
                     continue
+
                 if paused:
                     paused = False
                     self.log.info(
@@ -1042,13 +1110,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     velocity=velocity,
                     tai=tai,
                 )
-                await self.send_command(command, do_lock=False)
+                try:
+                    await asyncio.wait_for(
+                        self.send_command(command, do_lock=False), timeout=1
+                    )
+                except asyncio.TimeoutError:
+                    print("*** CameraCableWrapTrackTarget timed out ***")
+                    raise
                 await self.evt_cameraCableWrapTarget.set_write(
                     position=position, velocity=velocity, taiTime=tai
                 )
                 if self.camera_cable_wrap_following_enabled:
                     await asyncio.sleep(self.config.camera_cable_wrap_interval)
-
+            print(
+                "_camera_cable_wrap_follow_loop while loop ends: "
+                f"{self.camera_cable_wrap_following_enabled=}"
+            )
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following ends")
         except salobj.ExpectedError as e:
@@ -1056,6 +1133,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         except Exception:
             self.log.exception("Camera cable wrap following failed")
         finally:
+            await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
             await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
 
     @property
@@ -1176,11 +1254,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled()
+        await self.cmd_startTracking.ack_in_progress(
+            data, timeout=START_TRACKING_TIMEOUT
+        )
         await self.send_command(commands.BothAxesEnableTracking(), do_lock=True)
 
     async def do_stop(self, data):
         """Handle the stop command."""
         self.assert_enabled()
+        await self.cmd_startTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_commands(
             commands.BothAxesStop(),
             commands.CameraCableWrapStop(),
@@ -1192,6 +1274,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stopTracking(self, data):
         """Handle the stopTracking command."""
         self.assert_enabled()
+        await self.cmd_startTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
     async def handle_available_settings(self, reply):
@@ -1260,6 +1343,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def handle_command_reply(self, reply):
         """Handle a ReplyId.CMD_x reply."""
+        self.log.log(LOG_LEVEL_COMMANDS, "Handle command reply %s", reply)
         reply_id = reply.id
         sequence_id = reply.sequenceId
         if reply_id == enums.ReplyId.CMD_ACKNOWLEDGED:
@@ -1414,13 +1498,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
             System.ELEVATION: (self.evt_elevationLimits, 1),
             System.AZIMUTH: (self.evt_azimuthLimits, 1),
             System.CAMERA_CABLE_WRAP: (self.evt_cameraCableWrapLimits, 1),
-        }.get(reply.system, None)
+        }.get(reply.system, (None, 1))
         if topic is None:
             try:
                 reply.system = System(reply.system)
             except ValueError:
                 pass
-            self.log.info(f"Unsupported system={reply.system!r} in handle_limits")
+            self.log.info(f"Ignoring limits for unsupported system={reply.system!r}")
         else:
             if nelts > 1:
                 await topic.set_write(limits=reply.limits)
@@ -1448,6 +1532,24 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         else:
             await topic_info.topic.set_write(powerState=reply.powerState)
+        if (
+            reply.powerState == PowerState.FAULT
+            and self.summary_state == salobj.State.ENABLED
+        ):
+            # Send the CSC to fault if the CSC is enabled and:
+            # * the axis is azimuth and elevation
+            # * the axis is camera cable wrap and
+            #   camera cable wrap following is enabled
+            if reply.system in {
+                System.AZIMUTH,
+                System.ELEVATION,
+                System.CAMERA_CABLE_WRAP,
+            }:
+                axis_name = System(reply.system).name.lower().replace("_", " ")
+                await self.fault(
+                    code=enums.CscErrorCode.AXIS_FAULT,
+                    report=f"The {axis_name} axis faulted.",
+                )
 
     async def handle_safety_interlocks(self, reply):
         """Handle a `ReplyId.SAFETY_INTERLOCKS` reply."""
@@ -1480,7 +1582,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def monitor_telemetry_client(self):
         """Go to FAULT state if the telemetry client exits prematurely."""
         await self.telemetry_client_process.wait()
-        self.fail("Telemetry process exited prematurely")
+        await self.fault(
+            code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR,
+            report="Telemetry process exited prematurely",
+        )
 
     async def read_loop(self):
         """Read and process replies from the low-level controller."""
@@ -1535,21 +1640,25 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         )
         self.log.debug("Read loop ends")
 
-    async def send_heartbeat_loop(self):
+    async def llv_heartbeat_loop(self):
         """Send a regular heartbeat "command" to the low-level controller.
 
         The command is not acknowledged in any way.
         """
-        heartbeat_bytes = commands.Heartbeat().encode()
+        self.log.debug("Heartbeat loop begins")
         try:
             while self.connected:
-                self.writer.write(heartbeat_bytes)
+                command_bytes = commands.Heartbeat().encode()
+                self.log.log(
+                    LOG_LEVEL_COMMANDS, "Send heartbeat command %s", command_bytes
+                )
+                self.writer.write(command_bytes)
                 await self.writer.drain()
-                await asyncio.sleep(1)
+                await asyncio.sleep(LLV_HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass
         except Exception:
-            self.log.exception("send heartbeat loop failed")
+            self.log.exception("Heartbeat loop failed")
 
     def signal_handler(self):
         """Handle signals such as SIGTERM."""
@@ -1558,6 +1667,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def start(self):
         await super().start()
+        await self.evt_connected.set_write(connected=self.connected)
         if self.simulation_mode == 1 and self.run_mock_controller:
             # Run the mock controller using random ports;
             # read the ports to set command_port and telemetry_port.
@@ -1610,8 +1720,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         except asyncio.TimeoutError:
             self.camera_cable_wrap_follow_loop_task.cancel()
-        finally:
-            await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
 
 
 def run_mtmount() -> None:

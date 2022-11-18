@@ -41,15 +41,9 @@ import logging
 import sys
 import traceback
 
-from lsst.ts import utils
-from lsst.ts import salobj
-from lsst.ts import simactuators
+from lsst.ts import salobj, simactuators, utils
 
-from . import constants
-from . import enums
-from . import command_futures
-from . import commands
-from . import mock
+from . import command_futures, commands, constants, enums, mock
 
 logging.basicConfig()
 

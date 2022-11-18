@@ -22,6 +22,7 @@
 __all__ = ["TopEndChillerDevice"]
 
 from lsst.ts.idl.enums.MTMount import System
+
 from .base_device import BaseDevice
 
 
