@@ -59,15 +59,15 @@ else:
 
         Parameters
         ----------
-        name : str
+        name : `str`
             Field name
-        sal_type : str
+        sal_type : `str`
             SAL data type.
-        count : int
+        count : `int`
             For lists: the fixed list length.
-        units : str
+        units : `str`
             Units, "unitless" if none.
-        description : str
+        description : `str`
             Description (arbitrary text)
         """
 
@@ -85,13 +85,13 @@ else:
 
         Parameters
         ----------
-        component_name : str
+        component_name : `str`
             SAL component name
-        topic_subname : str
+        topic_subname : `str`
             Sub-namespace for topic names and schema subject and namespace.
-        sal_name : str
+        sal_name : `str`
             SAL topic name, e.g. logevent_summaryState
-        fields : Dict[str, FieldInfo]
+        fields : `dict` [`str`, `FieldInfo`]
             Dict of field name: field info
         """
 
@@ -176,7 +176,7 @@ class TMATelemetryConfigParser:
 
     * Third part: liquid or air:
 
-        * GW glycol water
+        * GW: glycol water
         * CP: compressed air
         * DY: Dynalene
         * GP: general purpose glycol
@@ -264,7 +264,7 @@ class TMATelemetryConfigParser:
 
         Returns
         -------
-        topic_id_field_info
+        topic_id_field_info : `tuple` [`int`, `FieldsType`]
             A tuple of:
 
             * topic_id: integer topic ID
@@ -473,10 +473,10 @@ class TMATelemetryConfigParser:
         base_name: `str`
             Base component of the field name; the first part
             up to the integer suffix.
-        sequence_field_names : `list`[`str`]
+        sequence_field_names : `list` [`str`]
             All field names that may be part of the sequence.
             The base names all match.
-        sequence_numbers : `list`[`int`]
+        sequence_numbers : `list` [`int`]
             The sequence number of each entry in sequence_field_names.
             The sequence is written as a single entry in consolidated_fields
             only if this list starts at 1 and increases by 1s.

@@ -32,7 +32,8 @@ STD_TIMEOUT = 2
 # How far in advance to set the time field of tracking commands (seconds).
 TRACK_ADVANCE_TIME = 0.15
 
-# Interval between tracking commands (seconds). 0.05 matches MTPtg.
+# Interval between tracking commands (seconds).
+# 0.05 is interval used by MTPtg, the MT pointing component.
 TRACK_INTERVAL = 0.05
 
 

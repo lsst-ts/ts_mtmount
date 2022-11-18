@@ -1060,6 +1060,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         if (
             self.commander == enums.Source.HHD
@@ -1083,6 +1091,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthEnableTracking(sequence_id=command.sequence_id, on=True),
@@ -1096,6 +1112,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthHome(sequence_id=command.sequence_id),
@@ -1109,6 +1133,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthMove(
@@ -1126,6 +1158,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthPower(sequence_id=command.sequence_id, on=command.on),
@@ -1139,6 +1179,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthResetAlarm(sequence_id=command.sequence_id),
@@ -1152,6 +1200,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthStop(sequence_id=command.sequence_id),
@@ -1168,6 +1224,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthTrackTarget(
@@ -1191,6 +1255,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         task = asyncio.create_task(self.write_detailed_settings_applied())
         timeout = 1
@@ -1206,10 +1278,33 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         pass
 
     def do_mirror_cover_system_deploy(self, command):
+        """Handle the MIRROR_COVER_SYSTEM_DEPLOY command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
+        """
         sequence_id = command.sequence_id
         timeout = (
             sum(
@@ -1227,6 +1322,21 @@ class Controller:
         return timeout, task
 
     def do_mirror_cover_system_retract(self, command):
+        """Handle the MIRROR_COVER_SYSTEM_RETRACT command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
+        """
         sequence_id = command.sequence_id
         timeout = 2 + (  # the 2 is a margin to cover overhead
             sum(
@@ -1251,6 +1361,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         pass
 
@@ -1264,6 +1382,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         task = asyncio.create_task(self._impl_state_info())
         timeout = 1

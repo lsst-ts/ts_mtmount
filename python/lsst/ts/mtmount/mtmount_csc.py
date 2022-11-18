@@ -62,10 +62,11 @@ MOCK_CTRL_START_TIMEOUT = 30
 # Maximum time to wait for rotator telemetry (seconds).
 # Must be significantly greater than the interval between rotator
 # telemetry updates, which should not be longer than 0.2 seconds.
-# For minimum confusion when CCW following fails, this should also be
-# significantly less than the maximum time the low-level controller waits
-# for a tracking command, which is controlled by setting "Tracking Wait time
-# for check setpoint"; on 2020-02-01 the value was 5 seconds.
+# For minimum confusion when camera cable wrap following fails,
+# this should also be significantly less than the maximum time
+# the low-level controller waits for a tracking command,
+# which is controlled by setting "Tracking Wait time for check setpoint";
+# on 2020-02-01 the value was 5 seconds.
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
 # Maximum time (seconds) to for the startTracking command.
@@ -515,7 +516,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         desired_tai = utils.current_tai() + self.config.camera_cable_wrap_advance_time
         dt = desired_tai - rot_data.timestamp
 
-        # Note: with recent rotator improvments, actual position and
+        # Note: with recent rotator improvements, actual position and
         # velocity closely match desired position and velocity.
         # Thus the following code may no longer be necessary. 2022-11.
         if (
@@ -539,8 +540,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Note: the rotator does not report actualAcceleration
         rotator_acceleration = rot_data.demandAcceleration
 
-        # Compute desired CCW position and velocity by extrapolating
-        # rotator position, velocity, and acceleration (by dt seconds).
+        # Compute desired camera cable wrap position and velocity
+        # by extrapolating rotator position, velocity, and acceleration
+        # by dt seconds.
         desired_position = (
             (0.5 * rotator_acceleration * dt) + rotator_velocity
         ) * dt + rotator_position
@@ -1082,7 +1084,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             "Rotator data not available; stopping the camera "
                             "cable wrap until rotator data is available"
                         )
-                        print("pausing CCW following: stopping camera cable wrap")
+                        print(
+                            "pausing camera cable wrap following: stopping camera cable wrap"
+                        )
                         await self.send_command(
                             commands.CameraCableWrapStop(), do_lock=False
                         )
@@ -1534,7 +1538,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ):
             # Send the CSC to fault if the CSC is enabled and:
             # * the axis is azimuth and elevation
-            # * the axis is camera cable wrap and CCW following is enabled
+            # * the axis is camera cable wrap and
+            #   camera cable wrap following is enabled
             if reply.system in {
                 System.AZIMUTH,
                 System.ELEVATION,

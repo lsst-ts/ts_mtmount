@@ -62,7 +62,7 @@ class OilSupplySystemDevice(BaseDevice):
     * OilSupplySystemPowerMainPump:
 
         * Only accepted in manual mode.
-        * Can only turn on if cooling and the circulation pump are both on.
+        * Can only turn on if cooling is on and the circulation pump is on.
 
     This class ignores the _power_on attribute;
     instead it keeps track with cooling_on, main_pump_on, circulation_pump_on.
