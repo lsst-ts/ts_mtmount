@@ -73,6 +73,6 @@ CmdLimitsDict = {
     ),
     # From LTS-218.
     System.CAMERA_CABLE_WRAP: Limits(
-        min_position=-90, max_position=90, max_velocity=4.0, max_acceleration=1.5
+        min_position=-90, max_position=90, max_velocity=6.0, max_acceleration=1.5
     ),
 }

@@ -23,13 +23,12 @@ __all__ = ["MAX_TRACKING_DELAY", "AxisDevice"]
 
 import asyncio
 
-from lsst.ts import utils
-from lsst.ts import simactuators
+from lsst.ts import simactuators, utils
 from lsst.ts.idl.enums.MTMount import AxisMotionState, System
-from . import limits
-from ..exceptions import CommandSupersededException
-from .base_device import BaseDevice
 
+from ..exceptions import CommandSupersededException
+from . import limits
+from .base_device import BaseDevice
 
 # Maximum time (seconds) after the end time of one track command
 # before another must arrive. In other words, the maximum amount

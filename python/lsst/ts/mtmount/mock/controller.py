@@ -29,27 +29,23 @@ import logging
 import signal
 
 import astropy.time
-
-from lsst.ts import utils
-from lsst.ts import salobj
-from lsst.ts import tcpip
+from lsst.ts import salobj, tcpip, utils
 from lsst.ts.idl.enums.MTMount import (
     DeployableMotionState,
     ElevationLockingPinMotionState,
     PowerState,
     System,
 )
+
+from .. import commands, constants, enums
 from ..exceptions import CommandSupersededException
-from .. import commands
-from .. import constants
-from .. import enums
 
 # from . import device
 from .axis_device import AxisDevice
 from .detailed_settings import detailed_settings
 from .main_axes_power_supply_device import MainAxesPowerSupplyDevice
-from .mirror_covers_device import MirrorCoversDevice
 from .mirror_cover_locks_device import MirrorCoverLocksDevice
+from .mirror_covers_device import MirrorCoversDevice
 from .oil_supply_system_device import OilSupplySystemDevice
 from .top_end_chiller_device import TopEndChillerDevice
 
@@ -66,6 +62,14 @@ INITIAL_POSITION = {
     System.ELEVATION: 80,
     System.AZIMUTH: 0,
     System.CAMERA_CABLE_WRAP: 0,
+}
+
+# Set of commands that are allowed when not the commander
+ALWAYS_ALLOWED_COMMANDS = {
+    enums.CommandCode.ASK_FOR_COMMAND,
+    enums.CommandCode.ASK_FOR_SET_OF_SETTINGS,
+    enums.CommandCode.GET_ACTUAL_SETTINGS,
+    enums.CommandCode.STATE_INFO,
 }
 
 
@@ -271,6 +275,7 @@ class Controller:
             enums.CommandCode.BOTH_AXES_RESET_ALARM: self.do_both_axes_reset_alarm,
             enums.CommandCode.BOTH_AXES_STOP: self.do_both_axes_stop,
             enums.CommandCode.BOTH_AXES_TRACK_TARGET: self.do_both_axes_track_target,
+            enums.CommandCode.GET_ACTUAL_SETTINGS: self.do_get_actual_settings,
             enums.CommandCode.MAIN_CABINET_THERMAL_RESET_ALARM: self.do_main_cabinet_thermal_reset_alarm,
             enums.CommandCode.MIRROR_COVER_SYSTEM_DEPLOY: self.do_mirror_cover_system_deploy,
             enums.CommandCode.MIRROR_COVER_SYSTEM_RETRACT: self.do_mirror_cover_system_retract,
@@ -460,22 +465,22 @@ class Controller:
             torque_percent = 100 * actual.acceleration / actuator.max_acceleration
             data_dict = dict(
                 topicID=topic_id,
-                angle=actual.position,
-                speed=actual.velocity,
-                torquePercentage1=torque_percent,
-                torquePercentage2=torque_percent,
+                actualPosition=actual.position,
+                actualVelocity=actual.velocity,
+                actualTorquePercentage1=torque_percent,
+                actualTorquePercentage2=torque_percent,
                 timestamp=tai,
             )
         else:
             data_dict = dict(
                 topicID=topic_id,
-                angleActual=actual.position,
-                angleSet=target.position,
-                velocityActual=actual.velocity,
-                velocitySet=target.velocity,
-                # Torque is arbitrary; I have no idea
-                # what realistic values are.
-                torqueActual=actual.acceleration / 10,
+                actualPosition=actual.position,
+                demandPosition=target.position,
+                actualVelocity=actual.velocity,
+                demandVelocity=target.velocity,
+                # Torque is in Nm but I have little idea what realistic
+                # values are, so output something vaguely plausible
+                actualTorque=actual.acceleration / 10,
                 timestamp=tai,
             )
         if self.telemetry_server.connected:
@@ -901,9 +906,9 @@ class Controller:
             # TODO DM-35226: go to fault if heartbeat is not seen often enough
             return
 
-        if self.commander != enums.Source.CSC and command.command_code not in (
-            enums.CommandCode.ASK_FOR_COMMAND,
-            enums.CommandCode.STATE_INFO,
+        if (
+            self.commander != enums.Source.CSC
+            and command.command_code not in ALWAYS_ALLOWED_COMMANDS
         ):
             await self.write_cmd_rejected(
                 command=command,
@@ -1055,6 +1060,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         if (
             self.commander == enums.Source.HHD
@@ -1078,6 +1091,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthEnableTracking(sequence_id=command.sequence_id, on=True),
@@ -1091,6 +1112,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthHome(sequence_id=command.sequence_id),
@@ -1104,6 +1133,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthMove(
@@ -1121,6 +1158,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthPower(sequence_id=command.sequence_id, on=command.on),
@@ -1134,6 +1179,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthResetAlarm(sequence_id=command.sequence_id),
@@ -1147,6 +1200,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthStop(sequence_id=command.sequence_id),
@@ -1163,6 +1224,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
             commands.AzimuthTrackTarget(
@@ -1179,6 +1248,26 @@ class Controller:
             ),
         )
 
+    def do_get_actual_settings(self, command):
+        """Handle the GET_ACTUAL_SETTINGS command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
+        """
+        task = asyncio.create_task(self.write_detailed_settings_applied())
+        timeout = 1
+        return timeout, task
+
     def do_main_cabinet_thermal_reset_alarm(self, command):
         """Handle the MAIN_CABINET_THERMAL_RESET_ALARM command.
 
@@ -1189,10 +1278,33 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         pass
 
     def do_mirror_cover_system_deploy(self, command):
+        """Handle the MIRROR_COVER_SYSTEM_DEPLOY command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
+        """
         sequence_id = command.sequence_id
         timeout = (
             sum(
@@ -1210,6 +1322,21 @@ class Controller:
         return timeout, task
 
     def do_mirror_cover_system_retract(self, command):
+        """Handle the MIRROR_COVER_SYSTEM_RETRACT command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
+        """
         sequence_id = command.sequence_id
         timeout = 2 + (  # the 2 is a margin to cover overhead
             sum(
@@ -1234,6 +1361,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         pass
 
@@ -1247,6 +1382,14 @@ class Controller:
         ----------
         command : `Command`
             The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
         """
         task = asyncio.create_task(self._impl_state_info())
         timeout = 1
@@ -1444,8 +1587,17 @@ class Controller:
                 )
             )
 
+    async def write_detailed_settings_applied(self):
+        """Write the DETAILED_SETTINGS_APPLIED event."""
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.DETAILED_SETTINGS_APPLIED,
+                **self.detailed_settings,
+            )
+        )
+
     async def write_unmocked_events(self):
-        """Write all events that are not output in the normal course of
+        """Write most events that are not output in the normal course of
         controlling mock controller.
 
         This includes:
@@ -1455,6 +1607,9 @@ class Controller:
         * Devices the CSC is not allowed to control,
           including the deployable platform and elevation locking pin.
         * The main cabinet thermal controller.
+
+        It does not include DETAILED_SETTINGS_APPLIED, because that is
+        retrieved by a specific command.
         """
         await self.write_commander()
 
@@ -1466,13 +1621,6 @@ class Controller:
             make_reply_dict(
                 id=enums.ReplyId.AVAILABLE_SETTINGS,
                 sets=available_settings_formatted,
-            )
-        )
-
-        await self.write_reply(
-            make_reply_dict(
-                id=enums.ReplyId.DETAILED_SETTINGS_APPLIED,
-                **self.detailed_settings,
             )
         )
 

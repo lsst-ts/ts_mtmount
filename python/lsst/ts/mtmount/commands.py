@@ -59,6 +59,7 @@ __all__ = [
     "ElevationResetAlarm",
     "ElevationStop",
     "ElevationTrackTarget",
+    "GetActualSettings",
     "Heartbeat",
     "MainAxesPowerSupplyPower",
     "MainAxesPowerSupplyResetAlarm",
@@ -75,10 +76,11 @@ __all__ = [
     "MirrorCoversResetAlarm",
     "MirrorCoversStop",
     "OilSupplySystemPower",
+    "OilSupplySystemPowerCirculationPump",
     "OilSupplySystemPowerCooling",
     "OilSupplySystemPowerMainPump",
-    "OilSupplySystemPowerOil",
     "OilSupplySystemResetAlarm",
+    "OilSupplySystemSetMode",
     "SafetyReset",
     "StateInfo",
     "TopEndChillerPower",
@@ -90,9 +92,8 @@ __all__ = [
 ]
 
 from lsst.ts import utils
-from . import base_message
-from . import enums
-from . import field_info
+
+from . import base_message, enums, field_info
 from .utils import wrap_parameter_doc
 
 MAX_SEQUENCE_ID = (1 << 31) - 1
@@ -515,6 +516,10 @@ class ElevationTrackTarget(Command):
     )
 
 
+class GetActualSettings(Command):
+    field_infos = make_command_field_infos(enums.CommandCode.GET_ACTUAL_SETTINGS)
+
+
 class Heartbeat(Command):
     field_infos = make_command_field_infos(enums.CommandCode.HEARTBEAT)
 
@@ -674,6 +679,13 @@ class OilSupplySystemPower(Command):
     )
 
 
+class OilSupplySystemPowerCirculationPump(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_CIRCULATION_PUMP,
+        _OnOffParameters,
+    )
+
+
 class OilSupplySystemPowerCooling(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_COOLING,
@@ -688,16 +700,20 @@ class OilSupplySystemPowerMainPump(Command):
     )
 
 
-class OilSupplySystemPowerOil(Command):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_OIL,
-        _OnOffParameters,
-    )
-
-
 class OilSupplySystemResetAlarm(Command):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_RESET_ALARM,
+    )
+
+
+class OilSupplySystemSetMode(Command):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_SET_MODE,
+        (
+            field_info.BoolFieldInfo(
+                name="auto", doc="Automatic mode = true, manual mode = false"
+            ),
+        ),
     )
 
 
@@ -776,6 +792,7 @@ Commands = (
     ElevationResetAlarm,
     ElevationStop,
     ElevationTrackTarget,
+    GetActualSettings,
     Heartbeat,
     MainAxesPowerSupplyPower,
     MainAxesPowerSupplyResetAlarm,
@@ -792,10 +809,11 @@ Commands = (
     MirrorCoversResetAlarm,
     MirrorCoversStop,
     OilSupplySystemPower,
+    OilSupplySystemPowerCirculationPump,
     OilSupplySystemPowerCooling,
     OilSupplySystemPowerMainPump,
-    OilSupplySystemPowerOil,
     OilSupplySystemResetAlarm,
+    OilSupplySystemSetMode,
     SafetyReset,
     StateInfo,
     TopEndChillerPower,

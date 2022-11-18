@@ -36,6 +36,7 @@ import abc
 import enum
 
 from lsst.ts import utils
+
 from . import enums
 
 
@@ -321,7 +322,6 @@ class SourceFieldInfo(EnumFieldInfo):
             name="source",
             doc=f"Source of the {what}; a `Source`",
             dtype=enums.Source,
-            # TODO: change this when we have a value for the CSC
             default=enums.Source.CSC,
         )
 

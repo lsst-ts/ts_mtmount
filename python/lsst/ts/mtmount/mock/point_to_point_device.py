@@ -24,6 +24,7 @@ __all__ = ["PointToPointDevice"]
 import asyncio
 
 from lsst.ts import simactuators
+
 from ..exceptions import CommandSupersededException
 from .base_device import BaseDevice
 
