@@ -870,7 +870,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             await self.disconnect()
 
-    async def send_command(self, command, do_lock, wait_done=True):
+    async def send_command(self, command, do_lock):
         """Send a command to the operation manager and wait for it to finish.
 
         Parameters
@@ -883,12 +883,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands can run simultaneously, so specify True when practical.
             Specify False for stop commands and the camera cable wrap
             tracking command (so rotator following is not blocked).
-        wait_done : `bool`, optional
-            Wait for the command to finish?
-            If False then only wait for the command to be acknowledged;
-            if ``do_lock`` true then release the lock when acknowledged.
-            Note that a few commands are done when acknowledged;
-            this argument has no effect for those.
 
         Returns
         -------
@@ -898,29 +892,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
         try:
             if do_lock:
                 async with self.command_lock:
-                    return await self._basic_send_command(
-                        command=command, wait_done=wait_done
-                    )
+                    return await self._basic_send_command(command=command)
             else:
-                return await self._basic_send_command(
-                    command=command, wait_done=wait_done
-                )
+                return await self._basic_send_command(command=command)
         except ConnectionResetError:
             raise
         except Exception as e:
             self.log.exception(f"Failed to send command {command}: {e!r}")
             raise
 
-    async def _basic_send_command(self, command, wait_done=True):
+    async def _basic_send_command(self, command):
         """Implementation of send_command. Ignores the command lock.
 
         Parameters
         ----------
         command : `Command`
             Command to send.
-        wait_done : `bool`, optional
-            Wait for the command to finish?
-            If False then only wait for the command to be acknowledged.
 
         Returns
         -------
@@ -948,7 +935,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if timeout < 0:
             # This command only receives an Ack; mark it done.
             futures.done.set_result(None)
-        elif not futures.done.done() and wait_done:
+        elif not futures.done.done():
             try:
                 await asyncio.wait_for(futures.done, timeout=timeout + TIMEOUT_BUFFER)
             except asyncio.TimeoutError:
@@ -981,15 +968,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             if do_lock:
                 async with self.command_lock:
                     for command in commands:
-                        future = await self.send_command(
-                            command, do_lock=False, wait_done=True
-                        )
+                        future = await self.send_command(command, do_lock=False)
                         await future.done
             else:
                 for command in commands:
-                    future = await self.send_command(
-                        command, do_lock=False, wait_done=True
-                    )
+                    future = await self.send_command(command, do_lock=False)
                     await future.done
         except ConnectionResetError:
             if future is not None:
