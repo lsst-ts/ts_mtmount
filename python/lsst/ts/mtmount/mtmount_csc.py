@@ -82,6 +82,9 @@ TELEMETRY_START_TIMEOUT = 30
 # added to the time estimate reported by the low-level controller (sec).
 TIMEOUT_BUFFER = 5
 
+# Minimum tracking advance time (sec) allowed in trackTarget commands
+MIN_TRACKING_ADVANCE_TIME = 0.02
+
 
 class SystemStateInfo:
     """Information about a system state topic.
@@ -295,6 +298,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             initial_state=initial_state,
             simulation_mode=simulation_mode,
         )
+
+        # Allow multiple trackTarget commands to run at the same time
+        # in case ack is slow for one of them.
+        self.cmd_trackTarget.allow_multiple_callbacks = True
 
         # TODO DM-36879: remove this and rely on GetActualSettings
         # to return the data.
@@ -1227,8 +1234,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_trackTarget(self, data):
         """Handle the trackTarget command."""
         self.assert_enabled()
-        # Use do_lock=False to prevent a slow command
-        # from interrrupting tracking
+        advance_time = data.taiTime - utils.current_tai()
+        if advance_time < MIN_TRACKING_ADVANCE_TIME:
+            self.log.warning(
+                f"Ignoring late tracking command with taiTime={data.taiTime}: "
+                f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=}"
+            )
+            return
+
+        # Use do_lock=False and allow multiple simultaneous commands
+        # (in __init__) to prevent a blocked command from aborting tracking.
         await self.send_command(
             commands.BothAxesTrackTarget(
                 azimuth=data.azimuth,

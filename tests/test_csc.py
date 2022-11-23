@@ -55,6 +55,9 @@ LONG_TIMEOUT = 60
 
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
+# Desired advance time for tracking commands (sec)
+TRACK_ADVANCE_TIME = 0.15
+
 SAFETY_INTERLOCKS_FIELDS = (
     "causes",
     "subcausesEmergencyStop",
@@ -615,7 +618,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     ):
         """Make keyword argumetns for the trackTarget command."""
         if taiTime is None:
-            taiTime = utils.current_tai()
+            taiTime = utils.current_tai() + TRACK_ADVANCE_TIME
         return dict(
             azimuth=azimuth,
             elevation=elevation,
@@ -1244,7 +1247,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             assert not mock_azimuth.tracking_enabled
             assert not mock_elevation.tracking_enabled
 
-            tai = utils.current_tai()
+            tai = utils.current_tai() + TRACK_ADVANCE_TIME
             initial_azimuth = mock_azimuth.actuator.path.at(tai).position
             initial_elevation = mock_elevation.actuator.path.at(tai).position
 
@@ -1375,7 +1378,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         previous_tai = 0
         while True:
             await asyncio.sleep(0.1)
-            tai = utils.current_tai()
+            tai = utils.current_tai() + TRACK_ADVANCE_TIME
             # Work around non-monotonic clocks, which are
             # sometimes seen when running Docker on macOS.
             if tai < previous_tai:
