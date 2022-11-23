@@ -38,6 +38,7 @@ v0.23.0
     * Go to fault if the azimuth, elevation, or camera cable wrap axis faults, with new error code ``CscErrorCode.AXIS_FAULT``.
     * Log commands sent and command replies received at level 15 (halfway between info and debug).
     * Add support for the GetActualSettings command. But don't use it yet, because it is broken in the TMA.
+    * Remove the ``wait_done`` argument from the ``send_command`` method; always wait.
     * Fix a bug in the ``monitor_telemetry_client`` method.
     * Fix a bug in the camera cable wrap following code.
     * Fix a bug in handling the TMA limits event for some systems.
