@@ -794,8 +794,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 # until the main power supply is on.
                 # Sometimes a second reset is needed for the main axes
                 # (a known bug in the TMA as of 2022-11-03).
-                (commands.BothAxesResetAlarm(), True),
-                (commands.BothAxesResetAlarm(), True),
+                (commands.BothAxesResetAlarm(), False),
+                (commands.BothAxesResetAlarm(), False),
                 (commands.BothAxesPower(on=True), True),
                 (commands.CameraCableWrapPower(on=True), True),
             ):
