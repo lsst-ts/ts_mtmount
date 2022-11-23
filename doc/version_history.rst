@@ -6,6 +6,22 @@
 Version History
 ###############
 
+v0.24.1
+-------
+
+* `MTMountCSC`:
+
+    * Fail pending low-level commands on disconnect.
+    * Ignore trackTarget commands if the tracking advance time is too small, but log a warning.
+
+Requires:
+
+* ts_salobj 7.1
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 13
+
 v0.23.0
 -------
 
