@@ -938,7 +938,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise RuntimeError(
                 f"Bug! Duplicate sequence_id {command.sequence_id} in command_dict"
             )
-        futures = command_futures.CommandFutures()
+        futures = command_futures.CommandFutures(command=command)
         self.command_dict[command.sequence_id] = futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
