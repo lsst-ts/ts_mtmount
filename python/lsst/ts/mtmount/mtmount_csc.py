@@ -246,10 +246,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Subprocess running the mock controller
         self.mock_controller_process = None
 
-        # Dict of command sequence-id: (ack_task, done_task).
-        # ack_task is set to the timeout (sec) when command is acknowledged.
-        # done_task is set to to None when the command is done.
-        # Both are set to exceptions if the command fails.
+        # Dict of command sequence-id: command_futures.CommandFutures
         self.command_dict = dict()
 
         # Reply IDs that this code does not handle.
@@ -710,6 +707,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         because that should remain running until the CSC quits.
         """
         self.should_be_connected = False
+
+        # Cancel pending commands
+        while self.command_dict:
+            command = self.command_dict.popitem()[1]
+            command.setnoack("Connection closed before command finished")
 
         # TODO DM-35194: remove this code block when it is OK to drop control
         # (e.g. without shutting down the OSS).
