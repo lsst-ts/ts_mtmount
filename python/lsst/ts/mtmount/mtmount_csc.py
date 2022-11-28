@@ -300,14 +300,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # in case ack is slow for one of them.
         self.cmd_trackTarget.allow_multiple_callbacks = True
 
-        # TODO DM-36879: remove this and rely on GetActualSettings
-        # to return the data.
-        self.evt_cameraCableWrapControllerSettings.set(
-            maxCmdVelocity=5.6,
-            minCmdPosition=-90,
-            maxCmdPosition=90,
-        )
-
         # Dict of system ID: SystemStateInfo;
         # this provides useful information for handling replies and also
         # initializes the relevant fields of the events. Initialization is
@@ -624,9 +616,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
             await self.send_command(commands.StateInfo(), do_lock=True)
-            # TODO DM-36879: enable this when the TMA command works:
-            if False:
-                await self.send_command(commands.GetActualSettings(), do_lock=True)
+            await self.send_command(commands.GetActualSettings(), do_lock=True)
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
             err_msg = "Could not connect to the low-level controller: "
@@ -1057,15 +1047,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         This should be called by start_camera_cable_wrap_following.
         Camera cable wrap tracking must be enabled before this is called.
         """
-        self.log.info("Camera cable wrap following begins")
-        self.rotator_position_error_excessive = False
-        if not self.evt_cameraCableWrapControllerSettings.has_data:
-            raise RuntimeError(
-                "cameraCableWrapControllerSettings event has not been published; "
-                "camera cable wrap command limits unknown"
-            )
-        paused = False
         try:
+            self.log.info("Camera cable wrap following begins")
+            self.rotator_position_error_excessive = False
+            if not self.evt_cameraCableWrapControllerSettings.has_data:
+                raise RuntimeError(
+                    "cameraCableWrapControllerSettings event has not been published; "
+                    "camera cable wrap command limits unknown"
+                )
+            paused = False
+
             while self.camera_cable_wrap_following_enabled:
                 try:
                     position_velocity_tai = await self.get_camera_cable_wrap_demand()
@@ -1436,7 +1427,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 maxCmdPosition=axis_settings["LimitsMaxPositionValue"],
                 minL1Limit=min_l1_limit,
                 maxL1Limit=max_l1_limit,
-                maxCmdVelocity=axis_settings["TcsMaxSpeed"],
+                maxCmdVelocity=axis_settings["TcsMaxVelocity"],
                 maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
                 maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
                 maxMoveJerk=axis_settings["TcsDefaultJerk"],
@@ -1449,8 +1440,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         ccw_settings = reply.CW["CCW"]
         await self.evt_cameraCableWrapControllerSettings.set_write(
-            l1LimitsEnabled=ccw_settings["SoftwareLimitEnable"],
-            l2LimitsEnabled=ccw_settings["LimitSwitchEnable"],
+            # TODO DM-37114: enable these once XML 14.1 is deployed
+            # minL1LimitEnabled=ccw_settings["NegativeSoftwareLimitEnable"],
+            # maxL1LimitEnabled=ccw_settings["PositiveSoftwareLimitEnable"],
+            # minL2LimitEnabled=ccw_settings["NegativeLimitSwitchEnable"],
+            # maxL2LimitEnabled=ccw_settings["PositiveLimitSwitchEnable"],
             minCmdPosition=ccw_settings["MinPosition"],
             maxCmdPosition=ccw_settings["MaxPosition"],
             minL1Limit=ccw_settings["MinSoftwareLimit"],

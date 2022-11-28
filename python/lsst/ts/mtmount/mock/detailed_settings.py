@@ -215,7 +215,8 @@ CW:
     IdString1: Motor 1
     IdString2: Motor 2
     Inpositionmargin: 0.2
-    LimitSwitchEnable: true
+    NegativeLimitSwitchEnable: true
+    PositiveLimitSwitchEnable: true
     MaxAcceleration: 1
     MaxJerk: 7
     MaxPosition: 90
@@ -232,7 +233,8 @@ CW:
     PositionOffset: 0
     Resettingtime: 2000
     RotationSense: 1
-    SoftwareLimitEnable: true
+    NegativeSoftwareLimitEnable: true
+    PositiveSoftwareLimitEnable: true
     SpeedLimit: 6
     StoptransTimeout: 4000
     Systemsource: 1000.CCW

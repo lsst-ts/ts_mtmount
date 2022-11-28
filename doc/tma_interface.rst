@@ -208,7 +208,7 @@ there will be similarly-named limits for the EUI and HHD:
     else:
         no min/max command limit
 
-* TcsMaxSpeed: command velocity limit.
+* TcsMaxVelocity: command velocity limit.
 * Limits[Negative|Positive]AdjustableSoftwareLimitEnable: are the adjustable L1 (software) limits enabled?
 * Limits[Negative|Positive]SoftwareLimitEnabled: are the non-adjustable L1 (software) limits enabled?
 * Thus the actual min/max L1 (software) limits are given by::
@@ -236,7 +236,8 @@ Camera Cable Wrap
 The camera cable wrap (CCW) has simpler limits than the main axes.
 For example it has no "adjustable" L1 or "operational" L2 limits,
 and the limits are the same for the EUI, HHD and TCS.
-The parameter names are different than for the main axes:
+Also many parameter names are different than for the main axes.
+Here are some of the most important parameters:
 
 * [Min|Max]Position: command position limits.
 * MaxSpeed: command velocity limits.
@@ -244,5 +245,6 @@ The parameter names are different than for the main axes:
   Technically these are defaults, which are only used if the specified value is 0;
   however, the CSC always specifies 0 for these parameters.
 * Tracking[Speed|Acceleration|Jerk]: the max velocity, acceleration and jerk used by the trajectory planner for slewing and tracking.
-* [Min|Max]SoftwareLimit: L1 (software) limits.
-* LimitSwitchEnable: are the L1 (software) limits enabled?
+* [Min|Max]SoftwareLimit: the software position limits.
+* [Negative|Positive]SoftwareLimitEnable: are the software position limits enabled?
+* [Negative|Positive]LimitSwitchEnable: are the direction inhibit limit switches enabled?

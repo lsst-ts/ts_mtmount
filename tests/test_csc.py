@@ -300,57 +300,56 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     )
                 else:
                     extra_elevation_fields = dict()
-                # TODO DM-36879: restore this once GetActualSettings works
-                if False:
-                    await self.assert_next_sample(
-                        topic=topic,
-                        minCmdPositionEnabled=True,
-                        maxCmdPositionEnabled=True,
-                        minL1LimitEnabled=True,
-                        maxL1LimitEnabled=True,
-                        minOperationalL1LimitEnabled=True,
-                        maxOperationalL1LimitEnabled=True,
-                        minL2LimitEnabled=True,
-                        maxL2LimitEnabled=True,
-                        minCmdPosition=axis_cmd_limits.min_position,
-                        maxCmdPosition=axis_cmd_limits.max_position,
-                        minL1Limit=axis_settings[
-                            "LimitsNegativeAdjustableSoftwareLimitValue"
-                        ],
-                        maxL1Limit=axis_settings[
-                            "LimitsPositiveAdjustableSoftwareLimitValue"
-                        ],
-                        maxCmdVelocity=axis_cmd_limits.max_velocity,
-                        maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
-                        maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
-                        maxMoveJerk=axis_settings["TcsDefaultJerk"],
-                        maxTrackingVelocity=axis_actuator.max_velocity,
-                        maxTrackingAcceleration=axis_actuator.max_acceleration,
-                        maxTrackingJerk=axis_settings["SoftmotionTrackingMaxJerk"],
-                        **extra_elevation_fields,
-                    )
+                await self.assert_next_sample(
+                    topic=topic,
+                    minCmdPositionEnabled=True,
+                    maxCmdPositionEnabled=True,
+                    minL1LimitEnabled=True,
+                    maxL1LimitEnabled=True,
+                    minOperationalL1LimitEnabled=True,
+                    maxOperationalL1LimitEnabled=True,
+                    minL2LimitEnabled=True,
+                    maxL2LimitEnabled=True,
+                    minCmdPosition=axis_cmd_limits.min_position,
+                    maxCmdPosition=axis_cmd_limits.max_position,
+                    minL1Limit=axis_settings[
+                        "LimitsNegativeAdjustableSoftwareLimitValue"
+                    ],
+                    maxL1Limit=axis_settings[
+                        "LimitsPositiveAdjustableSoftwareLimitValue"
+                    ],
+                    maxCmdVelocity=axis_cmd_limits.max_velocity,
+                    maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
+                    maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
+                    maxMoveJerk=axis_settings["TcsDefaultJerk"],
+                    maxTrackingVelocity=axis_actuator.max_velocity,
+                    maxTrackingAcceleration=axis_actuator.max_acceleration,
+                    maxTrackingJerk=axis_settings["SoftmotionTrackingMaxJerk"],
+                    **extra_elevation_fields,
+                )
             ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
             ccw_actuator = ccw_device.actuator
             ccw_cmd_limits = ccw_device.cmd_limits
             ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]
-            # TODO DM-36879: restore this once GetActualSettings works
-            if False:
-                await self.assert_next_sample(
-                    topic=self.remote.evt_cameraCableWrapControllerSettings,
-                    l1LimitsEnabled=True,
-                    l2LimitsEnabled=True,
-                    minCmdPosition=ccw_cmd_limits.min_position,
-                    maxCmdPosition=ccw_cmd_limits.max_position,
-                    minL1Limit=ccw_settings["MinSoftwareLimit"],
-                    maxL1Limit=ccw_settings["MaxSoftwareLimit"],
-                    maxCmdVelocity=ccw_cmd_limits.max_velocity,
-                    maxMoveVelocity=ccw_settings["DefaultSpeed"],
-                    maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
-                    maxMoveJerk=ccw_settings["DefaultJerk"],
-                    maxTrackingVelocity=ccw_actuator.max_velocity,
-                    maxTrackingAcceleration=ccw_actuator.max_acceleration,
-                    maxTrackingJerk=ccw_settings["TrackingJerk"],
-                )
+            await self.assert_next_sample(
+                topic=self.remote.evt_cameraCableWrapControllerSettings,
+                # TODO DM-37114: enable these once XML 14.1 is deployed
+                # minL1LimitEnabled=True,
+                # maxL1LimitEnabled=True,
+                # minL2LimitEnabled=True,
+                # maxL2LimitEnabled=True,
+                minCmdPosition=ccw_cmd_limits.min_position,
+                maxCmdPosition=ccw_cmd_limits.max_position,
+                minL1Limit=ccw_settings["MinSoftwareLimit"],
+                maxL1Limit=ccw_settings["MaxSoftwareLimit"],
+                maxCmdVelocity=ccw_cmd_limits.max_velocity,
+                maxMoveVelocity=ccw_settings["DefaultSpeed"],
+                maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
+                maxMoveJerk=ccw_settings["DefaultJerk"],
+                maxTrackingVelocity=ccw_actuator.max_velocity,
+                maxTrackingAcceleration=ccw_actuator.max_acceleration,
+                maxTrackingJerk=ccw_settings["TrackingJerk"],
+            )
 
             available_settings = self.mock_controller.available_settings
             await self.assert_next_sample(
@@ -1468,18 +1467,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
-            # TODO DM-36879: get the data from the remote again,
-            # once GetActualSettings works.
-            if True:
-                ccw_controller_settings_data = (
-                    self.csc.evt_cameraCableWrapControllerSettings.data
+            ccw_controller_settings_data = (
+                await self.remote.evt_cameraCableWrapControllerSettings.next(
+                    flush=False, timeout=STD_TIMEOUT
                 )
-            else:
-                ccw_controller_settings_data = (
-                    await self.remote.evt_cameraCableWrapControllerSettings.next(
-                        flush=False, timeout=STD_TIMEOUT
-                    )
-                )
+            )
             ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
             ccw_cmd_limits = ccw_device.cmd_limits
             assert not ccw_device.power_on

@@ -1043,7 +1043,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                             == axis_cmd_limits.max_position
                         )
                         assert (
-                            axis_settings["TcsMaxSpeed"] == axis_cmd_limits.max_velocity
+                            axis_settings["TcsMaxVelocity"]
+                            == axis_cmd_limits.max_velocity
                         )
                         assert (
                             axis_settings["TcsMaxAcceleration"]
