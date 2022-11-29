@@ -1200,12 +1200,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Handle the moveToTarget command."""
         self.assert_enabled()
         cmd_futures = await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
+            # TODO DM-37115: remove the minus sign on azimuth
+            # once the TMA uses the correct sign for azimuth
+            commands.BothAxesMove(azimuth=-data.azimuth, elevation=data.elevation),
             do_lock=True,
         )
         timeout = cmd_futures.timeout + TIMEOUT_BUFFER
         await self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
         await cmd_futures.done
+        # Note: the target position is reported
+        # by the TMA as ReplyId.AXIS_MOTION_STATE
 
     async def do_trackTarget(self, data):
         """Handle the trackTarget command."""
@@ -1221,9 +1225,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Use do_lock=False and allow multiple simultaneous commands
         # (in __init__) to prevent a blocked command from aborting tracking.
         await self.send_command(
+            # TODO DM-37115: remove the minus signs on azimuth
+            # once the TMA uses the correct sign for azimuth
             commands.BothAxesTrackTarget(
-                azimuth=data.azimuth,
-                azimuth_velocity=data.azimuthVelocity,
+                azimuth=-data.azimuth,
+                azimuth_velocity=-data.azimuthVelocity,
                 elevation=data.elevation,
                 elevation_velocity=data.elevationVelocity,
                 tai=data.taiTime,
@@ -1294,10 +1300,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     radesys="",
                 )
         elif axis == System.AZIMUTH:
+            # TODO DM-37115: remove the minus sign
+            # when the TMA azimuth has the correct sign.
             await self.evt_azimuthMotionState.set_write(state=state)
             if state == AxisMotionState.MOVING_POINT_TO_POINT:
                 await self.evt_target.set_write(
-                    azimuth=reply.position,
+                    azimuth=-reply.position,
                     azimuthVelocity=0,
                     taiTime=utils.current_tai(),
                     trackId=0,

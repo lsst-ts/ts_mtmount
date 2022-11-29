@@ -87,6 +87,24 @@ class TelemetryTopicHandler:
 
 
 class TelemetryClient:
+    """Read telemetry data from the TMA and publish as SAL messages.
+
+    Paramaters
+    ----------
+    host : `str`
+        Host IP address of TMA telemetry server.
+    port : `int`
+        Host IP port of TMA telemetry server.
+    connection_timeout : `float`
+        Connection timeout (seconds).
+
+    Notes
+    -----
+    Methods with the name "_preprocess_{sal_topic_name}" are used
+    to tweak telemetry data. They receive one argument:
+    the raw telemetry data as a dict, and must modify it "in place".
+    """
+
     on_drive_states = frozenset(("Standstill", "Discrete Motion", "Stopping"))
 
     def __init__(
@@ -276,6 +294,18 @@ class TelemetryClient:
         except Exception:
             self.log.exception("read_loop failed; giving up.")
             asyncio.ensure_future(self.close())
+
+    # TODO DM-37115: remove this when the TMA azimuth has the correct sign.
+    def _preprocess_azimuth(self, llv_data):
+        """Invert azimuth data"""
+        for field in (
+            "actualPosition",
+            "demandPosition",
+            "actualVelocity",
+            "demandVelocity",
+            "actualTorque",
+        ):
+            llv_data[field] = -llv_data[field]
 
 
 def run_mtmount_telemetry_client():
