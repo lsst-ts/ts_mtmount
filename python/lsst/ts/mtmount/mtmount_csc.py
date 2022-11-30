@@ -39,6 +39,9 @@ from . import __version__, command_futures, commands, constants, enums
 from .config_schema import CONFIG_SCHEMA
 from .utils import truncate_value
 
+# Interval between consecutive commands to the same subsystem (seconds).
+COMMAND_INTERVAL = 0.01
+
 # Interval between sending heartbeat commands
 # to the low-level controller (seconds).
 LLV_HEARTBEAT_INTERVAL = 1
@@ -791,6 +794,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             ):
                 try:
                     await self.send_command(command, do_lock=True)
+                    await asyncio.sleep(COMMAND_INTERVAL)
                 except Exception as e:
                     if must_succeed:
                         raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
@@ -828,6 +832,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ]:
             try:
                 await self.send_command(command, do_lock=True)
+                await asyncio.sleep(COMMAND_INTERVAL)
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
