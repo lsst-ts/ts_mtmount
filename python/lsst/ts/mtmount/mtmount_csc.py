@@ -921,6 +921,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 f"Bug! Duplicate sequence_id {command.sequence_id} in command_dict"
             )
         futures = command_futures.CommandFutures(command=command)
+        # Set the timestamp field to the time at which the command was sent.
+        command.timestamp = utils.current_tai()
         self.command_dict[command.sequence_id] = futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
