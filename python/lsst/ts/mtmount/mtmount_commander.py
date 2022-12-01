@@ -26,13 +26,13 @@ import dataclasses
 
 from lsst.ts import salobj, simactuators, utils
 
-# Standard timeout for CSC commands (seconds)
+# Standard timeout for CSC commands (sec)
 STD_TIMEOUT = 2
 
-# How far in advance to set the time field of tracking commands (seconds).
+# How far in advance to set the time field of tracking commands (sec).
 TRACK_ADVANCE_TIME = 0.15
 
-# Interval between tracking commands (seconds).
+# Interval between tracking commands (sec).
 # 0.05 is interval used by MTPtg, the MT pointing component.
 TRACK_INTERVAL = 0.05
 

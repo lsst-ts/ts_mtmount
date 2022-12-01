@@ -103,6 +103,18 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                 actualTorque=3.3,
                 timestamp=time.time(),
             )
+            # TODO DM-37115: remove this variable and use desired_elaz_dds_data
+            # when the TMA azimuth has the correct sign.
+            desired_az_dds_data = desired_elaz_dds_data.copy()
+            for field in (
+                "actualPosition",
+                "demandPosition",
+                "actualVelocity",
+                "demandVelocity",
+                "actualTorque",
+            ):
+                desired_az_dds_data[field] = -desired_az_dds_data[field]
+
             # topic_id is from telemetry_map.yaml
             azimuth_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elaz_dds_data,
@@ -111,7 +123,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             azimuth_llv_data["this_extra_field_should_be_ignored"] = 55.2
             await self.publish_data(azimuth_llv_data)
             await self.assert_next_telemetry(
-                self.remote.tel_azimuth, desired_elaz_dds_data
+                self.remote.tel_azimuth, desired_az_dds_data
             )
 
             elevation_llv_data = self.convert_dds_data_to_llv(
@@ -180,7 +192,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         delta : `float`, optional
             Maximum allowed difference for float values.
         timeout : `float`, optional
-            Maximum time to wait for a message (seconds).
+            Maximum time to wait for a message (sec).
 
         Returns
         -------

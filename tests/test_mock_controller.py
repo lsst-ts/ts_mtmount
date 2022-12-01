@@ -806,7 +806,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # once the slew is done
             num_tracking_remaining = 10
             t0 = utils.current_tai()
-            # The maximum time for slewing and tracking (seconds);
+            # The maximum time for slewing and tracking (sec);
             # be generous, because this is used as a timeout
             max_slewing_and_tracking_duration = 10
             timeout_tai = t0 + max_slewing_and_tracking_duration
@@ -1043,7 +1043,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                             == axis_cmd_limits.max_position
                         )
                         assert (
-                            axis_settings["TcsMaxSpeed"] == axis_cmd_limits.max_velocity
+                            axis_settings["TcsMaxVelocity"]
+                            == axis_cmd_limits.max_velocity
                         )
                         assert (
                             axis_settings["TcsMaxAcceleration"]
