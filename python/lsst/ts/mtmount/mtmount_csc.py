@@ -39,14 +39,17 @@ from . import __version__, command_futures, commands, constants, enums
 from .config_schema import CONFIG_SCHEMA
 from .utils import truncate_value
 
+# Interval between consecutive commands to the same subsystem (sec).
+COMMAND_INTERVAL = 0.01
+
 # Interval between sending heartbeat commands
-# to the low-level controller (seconds).
+# to the low-level controller (sec).
 LLV_HEARTBEAT_INTERVAL = 1
 
 # Log level for commands and command replies.
 LOG_LEVEL_COMMANDS = (logging.DEBUG + logging.INFO) // 2
 
-# Maximum time (seconds) to fully deploy or retract the mirror covers,
+# Maximum time (sec) to fully deploy or retract the mirror covers,
 # including dealing with the mirror cover locks.
 # 60 is the maximum allowed by our requirements,
 # so it is not necessarily accurate.
@@ -59,7 +62,7 @@ MIRROR_COVER_TIMEOUT = 60
 # and seeing the "running" message (sec).
 MOCK_CTRL_START_TIMEOUT = 30
 
-# Maximum time to wait for rotator telemetry (seconds).
+# Maximum time to wait for rotator telemetry (sec).
 # Must be significantly greater than the interval between rotator
 # telemetry updates, which should not be longer than 0.2 seconds.
 # For minimum confusion when camera cable wrap following fails,
@@ -69,10 +72,10 @@ MOCK_CTRL_START_TIMEOUT = 30
 # on 2020-02-01 the value was 5 seconds.
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
-# Maximum time (seconds) to for the startTracking command.
+# Maximum time (sec) to for the startTracking command.
 START_TRACKING_TIMEOUT = 7
 
-# Maximum time (seconds) to for the stop and stopTracking commands.
+# Maximum time (sec) to for the stop and stopTracking commands.
 STOP_TIMEOUT = 5
 
 # Timeout for seeing telemetry from the telemetry client (sec).
@@ -81,6 +84,9 @@ TELEMETRY_START_TIMEOUT = 30
 # Extra time to wait for low-level commands to be done;
 # added to the time estimate reported by the low-level controller (sec).
 TIMEOUT_BUFFER = 5
+
+# Minimum tracking advance time (sec) allowed in trackTarget commands
+MIN_TRACKING_ADVANCE_TIME = 0.02
 
 
 class SystemStateInfo:
@@ -243,10 +249,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Subprocess running the mock controller
         self.mock_controller_process = None
 
-        # Dict of command sequence-id: (ack_task, done_task).
-        # ack_task is set to the timeout (sec) when command is acknowledged.
-        # done_task is set to to None when the command is done.
-        # Both are set to exceptions if the command fails.
+        # Dict of command sequence-id: command_futures.CommandFutures
         self.command_dict = dict()
 
         # Reply IDs that this code does not handle.
@@ -296,13 +299,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             simulation_mode=simulation_mode,
         )
 
-        # TODO DM-36879: remove this and rely on GetActualSettings
-        # to return the data.
-        self.evt_cameraCableWrapControllerSettings.set(
-            maxCmdVelocity=5.6,
-            minCmdPosition=-90,
-            maxCmdPosition=90,
-        )
+        # Allow multiple trackTarget commands to run at the same time
+        # in case ack is slow for one of them.
+        self.cmd_trackTarget.allow_multiple_callbacks = True
 
         # Dict of system ID: SystemStateInfo;
         # this provides useful information for handling replies and also
@@ -620,9 +619,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
             await self.send_command(commands.StateInfo(), do_lock=True)
-            # TODO DM-36879: enable this when the TMA command works:
-            if False:
-                await self.send_command(commands.GetActualSettings(), do_lock=True)
+            await self.send_command(commands.GetActualSettings(), do_lock=True)
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
             err_msg = "Could not connect to the low-level controller: "
@@ -703,6 +700,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         because that should remain running until the CSC quits.
         """
         self.should_be_connected = False
+
+        # Cancel pending commands
+        while self.command_dict:
+            command = self.command_dict.popitem()[1]
+            command.setnoack("Connection closed before command finished")
 
         # TODO DM-35194: remove this code block when it is OK to drop control
         # (e.g. without shutting down the OSS).
@@ -785,13 +787,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 # until the main power supply is on.
                 # Sometimes a second reset is needed for the main axes
                 # (a known bug in the TMA as of 2022-11-03).
-                (commands.BothAxesResetAlarm(), True),
-                (commands.BothAxesResetAlarm(), True),
+                (commands.BothAxesResetAlarm(), False),
+                (commands.BothAxesResetAlarm(), False),
                 (commands.BothAxesPower(on=True), True),
                 (commands.CameraCableWrapPower(on=True), True),
             ):
                 try:
                     await self.send_command(command, do_lock=True)
+                    await asyncio.sleep(COMMAND_INTERVAL)
                 except Exception as e:
                     if must_succeed:
                         raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
@@ -829,6 +832,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ]:
             try:
                 await self.send_command(command, do_lock=True)
+                await asyncio.sleep(COMMAND_INTERVAL)
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
@@ -861,7 +865,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             await self.disconnect()
 
-    async def send_command(self, command, do_lock, wait_done=True):
+    async def send_command(self, command, do_lock):
         """Send a command to the operation manager and wait for it to finish.
 
         Parameters
@@ -874,12 +878,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands can run simultaneously, so specify True when practical.
             Specify False for stop commands and the camera cable wrap
             tracking command (so rotator following is not blocked).
-        wait_done : `bool`, optional
-            Wait for the command to finish?
-            If False then only wait for the command to be acknowledged;
-            if ``do_lock`` true then release the lock when acknowledged.
-            Note that a few commands are done when acknowledged;
-            this argument has no effect for those.
 
         Returns
         -------
@@ -889,29 +887,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
         try:
             if do_lock:
                 async with self.command_lock:
-                    return await self._basic_send_command(
-                        command=command, wait_done=wait_done
-                    )
+                    return await self._basic_send_command(command=command)
             else:
-                return await self._basic_send_command(
-                    command=command, wait_done=wait_done
-                )
+                return await self._basic_send_command(command=command)
         except ConnectionResetError:
             raise
         except Exception as e:
             self.log.exception(f"Failed to send command {command}: {e!r}")
             raise
 
-    async def _basic_send_command(self, command, wait_done=True):
+    async def _basic_send_command(self, command):
         """Implementation of send_command. Ignores the command lock.
 
         Parameters
         ----------
         command : `Command`
             Command to send.
-        wait_done : `bool`, optional
-            Wait for the command to finish?
-            If False then only wait for the command to be acknowledged.
 
         Returns
         -------
@@ -929,7 +920,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise RuntimeError(
                 f"Bug! Duplicate sequence_id {command.sequence_id} in command_dict"
             )
-        futures = command_futures.CommandFutures()
+        futures = command_futures.CommandFutures(command=command)
+        # Set the timestamp field to the time at which the command was sent.
+        command.timestamp = utils.current_tai()
         self.command_dict[command.sequence_id] = futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
@@ -939,7 +932,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if timeout < 0:
             # This command only receives an Ack; mark it done.
             futures.done.set_result(None)
-        elif not futures.done.done() and wait_done:
+        elif not futures.done.done():
             try:
                 await asyncio.wait_for(futures.done, timeout=timeout + TIMEOUT_BUFFER)
             except asyncio.TimeoutError:
@@ -972,15 +965,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             if do_lock:
                 async with self.command_lock:
                     for command in commands:
-                        future = await self.send_command(
-                            command, do_lock=False, wait_done=True
-                        )
+                        future = await self.send_command(command, do_lock=False)
                         await future.done
             else:
                 for command in commands:
-                    future = await self.send_command(
-                        command, do_lock=False, wait_done=True
-                    )
+                    future = await self.send_command(command, do_lock=False)
                     await future.done
         except ConnectionResetError:
             if future is not None:
@@ -1065,15 +1054,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         This should be called by start_camera_cable_wrap_following.
         Camera cable wrap tracking must be enabled before this is called.
         """
-        self.log.info("Camera cable wrap following begins")
-        self.rotator_position_error_excessive = False
-        if not self.evt_cameraCableWrapControllerSettings.has_data:
-            raise RuntimeError(
-                "cameraCableWrapControllerSettings event has not been published; "
-                "camera cable wrap command limits unknown"
-            )
-        paused = False
         try:
+            self.log.info("Camera cable wrap following begins")
+            self.rotator_position_error_excessive = False
+            if not self.evt_cameraCableWrapControllerSettings.has_data:
+                raise RuntimeError(
+                    "cameraCableWrapControllerSettings event has not been published; "
+                    "camera cable wrap command limits unknown"
+                )
+            paused = False
+
             while self.camera_cable_wrap_following_enabled:
                 try:
                     position_velocity_tai = await self.get_camera_cable_wrap_demand()
@@ -1217,22 +1207,36 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Handle the moveToTarget command."""
         self.assert_enabled()
         cmd_futures = await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
+            # TODO DM-37115: remove the minus sign on azimuth
+            # once the TMA uses the correct sign for azimuth
+            commands.BothAxesMove(azimuth=-data.azimuth, elevation=data.elevation),
             do_lock=True,
         )
         timeout = cmd_futures.timeout + TIMEOUT_BUFFER
         await self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
         await cmd_futures.done
+        # Note: the target position is reported
+        # by the TMA as ReplyId.AXIS_MOTION_STATE
 
     async def do_trackTarget(self, data):
         """Handle the trackTarget command."""
         self.assert_enabled()
-        # Use do_lock=False to prevent a slow command
-        # from interrrupting tracking
+        advance_time = data.taiTime - utils.current_tai()
+        if advance_time < MIN_TRACKING_ADVANCE_TIME:
+            self.log.warning(
+                f"Ignoring late tracking command with taiTime={data.taiTime}: "
+                f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=}"
+            )
+            return
+
+        # Use do_lock=False and allow multiple simultaneous commands
+        # (in __init__) to prevent a blocked command from aborting tracking.
         await self.send_command(
+            # TODO DM-37115: remove the minus signs on azimuth
+            # once the TMA uses the correct sign for azimuth
             commands.BothAxesTrackTarget(
-                azimuth=data.azimuth,
-                azimuth_velocity=data.azimuthVelocity,
+                azimuth=-data.azimuth,
+                azimuth_velocity=-data.azimuthVelocity,
                 elevation=data.elevation,
                 elevation_velocity=data.elevationVelocity,
                 tai=data.taiTime,
@@ -1303,10 +1307,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     radesys="",
                 )
         elif axis == System.AZIMUTH:
+            # TODO DM-37115: remove the minus sign
+            # when the TMA azimuth has the correct sign.
             await self.evt_azimuthMotionState.set_write(state=state)
             if state == AxisMotionState.MOVING_POINT_TO_POINT:
                 await self.evt_target.set_write(
-                    azimuth=reply.position,
+                    azimuth=-reply.position,
                     azimuthVelocity=0,
                     taiTime=utils.current_tai(),
                     trackId=0,
@@ -1436,7 +1442,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 maxCmdPosition=axis_settings["LimitsMaxPositionValue"],
                 minL1Limit=min_l1_limit,
                 maxL1Limit=max_l1_limit,
-                maxCmdVelocity=axis_settings["TcsMaxSpeed"],
+                maxCmdVelocity=axis_settings["TcsMaxVelocity"],
                 maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
                 maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
                 maxMoveJerk=axis_settings["TcsDefaultJerk"],
@@ -1449,8 +1455,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         ccw_settings = reply.CW["CCW"]
         await self.evt_cameraCableWrapControllerSettings.set_write(
-            l1LimitsEnabled=ccw_settings["SoftwareLimitEnable"],
-            l2LimitsEnabled=ccw_settings["LimitSwitchEnable"],
+            # TODO DM-37114: enable these once XML 14.1 is deployed
+            # minL1LimitEnabled=ccw_settings["NegativeSoftwareLimitEnable"],
+            # maxL1LimitEnabled=ccw_settings["PositiveSoftwareLimitEnable"],
+            # minL2LimitEnabled=ccw_settings["NegativeLimitSwitchEnable"],
+            # maxL2LimitEnabled=ccw_settings["PositiveLimitSwitchEnable"],
             minCmdPosition=ccw_settings["MinPosition"],
             maxCmdPosition=ccw_settings["MaxPosition"],
             minL1Limit=ccw_settings["MinSoftwareLimit"],

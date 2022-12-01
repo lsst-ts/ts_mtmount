@@ -295,7 +295,7 @@ class Controller:
             axis_settings = self.detailed_settings["MainAxis"][axis_name]
             axis_settings["LimitsMinPositionValue"] = axis_cmd_limits.min_position
             axis_settings["LimitsMaxPositionValue"] = axis_cmd_limits.max_position
-            axis_settings["TcsMaxSpeed"] = axis_cmd_limits.max_velocity
+            axis_settings["TcsMaxVelocity"] = axis_cmd_limits.max_velocity
             axis_settings["TcsMaxAcceleration"] = axis_cmd_limits.max_acceleration
             axis_settings["SoftmotionTrackingMaxSpeed"] = axis_actuator.max_velocity
             axis_settings[

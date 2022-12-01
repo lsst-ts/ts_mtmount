@@ -47,13 +47,16 @@ MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
 NOTELEMETRY_TIMEOUT = 2
 
 # Timeout for the CSC to react to a fault report
-# from the low-level controller (seconds).
+# from the low-level controller (sec).
 FAULT_TIMEOUT = 2
 
 # timeout for constructing several remotes and controllers (sec)
 LONG_TIMEOUT = 60
 
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
+
+# Desired advance time for tracking commands (sec)
+TRACK_ADVANCE_TIME = 0.15
 
 SAFETY_INTERLOCKS_FIELDS = (
     "causes",
@@ -297,57 +300,56 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     )
                 else:
                     extra_elevation_fields = dict()
-                # TODO DM-36879: restore this once GetActualSettings works
-                if False:
-                    await self.assert_next_sample(
-                        topic=topic,
-                        minCmdPositionEnabled=True,
-                        maxCmdPositionEnabled=True,
-                        minL1LimitEnabled=True,
-                        maxL1LimitEnabled=True,
-                        minOperationalL1LimitEnabled=True,
-                        maxOperationalL1LimitEnabled=True,
-                        minL2LimitEnabled=True,
-                        maxL2LimitEnabled=True,
-                        minCmdPosition=axis_cmd_limits.min_position,
-                        maxCmdPosition=axis_cmd_limits.max_position,
-                        minL1Limit=axis_settings[
-                            "LimitsNegativeAdjustableSoftwareLimitValue"
-                        ],
-                        maxL1Limit=axis_settings[
-                            "LimitsPositiveAdjustableSoftwareLimitValue"
-                        ],
-                        maxCmdVelocity=axis_cmd_limits.max_velocity,
-                        maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
-                        maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
-                        maxMoveJerk=axis_settings["TcsDefaultJerk"],
-                        maxTrackingVelocity=axis_actuator.max_velocity,
-                        maxTrackingAcceleration=axis_actuator.max_acceleration,
-                        maxTrackingJerk=axis_settings["SoftmotionTrackingMaxJerk"],
-                        **extra_elevation_fields,
-                    )
+                await self.assert_next_sample(
+                    topic=topic,
+                    minCmdPositionEnabled=True,
+                    maxCmdPositionEnabled=True,
+                    minL1LimitEnabled=True,
+                    maxL1LimitEnabled=True,
+                    minOperationalL1LimitEnabled=True,
+                    maxOperationalL1LimitEnabled=True,
+                    minL2LimitEnabled=True,
+                    maxL2LimitEnabled=True,
+                    minCmdPosition=axis_cmd_limits.min_position,
+                    maxCmdPosition=axis_cmd_limits.max_position,
+                    minL1Limit=axis_settings[
+                        "LimitsNegativeAdjustableSoftwareLimitValue"
+                    ],
+                    maxL1Limit=axis_settings[
+                        "LimitsPositiveAdjustableSoftwareLimitValue"
+                    ],
+                    maxCmdVelocity=axis_cmd_limits.max_velocity,
+                    maxMoveVelocity=axis_settings["TcsDefaultVelocity"],
+                    maxMoveAcceleration=axis_settings["TcsDefaultAcceleration"],
+                    maxMoveJerk=axis_settings["TcsDefaultJerk"],
+                    maxTrackingVelocity=axis_actuator.max_velocity,
+                    maxTrackingAcceleration=axis_actuator.max_acceleration,
+                    maxTrackingJerk=axis_settings["SoftmotionTrackingMaxJerk"],
+                    **extra_elevation_fields,
+                )
             ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
             ccw_actuator = ccw_device.actuator
             ccw_cmd_limits = ccw_device.cmd_limits
             ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]
-            # TODO DM-36879: restore this once GetActualSettings works
-            if False:
-                await self.assert_next_sample(
-                    topic=self.remote.evt_cameraCableWrapControllerSettings,
-                    l1LimitsEnabled=True,
-                    l2LimitsEnabled=True,
-                    minCmdPosition=ccw_cmd_limits.min_position,
-                    maxCmdPosition=ccw_cmd_limits.max_position,
-                    minL1Limit=ccw_settings["MinSoftwareLimit"],
-                    maxL1Limit=ccw_settings["MaxSoftwareLimit"],
-                    maxCmdVelocity=ccw_cmd_limits.max_velocity,
-                    maxMoveVelocity=ccw_settings["DefaultSpeed"],
-                    maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
-                    maxMoveJerk=ccw_settings["DefaultJerk"],
-                    maxTrackingVelocity=ccw_actuator.max_velocity,
-                    maxTrackingAcceleration=ccw_actuator.max_acceleration,
-                    maxTrackingJerk=ccw_settings["TrackingJerk"],
-                )
+            await self.assert_next_sample(
+                topic=self.remote.evt_cameraCableWrapControllerSettings,
+                # TODO DM-37114: enable these once XML 14.1 is deployed
+                # minL1LimitEnabled=True,
+                # maxL1LimitEnabled=True,
+                # minL2LimitEnabled=True,
+                # maxL2LimitEnabled=True,
+                minCmdPosition=ccw_cmd_limits.min_position,
+                maxCmdPosition=ccw_cmd_limits.max_position,
+                minL1Limit=ccw_settings["MinSoftwareLimit"],
+                maxL1Limit=ccw_settings["MaxSoftwareLimit"],
+                maxCmdVelocity=ccw_cmd_limits.max_velocity,
+                maxMoveVelocity=ccw_settings["DefaultSpeed"],
+                maxMoveAcceleration=ccw_settings["DefaultAcceleration"],
+                maxMoveJerk=ccw_settings["DefaultJerk"],
+                maxTrackingVelocity=ccw_actuator.max_velocity,
+                maxTrackingAcceleration=ccw_actuator.max_acceleration,
+                maxTrackingJerk=ccw_settings["TrackingJerk"],
+            )
 
             available_settings = self.mock_controller.available_settings
             await self.assert_next_sample(
@@ -615,7 +617,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     ):
         """Make keyword argumetns for the trackTarget command."""
         if taiTime is None:
-            taiTime = utils.current_tai()
+            taiTime = utils.current_tai() + TRACK_ADVANCE_TIME
         return dict(
             azimuth=azimuth,
             elevation=elevation,
@@ -1073,6 +1075,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             tai = utils.current_tai()
             azimuth_pvt = mock_azimuth.actuator.path.at(tai)
+            # TODO DM-37115: remove these two lines
+            # when the TMA azimuth has the correct sign.
+            azimuth_pvt.position = -azimuth_pvt.position
+            azimuth_pvt.velocity = -azimuth_pvt.velocity
             elevation_pvt = mock_elevation.actuator.path.at(tai)
             assert elevation_pvt.velocity == pytest.approx(0)
             assert azimuth_pvt.velocity == pytest.approx(0)
@@ -1136,14 +1142,20 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             tai = utils.current_tai()
             elevation_pvt = mock_elevation.actuator.path.at(tai)
             azimuth_pvt = mock_azimuth.actuator.path.at(tai)
+            # TODO DM-37115: remove these two lines
+            # when the TMA azimuth has the correct sign.
+            azimuth_pvt.position = -azimuth_pvt.position
+            azimuth_pvt.velocity = -azimuth_pvt.velocity
             assert tai >= mock_elevation.actuator.path[-1].tai
             assert azimuth_pvt.position == pytest.approx(target_azimuth)
             assert elevation_pvt.position == pytest.approx(target_elevation)
             assert azimuth_pvt.velocity == pytest.approx(0)
             assert elevation_pvt.velocity == pytest.approx(0)
 
+            # TODO DM-37115: swap reverse and forward
+            # when the TMA azimuth has the correct sign.
             await self.assert_next_sample(
-                topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=True
+                topic=self.remote.evt_azimuthToppleBlock, reverse=True, forward=False
             )
 
             # Check that the CCW is still following the rotator.
@@ -1154,9 +1166,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # while leaving the mock devices enabled.
             for (azimuth, az_ok), (elevation, el_ok) in itertools.product(
                 (
-                    (mock_azimuth.cmd_limits.min_position - 0.001, False),
+                    # TODO DM-37115: remove the minus signs
+                    # when the TMA azimuth has the correct sign.
+                    (-(mock_azimuth.cmd_limits.min_position - 0.001), False),
                     (0, True),
-                    (mock_azimuth.cmd_limits.max_position + 0.001, False),
+                    (-(mock_azimuth.cmd_limits.max_position + 0.001), False),
                 ),
                 (
                     (mock_elevation.cmd_limits.min_position - 0.001, False),
@@ -1244,8 +1258,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             assert not mock_azimuth.tracking_enabled
             assert not mock_elevation.tracking_enabled
 
-            tai = utils.current_tai()
-            initial_azimuth = mock_azimuth.actuator.path.at(tai).position
+            tai = utils.current_tai() + TRACK_ADVANCE_TIME
+            # TODO DM-37115: remove the minus sign
+            # when the TMA azimuth has the correct sign.
+            initial_azimuth = -mock_azimuth.actuator.path.at(tai).position
             initial_elevation = mock_elevation.actuator.path.at(tai).position
 
             # Check that tracking is rejected if not enabled
@@ -1306,9 +1322,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 (elevation_velocity, el_vel_ok),
             ) in itertools.product(
                 (
-                    (mock_azimuth.cmd_limits.min_position - 0.001, False),
+                    # TODO DM-37115: remove the minus signs
+                    # when the TMA azimuth has the correct sign.
+                    (-(mock_azimuth.cmd_limits.min_position - 0.001), False),
                     (0, True),
-                    (mock_azimuth.cmd_limits.max_position + 0.001, False),
+                    (-(mock_azimuth.cmd_limits.max_position + 0.001), False),
                 ),
                 (
                     (mock_elevation.cmd_limits.min_position - 0.001, False),
@@ -1375,7 +1393,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         previous_tai = 0
         while True:
             await asyncio.sleep(0.1)
-            tai = utils.current_tai()
+            tai = utils.current_tai() + TRACK_ADVANCE_TIME
             # Work around non-monotonic clocks, which are
             # sometimes seen when running Docker on macOS.
             if tai < previous_tai:
@@ -1391,10 +1409,12 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 taiTime=tai,
             )
             await self.remote.cmd_trackTarget.set_start(**kwargs, timeout=STD_TIMEOUT)
-            assert mock_azimuth.actuator.target.position == pytest.approx(
+            # TODO DM-37115: remove the minus signs
+            # when the TMA azimuth has the correct sign.
+            assert mock_azimuth.actuator.target.position == -pytest.approx(
                 current_azimuth
             )
-            assert mock_azimuth.actuator.target.velocity == pytest.approx(
+            assert mock_azimuth.actuator.target.velocity == -pytest.approx(
                 azimuth_velocity
             )
             assert mock_azimuth.actuator.target.tai == pytest.approx(tai, abs=0.001)
@@ -1423,10 +1443,12 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             az_actual = azimuth_actuator.path.at(tel_az_data.timestamp)
             az_target = azimuth_actuator.target.at(tel_az_data.timestamp)
-            assert tel_az_data.demandPosition == pytest.approx(az_target.position)
-            assert tel_az_data.demandVelocity == pytest.approx(az_target.velocity)
-            assert tel_az_data.actualPosition == pytest.approx(az_actual.position)
-            assert tel_az_data.actualVelocity == pytest.approx(az_actual.velocity)
+            # TODO DM-37115: remove the minus signs
+            # when the TMA azimuth has the correct sign.
+            assert tel_az_data.demandPosition == -pytest.approx(az_target.position)
+            assert tel_az_data.demandVelocity == -pytest.approx(az_target.velocity)
+            assert tel_az_data.actualPosition == -pytest.approx(az_actual.position)
+            assert tel_az_data.actualVelocity == -pytest.approx(az_actual.velocity)
 
             previous_tai = tai
 
@@ -1465,18 +1487,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
             )
-            # TODO DM-36879: get the data from the remote again,
-            # once GetActualSettings works.
-            if True:
-                ccw_controller_settings_data = (
-                    self.csc.evt_cameraCableWrapControllerSettings.data
+            ccw_controller_settings_data = (
+                await self.remote.evt_cameraCableWrapControllerSettings.next(
+                    flush=False, timeout=STD_TIMEOUT
                 )
-            else:
-                ccw_controller_settings_data = (
-                    await self.remote.evt_cameraCableWrapControllerSettings.next(
-                        flush=False, timeout=STD_TIMEOUT
-                    )
-                )
+            )
             ccw_device = self.mock_controller.device_dict[System.CAMERA_CABLE_WRAP]
             ccw_cmd_limits = ccw_device.cmd_limits
             assert not ccw_device.power_on

@@ -29,6 +29,11 @@ from lsst.ts import salobj
 class CommandFutures:
     """asyncio futures to track the progress of a low-level controller command.
 
+    Parameters
+    ----------
+    command : `commands.Command`
+        The command.
+
     Attributes
     ----------
     ack : `asyncio.Future`
@@ -46,7 +51,8 @@ class CommandFutures:
         * exception = `lsst.ts.salobj.ExpectedError` if the command fails.
     """
 
-    def __init__(self):
+    def __init__(self, command):
+        self.command = command
         self.ack = asyncio.Future()
         self.done = asyncio.Future()
 
