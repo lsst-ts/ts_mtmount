@@ -192,7 +192,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         delta : `float`, optional
             Maximum allowed difference for float values.
         timeout : `float`, optional
-            Maximum time to wait for a message (seconds).
+            Maximum time to wait for a message (sec).
 
         Returns
         -------

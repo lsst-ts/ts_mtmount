@@ -39,17 +39,17 @@ from . import __version__, command_futures, commands, constants, enums
 from .config_schema import CONFIG_SCHEMA
 from .utils import truncate_value
 
-# Interval between consecutive commands to the same subsystem (seconds).
+# Interval between consecutive commands to the same subsystem (sec).
 COMMAND_INTERVAL = 0.01
 
 # Interval between sending heartbeat commands
-# to the low-level controller (seconds).
+# to the low-level controller (sec).
 LLV_HEARTBEAT_INTERVAL = 1
 
 # Log level for commands and command replies.
 LOG_LEVEL_COMMANDS = (logging.DEBUG + logging.INFO) // 2
 
-# Maximum time (seconds) to fully deploy or retract the mirror covers,
+# Maximum time (sec) to fully deploy or retract the mirror covers,
 # including dealing with the mirror cover locks.
 # 60 is the maximum allowed by our requirements,
 # so it is not necessarily accurate.
@@ -62,7 +62,7 @@ MIRROR_COVER_TIMEOUT = 60
 # and seeing the "running" message (sec).
 MOCK_CTRL_START_TIMEOUT = 30
 
-# Maximum time to wait for rotator telemetry (seconds).
+# Maximum time to wait for rotator telemetry (sec).
 # Must be significantly greater than the interval between rotator
 # telemetry updates, which should not be longer than 0.2 seconds.
 # For minimum confusion when camera cable wrap following fails,
@@ -72,10 +72,10 @@ MOCK_CTRL_START_TIMEOUT = 30
 # on 2020-02-01 the value was 5 seconds.
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
-# Maximum time (seconds) to for the startTracking command.
+# Maximum time (sec) to for the startTracking command.
 START_TRACKING_TIMEOUT = 7
 
-# Maximum time (seconds) to for the stop and stopTracking commands.
+# Maximum time (sec) to for the stop and stopTracking commands.
 STOP_TIMEOUT = 5
 
 # Timeout for seeing telemetry from the telemetry client (sec).

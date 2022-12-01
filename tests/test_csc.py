@@ -47,7 +47,7 @@ MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
 NOTELEMETRY_TIMEOUT = 2
 
 # Timeout for the CSC to react to a fault report
-# from the low-level controller (seconds).
+# from the low-level controller (sec).
 FAULT_TIMEOUT = 2
 
 # timeout for constructing several remotes and controllers (sec)

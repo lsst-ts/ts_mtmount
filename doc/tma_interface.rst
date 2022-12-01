@@ -117,7 +117,7 @@ Here are some sample replies:
 CMD_x replies have the following parameters:
 
 * sequenceId (int): the incrementing value specified by the client, used to identify replies for a given command.
-* CMD_ACKNOWLEDGED: ``timeout`` (double), expected command duration (seconds).
+* CMD_ACKNOWLEDGED: ``timeout`` (double), expected command duration (sec).
   Add 2 seconds to this value if you wish to use this for a timeout timer.
   -1 means "no known timeout" (wait forever).
 * CMD_REJECTED and CMD_FAILED: ``explanation`` (str): text explaining why the command was rejected.

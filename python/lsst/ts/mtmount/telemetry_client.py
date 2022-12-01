@@ -37,7 +37,7 @@ from lsst.ts import salobj
 from . import constants
 from .telemetry_map import TELEMETRY_MAP
 
-# Timeout to read telemetry (seconds). If no telemetry is seen
+# Timeout to read telemetry (sec). If no telemetry is seen
 # in this time, the telemetry client logs an error and quits.
 TELEMETRY_TIMEOUT = 2
 
@@ -96,7 +96,7 @@ class TelemetryClient:
     port : `int`
         Host IP port of TMA telemetry server.
     connection_timeout : `float`
-        Connection timeout (seconds).
+        Connection timeout (sec).
 
     Notes
     -----

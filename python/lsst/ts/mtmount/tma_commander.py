@@ -47,9 +47,9 @@ from . import command_futures, commands, constants, enums, mock
 
 logging.basicConfig()
 
-TRACK_INTERVAL = 0.1  # interval between tracking updates (seconds)
+TRACK_INTERVAL = 0.1  # interval between tracking updates (sec)
 
-# How far in advance to set the time field of tracking commands (seconds)
+# How far in advance to set the time field of tracking commands (sec)
 TRACK_ADVANCE_TIME = 0.05
 
 # Time to wait to connect to the low-level controller (sec)

@@ -61,7 +61,7 @@ properties:
     type: number
   camera_cable_wrap_interval:
     description: >-
-      Interval between camera cable wrap tracking commands (seconds).
+      Interval between camera cable wrap tracking commands (sec).
       The actual time between commans will be this interval
       plus the time it takes to compute and issue the tracking command.
     type: number

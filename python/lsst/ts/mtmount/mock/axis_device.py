@@ -30,7 +30,7 @@ from ..exceptions import CommandSupersededException
 from . import limits
 from .base_device import BaseDevice
 
-# Maximum time (seconds) after the end time of one track command
+# Maximum time (sec) after the end time of one track command
 # before another must arrive. In other words, the maximum amount
 # of time the axis is willing to extrapolate a track command.
 # The low-level controller uses 5 seconds.
@@ -455,7 +455,7 @@ class AxisDevice(BaseDevice):
         )
 
     async def _tracking_timer(self, duration):
-        """Wait for the specified duration (seconds) and kill tracking.
+        """Wait for the specified duration (sec) and kill tracking.
 
         start_tracking_timer re-starts this for every track command
         (while tracking is not paused).
