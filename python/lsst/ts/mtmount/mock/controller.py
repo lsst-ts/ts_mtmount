@@ -461,12 +461,15 @@ class Controller:
         target = actuator.target.at(tai)
         actual = actuator.path.at(tai)
 
-        if system_id == System.CAMERA_CABLE_WRAP:
+        if topic_id == enums.TelemetryTopicId.CAMERA_CABLE_WRAP:
             torque_percent = 100 * actual.acceleration / actuator.max_acceleration
             data_dict = dict(
                 topicID=topic_id,
                 actualPosition=actual.position,
                 actualVelocity=actual.velocity,
+                actualAcceleration=actual.acceleration,
+                demandPosition=target.position,
+                demandVelocity=target.velocity,
                 actualTorquePercentage1=torque_percent,
                 actualTorquePercentage2=torque_percent,
                 timestamp=tai,

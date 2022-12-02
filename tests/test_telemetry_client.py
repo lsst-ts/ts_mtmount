@@ -170,6 +170,9 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             desired_ccw_dds_data = dict(
                 actualPosition=12.3,
                 actualVelocity=-34.5,
+                actualAcceleration=1.35,
+                demandPosition=12.1,
+                demandVelocity=-34.7,
                 actualTorquePercentage=[0.11, 0.12],
                 timestamp=time.time(),
             )
@@ -253,12 +256,15 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         llv_data : `dict`
             Dict of low-level field name: value telemetry data.
         """
-        llv_data = dict(topicID=topic_id)
-        field_dict = mtmount.TELEMETRY_MAP[topic_id][1]
-        for key, value in dds_data.items():
-            func = field_dict[key]
-            llv_data.update(func.llv_dict_from_sal_value(value))
-        return llv_data
+        try:
+            llv_data = dict(topicID=topic_id)
+            field_dict = mtmount.TELEMETRY_MAP[topic_id][1]
+            for key, value in dds_data.items():
+                func = field_dict[key]
+                llv_data.update(func.llv_dict_from_sal_value(value))
+            return llv_data
+        except Exception as e:
+            raise RuntimeError(f"Could not convert {dds_data=} for {topic_id=}: {e!r}")
 
     def make_elaz_drives_dds_data(self, naxes):
         """Make telemetry data for elevation or azimuth drives.
