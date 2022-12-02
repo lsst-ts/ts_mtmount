@@ -358,6 +358,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             enums.ReplyId.DETAILED_SETTINGS_APPLIED: self.handle_detailed_settings_applied,
             enums.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE: self.handle_elevation_locking_pin_motion_state,
             enums.ReplyId.ERROR: self.handle_error,
+            enums.ReplyId.HOMED: self.handle_homed,
             enums.ReplyId.IN_POSITION: self.handle_in_position,
             enums.ReplyId.LIMITS: self.handle_limits,
             enums.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE: functools.partial(
@@ -1491,6 +1492,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
             force_output=True,
         )
 
+    async def handle_homed(self, reply):
+        """Handle a `ReplyId.HOMED` reply."""
+        topic = {
+            System.ELEVATION: self.evt_elevationHomed,
+            System.AZIMUTH: self.evt_azimuthHomed,
+        }.get(reply.axis, None)
+        if topic is None:
+            self.log.warning(f"Unrecognized axis={reply.axis} in handle_in_position")
+        else:
+            await topic.set_write(homed=reply.homed)
+
     async def handle_in_position(self, reply):
         """Handle a `ReplyId.IN_POSITION` reply."""
         topic = {
@@ -1499,7 +1511,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             System.CAMERA_CABLE_WRAP: self.evt_cameraCableWrapInPosition,
         }.get(reply.axis, None)
         if topic is None:
-            self.log.warning(f"Unrecognized axis={reply.system} in handle_in_position")
+            self.log.warning(f"Unrecognized axis={reply.axis} in handle_in_position")
         else:
             await topic.set_write(inPosition=reply.inPosition)
 

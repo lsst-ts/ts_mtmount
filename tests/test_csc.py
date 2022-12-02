@@ -350,6 +350,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 maxTrackingAcceleration=ccw_actuator.max_acceleration,
                 maxTrackingJerk=ccw_settings["TrackingJerk"],
             )
+            await self.assert_next_sample(self.remote.evt_azimuthHomed, homed=False)
+            await self.assert_next_sample(self.remote.evt_elevationHomed, homed=False)
 
             available_settings = self.mock_controller.available_settings
             await self.assert_next_sample(
@@ -1250,6 +1252,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=True
             )
+            await self.assert_next_sample(self.remote.evt_azimuthHomed, homed=False)
+            await self.assert_next_sample(self.remote.evt_elevationHomed, homed=False)
             await self.assert_axes_in_position(elevation=False, azimuth=False)
             await self.assert_target_cleared()
 
@@ -1279,8 +1283,12 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             with pytest.raises(salobj.AckError):
                 await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
 
-            # Home the axes, enable tracking and check mock axis controllers
+            # Home the axes
             await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
+            await self.assert_next_sample(self.remote.evt_azimuthHomed, homed=True)
+            await self.assert_next_sample(self.remote.evt_elevationHomed, homed=True)
+
+            # Enable tracking and check mock axis controllers
             await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
             assert mock_azimuth.tracking_enabled
             assert mock_elevation.tracking_enabled
