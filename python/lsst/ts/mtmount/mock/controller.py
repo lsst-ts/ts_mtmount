@@ -713,8 +713,7 @@ class Controller:
         if not self.command_server.connected:
             raise RuntimeError("Command client not connected")
         reply_str = json.dumps(reply_dict)
-        self.command_server.writer.write(reply_str.encode())
-        self.command_server.writer.write(constants.LINE_TERMINATOR)
+        self.command_server.writer.write(reply_str.encode() + constants.LINE_TERMINATOR)
         await self.command_server.writer.drain()
 
     async def write_telemetry(self, data_dict):
