@@ -243,6 +243,8 @@ class Controller:
         self.axis_motion_state_dict = {}
         # Dict of system_id: motion state for deployable devices
         self.deployable_motion_state_dict = {}
+        # Dict of system_id: homed
+        self.homed_dict = {}
         # Dict of system_id: in_position
         self.in_position_dict = {}
         # Dict of system_id: motion controller state
@@ -408,6 +410,11 @@ class Controller:
             System.MIRROR_COVERS: None,
         }
 
+        self.homed_dict = {
+            System.AZIMUTH: None,
+            System.ELEVATION: None,
+        }
+
         self.in_position_dict = {
             System.AZIMUTH: None,
             System.ELEVATION: None,
@@ -439,7 +446,8 @@ class Controller:
         In addition to telemetry, put the following events (if changed):
 
         * AXIS_MOTION_STATE
-        * IN_POSITION, if changed
+        * HOMED
+        * IN_POSITION
 
         Warning: this minimal and simplistic.
 
@@ -507,6 +515,23 @@ class Controller:
                     axis=axis,
                     state=motion_state,
                     position=device.point_to_point_target,
+                )
+            )
+
+        if (
+            system_id != System.CAMERA_CABLE_WRAP
+            and device.homed != self.homed_dict[system_id]
+        ):
+            self.homed_dict[system_id] = device.homed
+
+            if not self.command_server.connected:
+                return
+
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.HOMED,
+                    axis=axis,
+                    homed=device.homed,
                 )
             )
 
