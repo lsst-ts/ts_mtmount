@@ -130,7 +130,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             # topic_id is from telemetry_map.yaml
             azimuth_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elaz_dds_data,
-                topic_id=mtmount.TelemetryTopicId.AZIMUTH,
+                topic_id=mtmount.TelemetryTopicId.azimuth,
             )
             azimuth_llv_data["this_extra_field_should_be_ignored"] = 55.2
             await self.publish_data(azimuth_llv_data)
@@ -140,7 +140,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
 
             elevation_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elaz_dds_data,
-                topic_id=mtmount.TelemetryTopicId.ELEVATION,
+                topic_id=mtmount.TelemetryTopicId.elevation,
             )
             await self.publish_data(elevation_llv_data)
             await self.assert_next_telemetry(
@@ -150,7 +150,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             desired_azimuth_drives_dds_data = self.make_elaz_drives_dds_data(naxes=16)
             azimuth_drives_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_azimuth_drives_dds_data,
-                topic_id=mtmount.TelemetryTopicId.AZIMUTH_DRIVE,
+                topic_id=mtmount.TelemetryTopicId.azimuthDrives,
             )
             await self.publish_data(azimuth_drives_llv_data)
             await self.assert_next_telemetry(
@@ -160,7 +160,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             desired_elevation_drives_dds_data = self.make_elaz_drives_dds_data(naxes=12)
             elevation_drives_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_elevation_drives_dds_data,
-                topic_id=mtmount.TelemetryTopicId.ELEVATION_DRIVE,
+                topic_id=mtmount.TelemetryTopicId.elevationDrives,
             )
             await self.publish_data(elevation_drives_llv_data)
             await self.assert_next_telemetry(
@@ -178,7 +178,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             )
             ccw_llv_data = self.convert_dds_data_to_llv(
                 dds_data=desired_ccw_dds_data,
-                topic_id=mtmount.TelemetryTopicId.CAMERA_CABLE_WRAP,
+                topic_id=mtmount.TelemetryTopicId.cameraCableWrap,
             )
             await self.publish_data(ccw_llv_data)
             await self.assert_next_telemetry(

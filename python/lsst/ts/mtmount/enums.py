@@ -25,8 +25,6 @@ __all__ = [
     "EnabledState",
     "ReplyId",
     "Source",
-    "TelemetryTopicId",
-    "ThermalMode",
 ]
 
 import enum

@@ -19,9 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["TELEMETRY_MAP"]
+__all__ = ["TELEMETRY_MAP", "TelemetryTopicId"]
 
 import abc
+import enum
 
 import yaml
 
@@ -635,3 +636,13 @@ for topic_id, topic_data in RAW_TELEMETRY_MAP.items():
         except Exception as e:
             raise ValueError(f"Cannot parse {topic_id=} {field_name=}: {e!r}")
     TELEMETRY_MAP[topic_id] = [sal_topic_name, field_extraction_func_dict]
+
+
+#: Enum of sal_topic_name: topic_id where:
+#:
+#: * ``topic_id`` is the integer identifier of the low-level telemetry topic.
+#: * ``sal_topic_name`` is the SAL telemetry topic name
+TelemetryTopicId = enum.IntEnum(
+    "TelemetryTopicId",
+    {data_tuple[0]: topic_id for topic_id, data_tuple in TELEMETRY_MAP.items()},
+)

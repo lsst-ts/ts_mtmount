@@ -648,7 +648,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 Parameters
                 ----------
                 device : `mtmount.AxisDevice`
-                    Device to turn on or off
+                    Device to turn on or off.
                 power_on : `bool`
                     True to turn the device on, False to turn it off.
                 """
@@ -868,8 +868,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             axis_telems = [
                 await self.next_telemetry(topic_id)
                 for topic_id in (
-                    mtmount.TelemetryTopicId.AZIMUTH,
-                    mtmount.TelemetryTopicId.ELEVATION,
+                    mtmount.TelemetryTopicId.azimuth,
+                    mtmount.TelemetryTopicId.elevation,
                 )
             ]
             for i in (0, 1):
@@ -1455,14 +1455,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_initial_telemetry(self):
         async with self.make_controller():
             for topic_id, prefix in (
-                (mtmount.TelemetryTopicId.AZIMUTH, "az"),
-                (mtmount.TelemetryTopicId.ELEVATION, "el"),
+                (mtmount.TelemetryTopicId.azimuth, "az"),
+                (mtmount.TelemetryTopicId.elevation, "el"),
             ):
                 # Elevation does not start at position 0,
                 # so read the position.
                 system_id = {
-                    mtmount.TelemetryTopicId.AZIMUTH: System.AZIMUTH,
-                    mtmount.TelemetryTopicId.ELEVATION: System.ELEVATION,
+                    mtmount.TelemetryTopicId.azimuth: System.AZIMUTH,
+                    mtmount.TelemetryTopicId.elevation: System.ELEVATION,
                 }[topic_id]
                 device = self.controller.device_dict[system_id]
                 # Work around Docker time issues on macOS with an offset
@@ -1485,7 +1485,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Work around Docker time issues on macOS with an offset
             tai0 = utils.current_tai() - 0.1
             ccw_telem = await self.next_telemetry(
-                mtmount.TelemetryTopicId.CAMERA_CABLE_WRAP
+                mtmount.TelemetryTopicId.cameraCableWrap
             )
             for name in (
                 "actualPosition",

@@ -39,6 +39,7 @@ from lsst.ts.idl.enums.MTMount import (
 
 from .. import commands, constants, enums
 from ..exceptions import CommandSupersededException
+from ..telemetry_map import TelemetryTopicId
 
 # from . import device
 from .axis_device import AxisDevice
@@ -460,16 +461,16 @@ class Controller:
             This should be nearly the current time.
         """
         topic_id = {
-            System.AZIMUTH: enums.TelemetryTopicId.AZIMUTH,
-            System.ELEVATION: enums.TelemetryTopicId.ELEVATION,
-            System.CAMERA_CABLE_WRAP: enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
+            System.AZIMUTH: TelemetryTopicId.azimuth,
+            System.ELEVATION: TelemetryTopicId.elevation,
+            System.CAMERA_CABLE_WRAP: TelemetryTopicId.cameraCableWrap,
         }[system_id]
         device = self.device_dict[system_id]
         actuator = device.actuator
         target = actuator.target.at(tai)
         actual = actuator.path.at(tai)
 
-        if topic_id == enums.TelemetryTopicId.CAMERA_CABLE_WRAP:
+        if topic_id == TelemetryTopicId.cameraCableWrap:
             torque_percent = 100 * actual.acceleration / actuator.max_acceleration
             data_dict = dict(
                 topicID=topic_id,
