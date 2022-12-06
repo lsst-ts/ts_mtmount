@@ -67,7 +67,7 @@ INITIAL_POSITION = {
 # Set of commands that are allowed when not the commander
 ALWAYS_ALLOWED_COMMANDS = {
     enums.CommandCode.ASK_FOR_COMMAND,
-    enums.CommandCode.ASK_FOR_SET_OF_SETTINGS,
+    enums.CommandCode.GET_AVAILABLE_SETTING_SETS,
     enums.CommandCode.GET_ACTUAL_SETTINGS,
     enums.CommandCode.STATE_INFO,
 }
