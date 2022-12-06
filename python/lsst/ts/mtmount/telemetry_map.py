@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["TELEMETRY_MAP", "TelemetryTopicId"]
+__all__ = ["RAW_TELEMETRY_MAP", "TELEMETRY_MAP", "TelemetryTopicId"]
 
 import abc
 import enum
@@ -229,7 +229,7 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   timestamp: 1
 
 25:
-# TODO DM-37114: ditch this comment
+# TODO DM-37114: ditch this comment once ts_xml 14.1 is deployed:
 # This topic name is oSS in ts_xml 14.0 and oilSupplySystem in its successor.
 # Use the final name here, and hack around it in code for ts_xml 14.0.
 - oilSupplySystem
