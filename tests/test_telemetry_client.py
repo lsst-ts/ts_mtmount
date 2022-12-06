@@ -30,7 +30,7 @@ import numpy as np
 from lsst.ts import mtmount, salobj, tcpip
 
 # Standard timeout for TCP/IP messages (sec).
-STD_TIMEOUT = 5
+STD_TIMEOUT = 10
 
 # Time to wait for a connection attempt (sec).
 CONNECT_TIMEOUT = 5
@@ -49,12 +49,24 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
 
         The client is run as a background process.
 
+        Parameters
+        ----------
+        fail_if_end_early : `bool`
+            What to do if the telemetry process ends:
+
+            * True: fail; this is the normal mode.
+            * False: do not fail; used for testing telemetry client timeout.
+
         Attributes
         ----------
-        server : `lsst.ts.tcpip.OneClientServer`
-            Telemetry server. Publishes telemetry over TCP/IP.
         remote : `lsst.ts.salobj.Remote`
             MTMount remote to read DDS telemetry.
+        server : `lsst.ts.tcpip.OneClientServer`
+            A minimal telemetry server that can be used to manually
+            send data to the telemetry client process.
+        telemetry_client_process : `asyncio.subprocess.Process`
+            `TelemetryClient` running in a background process. Run using
+            command-line script ``run_mtmount_telemetry_client``.
         """
         self.server = tcpip.OneClientServer(
             name="TelemetryServer",
@@ -90,7 +102,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             if process_ended_early and fail_if_end_early:
                 self.fail("telemetry client exited early")
 
-    async def test_telemetry_x(self):
+    async def test_handle_telemetry(self):
         """Test all telemetry topics."""
         async with self.make_all(fail_if_end_early=True):
             # Arbitrary values that are suitable for both
@@ -171,6 +183,11 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_timeout(self):
+        """Test client timeout.
+
+        Start the telemetry server and client, but do not send any telemetry.
+        Wait for the telemetry client to time out and exit.
+        """
         async with self.make_all(fail_if_end_early=False):
             await asyncio.wait_for(
                 self.telemetry_client_process.wait(),
