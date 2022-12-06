@@ -884,17 +884,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         command_futures : `command_futures.CommandFutures`
             Futures that monitor the command.
         """
-        try:
-            if do_lock:
-                async with self.command_lock:
-                    return await self._basic_send_command(command=command)
-            else:
+        if do_lock:
+            async with self.command_lock:
                 return await self._basic_send_command(command=command)
-        except ConnectionResetError:
-            raise
-        except Exception as e:
-            self.log.exception(f"Failed to send command {command}: {e!r}")
-            raise
+        else:
+            return await self._basic_send_command(command=command)
 
     async def _basic_send_command(self, command):
         """Implementation of send_command. Ignores the command lock.
