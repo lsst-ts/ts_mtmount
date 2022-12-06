@@ -26,6 +26,7 @@ __all__ = [
     "ReplyId",
     "Source",
     "TelemetryTopicId",
+    "ThermalMode",
 ]
 
 import enum
@@ -331,3 +332,32 @@ class TelemetryTopicId(enum.IntEnum):
     ELEVATION = 15
     ELEVATION_DRIVE = 14
     CAMERA_CABLE_WRAP = 8
+
+
+class ThermalMode(enum.IntEnum):
+    """Thermal control mode for azimuth, elevation, and cabinet0101.
+
+    The modes used in the following commands:
+
+    * AZIMUTH_THERMAL_CONTROL_MODE,
+    * ELEVATION_THERMAL_CONTROL_MODE
+    * CABINET0101_THERMAL_CONTROL_MODE
+
+    The modes are as follows, along with the additional parameters
+    needed for the command:
+
+    * TRACK_AMBIENT: track ambient temperature measured by the subsystem.
+      No additional parameters.
+    * TRACK_SETPOINT: track a specified temperature.
+      One additional parameter: the desired temperature (C).
+    * SET_VALVE_POSITION: set valve position
+      One additional parameter: valve position (%).
+    * SET_AUTOTUNE: start or stop auto-tune.
+      One additional parameter: 1 = start, 0 = stop.
+
+    """
+
+    TRACK_AMBIENT = 0
+    TRACK_SETPOINT = 1
+    SET_VALVE_POSITION = 2
+    SET_AUTOTUNE = 3
