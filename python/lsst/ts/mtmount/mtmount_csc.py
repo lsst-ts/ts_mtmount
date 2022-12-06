@@ -1366,15 +1366,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
             case enums.ReplyId.CMD_REJECTED:
                 futures.setnoack(reply.explanation)
                 self.log.error(
-                    f"Command {futures.command.encode()} rejected: {reply.explanation}"
+                    f"Command {futures.command}={futures.command.encode()} rejected: {reply.explanation}"
                 )
             case enums.ReplyId.CMD_FAILED:
                 futures.setnoack(reply.explanation)
                 self.log.error(
-                    f"Command {futures.command.encode()} failed: {reply.explanation}"
+                    f"Command {futures.command}={futures.command.encode()} failed: {reply.explanation}"
                 )
             case enums.ReplyId.CMD_SUPERSEDED:
-                self.log.info(f"Command {futures.command.encode()} superseded")
+                self.log.info(f"Command {futures.command} superseded")
                 futures.setnoack("Superseded")
             case _:
                 raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
