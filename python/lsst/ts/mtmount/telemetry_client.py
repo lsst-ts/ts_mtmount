@@ -118,11 +118,20 @@ class TelemetryClient:
         self.controller = salobj.Controller(name="MTMount", write_only=True)
         self.log = self.controller.log.getChild("TelemetryClient")
 
+        # TODO DM-37114: ditch name_translation_dict once ts_xml 14.1
+        # is deployed.
+        name_translation_dict = (
+            {"oilSupplySystem": "oSS"} if hasattr(self.controller, "tel_oSS") else {}
+        )
+
         self.connection_timeout = connection_timeout
         # dict of low-level controller topic ID: TelemetryTopicHandler
         self.topic_handlers = {
             topic_id: TelemetryTopicHandler(
-                topic=getattr(self.controller, f"tel_{sal_topic_name}"),
+                topic=getattr(
+                    self.controller,
+                    f"tel_{name_translation_dict.get(sal_topic_name, sal_topic_name)}",
+                ),
                 field_dict=field_dict,
                 preprocessor=self.get_preprocessor(sal_topic_name),
             )

@@ -229,7 +229,9 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   timestamp: 1
 
 25:
-# This topic name is oSS in ts_xml 14.0 and oilSupplySystem in ts_xml 14.1
+# TODO DM-37114: ditch this comment
+# This topic name is oSS in ts_xml 14.0 and oilSupplySystem in its successor.
+# Use the final name here, and hack around it in code for ts_xml 14.0.
 - oilSupplySystem
 - ambientTemperature: 1
   computedOilFilmThicknessAzimuthBearing5004: 1
