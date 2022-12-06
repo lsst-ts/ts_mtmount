@@ -104,86 +104,57 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_handle_telemetry(self):
         """Test all telemetry topics."""
+        random = np.random.default_rng(47)
         async with self.make_all(fail_if_end_early=True):
-            # Arbitrary values that are suitable for both
-            # the elevation and azimuth telemetry topics.
-            desired_elaz_dds_data = dict(
-                actualPosition=55.1,
-                demandPosition=45.2,
-                actualVelocity=1.3,
-                demandVelocity=1.4,
-                actualTorque=3.3,
-                timestamp=time.time(),
-            )
-            # TODO DM-37115: remove this variable and use desired_elaz_dds_data
-            # when the TMA azimuth has the correct sign.
-            desired_az_dds_data = desired_elaz_dds_data.copy()
-            for field in (
-                "actualPosition",
-                "demandPosition",
-                "actualVelocity",
-                "demandVelocity",
-                "actualTorque",
-            ):
-                desired_az_dds_data[field] = -desired_az_dds_data[field]
+            for topic_id, (
+                sal_topic_name,
+                field_len_dict,
+            ) in mtmount.RAW_TELEMETRY_MAP.items():
+                # TODO DM-37114: remove this if/else once XML 14.1 is deployed.
+                if sal_topic_name == "oilSupplySystem" and hasattr(
+                    self.remote, "tel_oSS"
+                ):
+                    sal_topic_name = "oSS"
+                topic = getattr(self.remote, f"tel_{sal_topic_name}")
 
-            # topic_id is from telemetry_map.yaml
-            azimuth_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_elaz_dds_data,
-                topic_id=mtmount.TelemetryTopicId.azimuth,
-            )
-            azimuth_llv_data["this_extra_field_should_be_ignored"] = 55.2
-            await self.publish_data(azimuth_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_azimuth, desired_az_dds_data
-            )
+                desired_sal_data = dict()
+                tma_data = dict(topicID=topic_id)
+                null_sal_data = topic.DataType()
+                for fieldname, fieldlen in field_len_dict.items():
+                    null_field_data = getattr(null_sal_data, fieldname)
+                    if isinstance(null_field_data, list):
+                        dtype = type(null_field_data[0])
+                    else:
+                        dtype = type(null_field_data)
+                    if dtype is float:
+                        values = random.uniform(0, 90, fieldlen)
+                    elif dtype is int:
+                        # Note: using dtype=int doesn't work; json refuses
+                        # to serialize the values.
+                        values = [
+                            int(value) for value in random.integers(0, 10000, fieldlen)
+                        ]
+                    else:
+                        raise RuntimeError(
+                            f"Unrecognized {dtype=} for {sal_topic_name}.{fieldname}, {null_field_data=}"
+                        )
+                    if fieldlen == 1:
+                        desired_sal_data[fieldname] = values[0]
+                        tma_data[fieldname] = values[0]
+                    else:
+                        desired_sal_data[fieldname] = list(values)
+                        for i in range(fieldlen):
+                            tma_data[f"{fieldname}{i+1}"] = values[i]
 
-            elevation_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_elaz_dds_data,
-                topic_id=mtmount.TelemetryTopicId.elevation,
-            )
-            await self.publish_data(elevation_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_elevation, desired_elaz_dds_data
-            )
-
-            desired_azimuth_drives_dds_data = self.make_elaz_drives_dds_data(naxes=16)
-            azimuth_drives_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_azimuth_drives_dds_data,
-                topic_id=mtmount.TelemetryTopicId.azimuthDrives,
-            )
-            await self.publish_data(azimuth_drives_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_azimuthDrives, desired_azimuth_drives_dds_data
-            )
-
-            desired_elevation_drives_dds_data = self.make_elaz_drives_dds_data(naxes=12)
-            elevation_drives_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_elevation_drives_dds_data,
-                topic_id=mtmount.TelemetryTopicId.elevationDrives,
-            )
-            await self.publish_data(elevation_drives_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_elevationDrives, desired_elevation_drives_dds_data
-            )
-
-            desired_ccw_dds_data = dict(
-                actualPosition=12.3,
-                actualVelocity=-34.5,
-                actualAcceleration=1.35,
-                demandPosition=12.1,
-                demandVelocity=-34.7,
-                actualTorquePercentage=[0.11, 0.12],
-                timestamp=time.time(),
-            )
-            ccw_llv_data = self.convert_dds_data_to_llv(
-                dds_data=desired_ccw_dds_data,
-                topic_id=mtmount.TelemetryTopicId.cameraCableWrap,
-            )
-            await self.publish_data(ccw_llv_data)
-            await self.assert_next_telemetry(
-                self.remote.tel_cameraCableWrap, desired_ccw_dds_data
-            )
+                # TODO DM-37115: remove this block
+                # when the TMA azimuth has the correct sign.
+                if sal_topic_name == "azimuth":
+                    for field, value in tma_data.items():
+                        if field in {"topicID", "timestamp"}:
+                            continue
+                        tma_data[field] = -value
+                await self.publish_data(tma_data)
+                await self.assert_next_telemetry(topic, desired_sal_data)
 
     async def test_timeout(self):
         """Test client timeout.
