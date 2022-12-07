@@ -884,17 +884,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         command_futures : `command_futures.CommandFutures`
             Futures that monitor the command.
         """
-        try:
-            if do_lock:
-                async with self.command_lock:
-                    return await self._basic_send_command(command=command)
-            else:
+        if do_lock:
+            async with self.command_lock:
                 return await self._basic_send_command(command=command)
-        except ConnectionResetError:
-            raise
-        except Exception as e:
-            self.log.exception(f"Failed to send command {command}: {e!r}")
-            raise
+        else:
+            return await self._basic_send_command(command=command)
 
     async def _basic_send_command(self, command):
         """Implementation of send_command. Ignores the command lock.
@@ -1362,20 +1356,28 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 f"for non-existent command {sequence_id}"
             )
             return
-        if reply_id == enums.ReplyId.CMD_ACKNOWLEDGED:
-            # Command acknowledged. Set timeout but leave
-            # futures in command_dict.
-            futures.setack(reply.timeout)
-        elif reply_id in (enums.ReplyId.CMD_REJECTED, enums.ReplyId.CMD_FAILED):
-            # Command failed (before or after being acknowledged).
-            # Pop the command_dict entry and report failure.
-            futures.setnoack(reply.explanation)
-        elif reply_id == enums.ReplyId.CMD_SUCCEEDED:
-            futures.setdone()
-        elif reply_id == enums.ReplyId.CMD_SUPERSEDED:
-            futures.setnoack("Superseded")
-        else:
-            raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
+        match reply_id:
+            case enums.ReplyId.CMD_ACKNOWLEDGED:
+                # Command acknowledged: set timeout. Note that
+                # futures remains in command_dict (done above).
+                futures.setack(reply.timeout)
+            case enums.ReplyId.CMD_SUCCEEDED:
+                futures.setdone()
+            case enums.ReplyId.CMD_REJECTED:
+                futures.setnoack(reply.explanation)
+                self.log.error(
+                    f"Command {futures.command}={futures.command.encode()} rejected: {reply.explanation}"
+                )
+            case enums.ReplyId.CMD_FAILED:
+                futures.setnoack(reply.explanation)
+                self.log.error(
+                    f"Command {futures.command}={futures.command.encode()} failed: {reply.explanation}"
+                )
+            case enums.ReplyId.CMD_SUPERSEDED:
+                self.log.info(f"Command {futures.command} superseded")
+                futures.setnoack("Superseded")
+            case _:
+                raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
 
     async def handle_commander(self, reply):
         """Handle a `ReplyId.COMMANDER` reply."""

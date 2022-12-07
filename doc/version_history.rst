@@ -13,6 +13,7 @@ v0.23.1
 
     * Fail pending low-level commands on disconnect.
     * Ignore trackTarget commands if the tracking advance time is too small, but log a warning.
+    * Improve error reporting when a low-level command fails.
 
 Requires:
 
