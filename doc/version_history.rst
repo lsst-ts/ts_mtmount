@@ -6,6 +6,19 @@
 Version History
 ###############
 
+v0.23.2
+-------
+
+* `MTMountCSC`: improve error reporting when a low-level command fails.
+
+Requires:
+
+* ts_salobj 7.1
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 13
+
 v0.23.1
 -------
 
