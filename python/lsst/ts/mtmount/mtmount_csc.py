@@ -1669,12 +1669,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         The command is not acknowledged in any way.
         """
         self.log.debug("Heartbeat loop begins")
+        # Use the same sequence ID for all these commands, since they are
+        # not acknowledged. This makes the sequence IDs for more interesting
+        # commands more regular. Update the timestamp each time (as usual)
+        # so we can tell the commands apart.
+        heartbeat_command = commands.Heartbeat()
         try:
             while self.connected:
-                command_bytes = commands.Heartbeat().encode()
-                self.log.log(
-                    LOG_LEVEL_COMMANDS, "Send heartbeat command %s", command_bytes
-                )
+                heartbeat_command.timestamp = utils.current_tai()
+                command_bytes = heartbeat_command.encode()
+                self.log.debug("Send heartbeat command %s", command_bytes)
                 self.writer.write(command_bytes)
                 await self.writer.drain()
                 await asyncio.sleep(LLV_HEARTBEAT_INTERVAL)
