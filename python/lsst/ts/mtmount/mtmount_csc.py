@@ -370,6 +370,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 topic=self.evt_mirrorCoversMotionState,
             ),
             enums.ReplyId.MOTION_CONTROLLER_STATE: self.handle_motion_controller_state,
+            enums.ReplyId.OIL_SUPPLY_SYSTEM_STATE: self.handle_oil_supply_system_state,
             enums.ReplyId.POWER_STATE: self.handle_power_state,
             enums.ReplyId.SAFETY_INTERLOCKS: self.handle_safety_interlocks,
             enums.ReplyId.WARNING: self.handle_warning,
@@ -1546,6 +1547,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 motionControllerState=reply.motionControllerState,
             )
 
+    async def handle_oil_supply_system_state(self, reply):
+        await self.evt_oilSupplySystemState.set_write(
+            coolingPowerState=reply.cooling,
+            oilPowerState=reply.oil,
+            mainPumpPowerState=reply.mainPump,
+        )
+
     async def handle_power_state(self, reply):
         """Handle a `ReplyId.POWER_STATE` reply."""
         topic_info = self.system_state_dict[reply.system]
@@ -1642,7 +1650,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     try:
                         await handler(reply)
                     except Exception as e:
-                        self.log.error(f"Failed to handle reply: {reply}: {e!r}")
+                        self.log.error(
+                            f"Failed to handle reply: {reply}={read_bytes}: {e!r}"
+                        )
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
