@@ -9,7 +9,7 @@ lsst.ts.mtmount
 .. image:: https://img.shields.io/badge/GitHub-gray.svg
     :target: https://github.com/lsst-ts/ts_mtmount
 .. image:: https://img.shields.io/badge/Jira-gray.svg
-    :target: https://jira.lsstcorp.org/issues/?jql=labels+%3D+ts_mtmount
+    :target: https://jira.lsstcorp.org/issues/?jql=labels%3Dts_mtmount
 
 The MTMount CSC controls the Simonyi Survey Telescope main axes and related components at Vera C. Rubin Observatory.
 
