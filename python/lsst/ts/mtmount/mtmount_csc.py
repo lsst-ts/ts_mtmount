@@ -1550,7 +1550,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_oil_supply_system_state(self, reply):
         await self.evt_oilSupplySystemState.set_write(
             coolingPowerState=reply.cooling,
-            oilPowerState=reply.oil,
+            # TODO DM-37114: enable this once ts_xml 15 is deployed
+            # circulationPumpPowerState=reply.oil,
             mainPumpPowerState=reply.mainPump,
         )
 
