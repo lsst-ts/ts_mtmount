@@ -44,18 +44,10 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         salobj.set_random_lsst_dds_partition_prefix()
 
     @contextlib.asynccontextmanager
-    async def make_all(self, fail_if_end_early):
+    async def make_all(self):
         r"""Make a telemetry server, client, and remote.
 
         The client is run as a background process.
-
-        Parameters
-        ----------
-        fail_if_end_early : `bool`
-            What to do if the telemetry process ends:
-
-            * True: fail; this is the normal mode.
-            * False: do not fail; used for testing telemetry client timeout.
 
         Attributes
         ----------
@@ -64,9 +56,8 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         server : `lsst.ts.tcpip.OneClientServer`
             A minimal telemetry server that can be used to manually
             send data to the telemetry client process.
-        telemetry_client_process : `asyncio.subprocess.Process`
-            `TelemetryClient` running in a background process. Run using
-            command-line script ``run_mtmount_telemetry_client``.
+        telemetry_client : `TelemetryClient`
+            The telemetry client.
         """
         self.server = tcpip.OneClientServer(
             name="TelemetryServer",
@@ -78,34 +69,23 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         # Wait for the server to start so the port is set
         await asyncio.wait_for(self.server.start_task, timeout=STD_TIMEOUT)
 
-        args = [
-            "run_mtmount_telemetry_client",
-            f"--host={salobj.LOCAL_HOST}",
-            f"--port={self.server.port}",
-        ]
+        # Wait for the remote to start before starting the telemetry client,
+        # so the telemetry client will not time out waiting for telemetry.
         domain = salobj.Domain()
         self.remote = salobj.Remote(domain=domain, name="MTMount")
+
         await asyncio.wait_for(self.remote.start_task, timeout=STD_TIMEOUT)
-        self.telemetry_client_process = await asyncio.create_subprocess_exec(*args)
+        self.telemetry_client = mtmount.TelemetryClient(
+            host=salobj.LOCAL_HOST,
+            port=self.server.port,
+        )
         await asyncio.wait_for(self.server.connected_task, timeout=STD_TIMEOUT)
-        try:
-            yield
-        finally:
-            process_ended_early = self.telemetry_client_process.returncode is not None
-            if not process_ended_early:
-                self.telemetry_client_process.terminate()
-            await asyncio.gather(
-                self.remote.close(),
-                self.server.close(),
-                domain.close(),
-            )
-            if process_ended_early and fail_if_end_early:
-                self.fail("telemetry client exited early")
+        yield
 
     async def test_handle_telemetry(self):
         """Test all telemetry topics."""
         random = np.random.default_rng(47)
-        async with self.make_all(fail_if_end_early=True):
+        async with self.make_all():
             for topic_id, (
                 sal_topic_name,
                 field_len_dict,
@@ -162,9 +142,12 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         Start the telemetry server and client, but do not send any telemetry.
         Wait for the telemetry client to time out and exit.
         """
-        async with self.make_all(fail_if_end_early=False):
+        async with self.make_all():
             await asyncio.wait_for(
-                self.telemetry_client_process.wait(),
+                self.telemetry_client.start_task, timeout=STD_TIMEOUT
+            )
+            await asyncio.wait_for(
+                self.telemetry_client.done_task,
                 timeout=mtmount.TELEMETRY_TIMEOUT + STD_TIMEOUT,
             )
 
