@@ -27,7 +27,8 @@ import time
 import unittest
 
 import numpy as np
-from lsst.ts import mtmount, salobj, tcpip
+import pytest
+from lsst.ts import mtmount, salobj, tcpip, utils
 
 # Standard timeout for TCP/IP messages (sec).
 STD_TIMEOUT = 10
@@ -81,6 +82,63 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         )
         await asyncio.wait_for(self.server.connected_task, timeout=STD_TIMEOUT)
         yield
+
+    async def test_clock_offset_event(self):
+        """Test the clockOffset event."""
+        azimuth_data = dict(
+            topicID=6,
+            actualPosition=1,
+            actualTorque=0.1,
+            actualVelocity=0,
+            demandPosition=1,
+            demandVelocity=0,
+            timestamp=0,  # change this value before sending
+        )
+        async with self.make_all():
+            if not hasattr(self.remote, "evt_clockOffset"):
+                raise unittest.SkipTest("MTMount has no clockOffset event in ts_xml 14")
+            desired_offset = 0.4
+            start_time = utils.current_tai()
+            azimuth_data["timestamp"] = start_time + desired_offset
+            await self.publish_data(azimuth_data)
+            data = await self.remote.evt_clockOffset.next(
+                flush=False, timeout=STD_TIMEOUT
+            )
+            assert data.offset == pytest.approx(desired_offset, abs=0.1)
+
+            # Further telemetry should not produce new evt_clockOffset
+            # until the timer has expired
+            next_event_tai = data.private_sndStamp + mtmount.CLOCK_OFFSET_EVENT_INTERVAL
+
+            # Write data until within interval_buffer seconds of writing
+            # the next clockOffset event.
+            # Use no clock offset, so we can detect if any of these
+            # telemetry messages triggers a clockOffset event (none should).
+            interval_buffer = 0.1  # must be << TELEMETRY_TIMEOUT
+            while True:
+                curr_tai = utils.current_tai()
+                if curr_tai > next_event_tai - interval_buffer:
+                    break
+                azimuth_data["timestamp"] = curr_tai
+                await self.publish_data(azimuth_data)
+                # Sleep a bit to avoid flooding the telemetry client;
+                # the exact amount doesn't matter.
+                await asyncio.sleep(0.1)
+
+            # Wait until the timer expires, then send one more
+            # telemetry with a big clock offset.
+            await asyncio.wait_for(
+                self.telemetry_client.next_clock_offset_task, timeout=STD_TIMEOUT
+            )
+
+            desired_offset = -0.70
+            curr_tai = utils.current_tai()
+            azimuth_data["timestamp"] = curr_tai + desired_offset
+            await self.publish_data(azimuth_data)
+            data = await self.remote.evt_clockOffset.next(
+                flush=False, timeout=STD_TIMEOUT
+            )
+            assert data.offset == pytest.approx(desired_offset, abs=0.1)
 
     async def test_handle_telemetry(self):
         """Test all telemetry topics."""

@@ -20,6 +20,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = [
+    "CLOCK_OFFSET_EVENT_INTERVAL",
     "TELEMETRY_TIMEOUT",
     "TelemetryTopicHandler",
     "TelemetryClient",
@@ -32,10 +33,15 @@ import json
 import logging
 import signal
 
-from lsst.ts import salobj
+from lsst.ts import salobj, utils
 
 from . import constants
 from .telemetry_map import TELEMETRY_MAP
+
+# Approximate interval between output of the clockOffset event (seconds).
+# The clockOffset event is output when the first new telemetry is received
+# after the timer has expired.
+CLOCK_OFFSET_EVENT_INTERVAL = 1
 
 # Timeout to read telemetry (sec). If no telemetry is seen
 # in this time, the telemetry client logs an error and quits.
@@ -118,11 +124,19 @@ class TelemetryClient:
         self.controller = salobj.Controller(name="MTMount", write_only=True)
         self.log = self.controller.log.getChild("TelemetryClient")
 
-        # TODO DM-37114: ditch name_translation_dict once ts_xml 14.1
+        # TODO DM-37114: ditch name_translation_dict once ts_xml 15
         # is deployed.
         name_translation_dict = (
             {"oilSupplySystem": "oSS"} if hasattr(self.controller, "tel_oSS") else {}
         )
+
+        # TODO DM-37114: ditch is_ts_xml_14 and assume it is always true
+        # once ts_xml 15 is deployed.
+        self.is_ts_xml_14 = not hasattr(self.controller, "evt_clockOffset")
+
+        # read_loop should output the clockOffset event
+        # for the next telemetry received when this timer expires
+        self.next_clock_offset_task = utils.make_done_future()
 
         self.connection_timeout = connection_timeout
         # dict of low-level controller topic ID: TelemetryTopicHandler
@@ -239,6 +253,7 @@ class TelemetryClient:
         self.log.info("disconnecting")
         self.start_task.cancel()
         self.read_task.cancel()
+        self.next_clock_offset_task.cancel()
         writer = self.writer
         self.reader = None
         self.writer = None
@@ -278,6 +293,14 @@ class TelemetryClient:
                 try:
                     decoded_data = data.decode()
                     llv_data = json.loads(decoded_data)
+                    if not self.is_ts_xml_14 and self.next_clock_offset_task.done():
+                        clock_offset = llv_data["timestamp"] - utils.current_tai()
+                        await self.controller.evt_clockOffset.set_write(
+                            offset=clock_offset,
+                        )
+                        self.next_clock_offset_task = asyncio.create_task(
+                            asyncio.sleep(CLOCK_OFFSET_EVENT_INTERVAL)
+                        )
                     topic_id = llv_data["topicID"]
                     topic_handler = self.topic_handlers.get(topic_id)
                     if topic_handler is None:
