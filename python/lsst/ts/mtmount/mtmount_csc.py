@@ -1459,7 +1459,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         ccw_settings = reply.CW["CCW"]
         await self.evt_cameraCableWrapControllerSettings.set_write(
-            # TODO DM-37114: enable these once XML 14.1 is deployed
+            # TODO DM-37114: enable these once ts_xml 15 is deployed
             # minL1LimitEnabled=ccw_settings["NegativeSoftwareLimitEnable"],
             # maxL1LimitEnabled=ccw_settings["PositiveSoftwareLimitEnable"],
             # minL2LimitEnabled=ccw_settings["NegativeLimitSwitchEnable"],
