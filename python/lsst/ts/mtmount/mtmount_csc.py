@@ -42,6 +42,9 @@ from .utils import truncate_value
 # Interval between consecutive commands to the same subsystem (sec).
 COMMAND_INTERVAL = 0.01
 
+# If a command ack is later than this value (seconds) log a warning.
+LATE_COMMAND_ACK_INTERVAL = 0.05
+
 # Interval between sending heartbeat commands
 # to the low-level controller (sec).
 LLV_HEARTBEAT_INTERVAL = 1
@@ -1340,6 +1343,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 # Command acknowledged: set timeout. Note that
                 # futures remains in command_dict (done above).
                 futures.setack(reply.timeout)
+                curr_tai = utils.current_tai()
+                if curr_tai - futures.command.timestamp > LATE_COMMAND_ACK_INTERVAL:
+                    self.log.warning(
+                        f"ack of command {futures.command}={futures.command.encode()} "
+                        f"took {curr_tai - futures.command.timestamp:0.2f} seconds"
+                    )
             case enums.ReplyId.CMD_SUCCEEDED:
                 futures.setdone()
             case enums.ReplyId.CMD_REJECTED:
