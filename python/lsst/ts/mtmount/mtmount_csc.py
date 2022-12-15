@@ -299,10 +299,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             simulation_mode=simulation_mode,
         )
 
-        # Allow multiple trackTarget commands to run at the same time
-        # in case ack is slow for one of them.
-        self.cmd_trackTarget.allow_multiple_callbacks = True
-
         # Dict of system ID: SystemStateInfo;
         # this provides useful information for handling replies and also
         # initializes the relevant fields of the events. Initialization is
@@ -1208,8 +1204,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             return
 
-        # Use do_lock=False and allow multiple simultaneous commands
-        # (in __init__) to prevent a blocked command from aborting tracking.
         await self.send_command(
             # TODO DM-37115: remove the minus signs on azimuth
             # once the TMA uses the correct sign for azimuth
@@ -1220,7 +1214,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 elevation_velocity=data.elevationVelocity,
                 tai=data.taiTime,
             ),
-            do_lock=False,
+            do_lock=True,
         )
         await self.evt_target.set_write(
             azimuth=data.azimuth,
