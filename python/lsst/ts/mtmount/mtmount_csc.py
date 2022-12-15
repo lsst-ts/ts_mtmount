@@ -708,21 +708,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             command = self.command_dict.popitem()[1]
             command.setnoack("Connection closed before command finished")
 
-        # TODO DM-35194: remove this code block when it is OK to drop control
-        # (e.g. without shutting down the OSS).
-        if self.has_control:
-            self.log.info("In disconnect: try to give up command of the mount.")
-            try:
-                await self.send_command(
-                    commands.AskForCommand(commander=enums.Source.EUI), do_lock=False
-                )
-                self.llv_heartbeat_loop_task.cancel()
-                self.has_control = False
-            except Exception as e:
-                self.log.warning(
-                    f"Failed to give up command of the mount; continuing to disconnect: {e!r}"
-                )
-
         self.monitor_telemetry_client_task.cancel()
 
         if self.writer is not None:
@@ -846,10 +831,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # Give control to EUI so the TMA keeps receiving heartbeats;
             # this prevents it from shutting off the oil supply system,
             # main axes power supply, and top-end chiller.
-            # TODO DM-35194: if we get Tekniker to change the behavior when
-            # there is no heartbeat, change this to enums.Source.NONE.
             await self.send_command(
-                commands.AskForCommand(commander=enums.Source.EUI), do_lock=False
+                commands.AskForCommand(commander=enums.Source.NONE), do_lock=False
             )
             self.llv_heartbeat_loop_task.cancel()
             self.has_control = False
