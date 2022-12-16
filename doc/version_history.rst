@@ -6,6 +6,39 @@
 Version History
 ###############
 
+v0.24.0
+-------
+
+* `MTMountCsc`:
+
+    * Publish the ``azimuthHomed`` and ``elevationHomed`` events.
+      This requires ts_xml 14.
+    * When disconnecting give control to nobody instead of to the EUI (now that the TMA has been updated to make this practical).
+    * Handle the OIL_SUPPLY_SYSTEM_STATE low-level event.
+
+* `TelemetryClient`:
+
+    * Publish all telemetry topics defined in ts_xml 14.
+      Do this in a way that handles the rename of topic "oSS" to "oilSupplySystem" in ts_xml 15.
+    * Publish the clockOffset event if using ts_xml 15.
+
+* `mock.Controller`:
+
+    * Pubish AXIS_HOMED events for azimuth and elevation.
+    * Add missing camera cable wrap telemetry fields.
+    * Fix a bug that could cause output data to be written in a separate message from its terminator.
+
+* `TMATelemetryConfigParser`: write the data needed for RAW_TELEMETRY_MAP.
+* `MTMountCommander`: show most telemetry (not ``encoder`` or ``oSS/oilSupplySystem``).
+
+Requires:
+
+* ts_salobj 7.1
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 14
+
 v0.23.2
 -------
 
@@ -80,8 +113,6 @@ Requires:
 v0.22.2
 -------
 
-Changes:
-
 * Update entrypoints in pyproject.toml
 * In conda recipe, add entry points and replace py.test with pytest, running in verbose mode.
 * Update run_mtmount_telemetry_client entrypoint and bin script.
@@ -102,8 +133,6 @@ Requires:
 v0.22.1
 -------
 
-Changes:
-
 * Rename bin scripts to remove ".py" extension.
 * pyproject.toml: add missing entries to ``[project.scripts]``.
 * Jenkinsfile: work around a new git permission issue.
@@ -119,8 +148,6 @@ Requires:
 
 v0.22.0
 -------
-
-Changes:
 
 * `MTMountCsc`:
 
@@ -158,8 +185,6 @@ Requires:
 v0.21.1
 -------
 
-Changes:
-
 * `MTMountCsc`: stop writing the appliedSettingsMatchStart event.
 * `CONFIG_SCHEMA`: delete default values.
 
@@ -173,8 +198,6 @@ Requires:
 
 v0.21.0
 -------
-
-Changes:
 
 * Update for ts_salobj v7, which is required.
   This also requires ts_xml 11.
@@ -192,8 +215,6 @@ Requires:
 v0.20.1
 -------
 
-Changes:
-
 * Expand the elevation limits back to 0, 90, to match LTS-103.
 * `mock.AxisDevice`: fix the "out of range" error message.
   It was printing the minimum value as the upper limit, instead of the maximum value.
@@ -208,8 +229,6 @@ Requires:
 
 v0.20.0
 -------
-
-Changes:
 
 * Publish new events based on DETAILED_SETTINGS_APPLIED event from the low-level controller.
 * Limit the camera cable wrap commanded position to be within acceptable limits,
@@ -232,8 +251,6 @@ Requires:
 v0.19.1
 -------
 
-Changes:
-
 * Use ts_utils.
 * Fix tests/test_csc.py; two tests were failing because they did not provide regular rotation telemetry.
 * Fix a typo in bin/command_mtmount.py.
@@ -248,8 +265,6 @@ Requires:
 
 v0.19.0
 -------
-
-Changes:
 
 * Add support for all but one of the new low-level controller events.
   The one missing event is DETAILED_SETTINGS_APPLIED;
@@ -271,8 +286,6 @@ Requires:
 0.18.1
 -------
 
-Changes:
-
 * Make camera cable wrap (CCW) following more robust by not locking the low-level TCP/IP stream while commands run
   (except in limited cases, such as initializing subsystems and shutting them back down).
   This fixes DM-30990: moveToTarget causes CCW following to fail.
@@ -288,8 +301,6 @@ Requires:
 v0.18.0
 -------
 
-Changes:
-
 * Update to use ts_tcpip instead of ts_hexrotcomm.
 * Test black formatting with pytest, instead of tests/test_black.py.
 
@@ -304,8 +315,6 @@ Requires:
 v0.17.1
 -------
 
-Changes:
-
 * Format the code with black 20.8b1.
 
 Requires:
@@ -318,8 +327,6 @@ Requires:
 
 v0.17.0
 -------
-
-Changes:
 
 * Fix two bugs that prevented the CSC from outputting telemetry after going to standby and back to disabled state:
 
@@ -344,8 +351,6 @@ Requires:
 v0.16.0
 -------
 
-Changes:
-
 * `MTMountCsc`: improve camera cable wrap following startup and shutdown,
   including more reliably stopping the axis.
 * `MTMountCsc`: bug fix: it was using the wrong telemetry port in normal mode (not simulating).
@@ -365,8 +370,6 @@ Requires:
 
 v0.15.0
 -------
-
-Changes:
 
 * `MTMountCsc` (and, where relevant, `mock.Controller`) updates:
 
@@ -393,8 +396,6 @@ Requires:
 v0.14.0
 -------
 
-Changes:
-
 * Use a single socket for commands and replies.
 * `mock.Controller` related changes: 
     * Replaced ``command_port`` and ``telemetry_port`` constructor argument with ``random_ports``
@@ -417,8 +418,6 @@ Requires:
 
 v0.13.0
 -------
-
-Changes:
 
 * Overhaul camera cable wrap control.
   This requires ts_xml 7.2:
@@ -450,8 +449,6 @@ Requires:
 v0.12.1
 -------
 
-Changes:
-
 * Fixed setup.py and conda/meta.yaml so the conda build works again.
 
 Requires:
@@ -464,8 +461,6 @@ Requires:
 
 v0.12.0
 -------
-
-Changes:
 
 * Add missing ``description`` field to `replies.WarningReply` and `replies.ErrorReply`.
 * Fix the enable tracking low-level commands:
@@ -492,8 +487,6 @@ Requires:
 
 v0.11.0
 -------
-
-Changes:
 
 * Update to use MTMount instead of NewMTMount IDL files.
   This requires ts_xml 7.1.
@@ -522,8 +515,6 @@ Requires:
 v0.10.0
 -------
 
-Changes:
-
 * Rename ``bin/zrun_mtmount_commander.py`` to ``bin/command_mtmount.py`` to match naming in other packages.
 * Change the ``--log-level`` command-line argument to ``--loglevel`` for ``bin/run_mock_tma.py`` and ``bin/tma_commander.py``, to match the command-line argument for running CSCs.
 * In simulation mode start the mock controller process just before connecting to the low-level controller, and terminate it just after disconnecting.
@@ -546,8 +537,6 @@ Requires:
 v0.9.0
 ------
 
-Changes:
-
 * Update the `MTMountCsc` to send the ``ASK_FOR_COMMAND`` low-level command when going to ``ENABLED`` state.
   Only send device initialization and shutdown commands if the CSC has command.
 * Add more commands to the TMA commander.
@@ -563,8 +552,6 @@ Requires:
 v0.8.1
 ------
 
-Changes:
-
 * Update Jenkinsfile.conda to use the shared library.
 * Pin the versions of ts_idl and ts_salobj in conda/meta.yaml.
 
@@ -578,8 +565,6 @@ Requires:
 
 v0.8.0
 ------
-
-Changes:
 
 * Update to use and require ts_xml 7.
 
@@ -600,8 +585,6 @@ Requires:
 v0.7.4
 ------
 
-Changes:
-
 * Add run_mock_tma.py script to setup.py.
 
 Requires:
@@ -614,8 +597,6 @@ Requires:
 
 v0.7.3
 ------
-
-Changes:
 
 * Fix a bug in the close method of the mock controller.
   It would try to close the communicator even if was still None.
@@ -631,8 +612,6 @@ Requires:
 v0.7.2
 ------
 
-Changes:
-
 * Fix a bug that prevents the CSC from starting the mock TMA controller.
 * Added missing ``enable`` constructor argument to `MTMountCommander`.
 
@@ -647,8 +626,6 @@ Requires:
 v0.7.1
 ------
 
-Changes:
-
 * Fix the requirements information in the version history for v0.6.0, v0.6.1, and v0.7.0.
 
 Requires:
@@ -661,8 +638,6 @@ Requires:
 
 v0.7.0
 ------
-
-Changes:
 
 * This release requires ts_salobj 6.
 * Simplified the simulation mode support, using ts_salobj 6-specific features.
@@ -679,8 +654,6 @@ Requires:
 v0.6.1
 ------
 
-Changes:
-
 * Fix bin/run_mtmount.py so that it works with ts_salobj 6 (and 5).
 * Add a unit test of bin/run_mtmount.py.
 
@@ -694,8 +667,6 @@ Requires:
 
 v0.6.0
 ------
-
-Changes:
 
 * In simulation mode have the `MTMountCSC` run the mock controller in a subprocess,
   in order to give the CSC a better chance of keeping up with tracking commands.
@@ -717,8 +688,6 @@ Requires:
 v0.5.0
 ------
 
-Changes:
-
 * Send camera cable wrap tracking commands in advance, by a configurable duration.
 * Make the CSC enable camera cable wrap tracking when first enabled.
 
@@ -733,8 +702,6 @@ Requires:
 v0.4.0
 ------
 
-Changes:
-
 * Update CCW-Rotator synchronization algorithm to account for the current position of the CCW when computing the CCW demand.
 
 Requires:
@@ -748,8 +715,6 @@ Requires:
 v0.3.0
 ------
 
-Changes:
-
 * Update the motion limits for the simulator with more realistic values.
 
 Requires:
@@ -762,8 +727,6 @@ Requires:
 
 v0.2.0
 ------
-
-Changes:
 
 * Updated for ts_simactuators 2
 * Changed ``Limits.scale`` to `Limits.scaled`.

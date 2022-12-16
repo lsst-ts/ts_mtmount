@@ -52,23 +52,46 @@ class MTMountCommander(salobj.CscCommander):
         super().__init__(
             name="MTMount",
             enable=enable,
-            telemetry_fields_to_not_compare=("current", "timestamp"),
+            telemetry_fields_to_not_compare=(
+                "actualAcceleration",
+                "actualTorque",
+                "actualTorquePercentage",
+                "actualTorquePercentagePlatform1Drive",
+                "actualTorquePercentagePlatform2Drive",
+                "current",
+                "powerSupplyCurrent",
+                "timestamp",
+            ),
         )
-        for command_to_ignore in ("abort", "setValue"):
-            self.command_dict.pop(command_to_ignore, None)
+
+        # Disable telemetry from topics we don't care about
+        # (and are too much work to filter out noise)
+        for topic_name in (
+            "auxiliaryBoxes",
+            "azimuthDrivesThermal",
+            "cabinet0101",
+            "compressedAir",
+            "cooling",
+            "dynaleneCooling",
+            "elevationDrivesThermal",
+            "encoder",
+            "generalPurposeGlycolWater",
+            "mountControlMainCabinet",
+        ):
+            topic = getattr(self.remote, f"tel_{topic_name}")
+            topic.callback = None
+        # TODO 37114: once ts_xml 15 is released,
+        # use the above loop to block oilSupplySubsystem
+        for topic_name in ("oSS", "oilSupplySubsystem"):
+            topic = getattr(self.remote, f"tel_{topic_name}", None)
+            if topic is not None:
+                topic.callback = None
 
         self.tracking_task = utils.make_done_future()
 
         ramp_arg_names = list(RampArgs.__dataclass_fields__)
         self.help_dict["ramp"] = " ".join(ramp_arg_names) + " # track a ramp"
         self.ramp_count = 0
-
-        # Disable telemetry for now
-        # TODO: output it if important values change by "enough"
-        for name in self.remote.salinfo.telemetry_names:
-            topic_attr_name = f"tel_{name}"
-            topic = getattr(self.remote, topic_attr_name)
-            setattr(topic, "callback", None)
 
     @property
     def ramp_arg_names(self):
@@ -163,6 +186,9 @@ class MTMountCommander(salobj.CscCommander):
         print("Disable tracking")
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
         print("Ramp done")
+
+    def telemetry_callback(self, data, name, digits=1):
+        super().telemetry_callback(data=data, name=name, digits=digits)
 
 
 def command_mtmount():

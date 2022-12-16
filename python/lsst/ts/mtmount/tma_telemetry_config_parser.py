@@ -26,13 +26,12 @@ import configparser
 import dataclasses
 import pathlib
 import re
-
-from lsst.ts import salobj
+import sys
 
 # Dict of TMA telemetry type (str): SAL type (str)
 SAL_TYPES = dict(
     String="string",
-    Int64="long",
+    Int64="long long",
     INT32="int",
     DBL="double",
     Boolean="boolean",
@@ -41,71 +40,73 @@ SAL_TYPES = dict(
 # Regular expression to parse a field name as [name][optional numeric suffix]
 NAME_INT_RE = re.compile(r"^(.*?)(\d*)$")
 
+# Dict of TMA section name: SAL topic name,
+# for names that the automatic translation isn't good enough.
+TOPIC_NAME_TRANSLATION_DICT = {
+    "OSS": "oilSupplySystem",
+}
+
 # Dict of TMA unit: XML unit.
 UNITS_TRANSLATION_DICT = {
     "iu": "unitless",  # encoder counts
 }
 
-if hasattr(salobj, "FieldInfo"):
-    FieldInfo = salobj.FieldInfo
-    TopicInfo = salobj.TopicInfo
-else:
 
-    @dataclasses.dataclass
-    class FieldInfo:
-        """Information about one field of a topic.
+@dataclasses.dataclass
+class FieldInfo:
+    """Information about one field of a topic.
 
-        Abbreviated version of salobj (Kafka version) FieldInfo
+    Abbreviated version of salobj (Kafka version) FieldInfo.
+    Once we switch to Kafka we could use the salobj version.
 
-        Parameters
-        ----------
-        name : `str`
-            Field name
-        sal_type : `str`
-            SAL data type.
-        count : `int`
-            For lists: the fixed list length.
-        units : `str`
-            Units, "unitless" if none.
-        description : `str`
-            Description (arbitrary text)
-        """
+    Parameters
+    ----------
+    name : `str`
+        Field name.
+    sal_type : `str`
+        SAL data type.
+    count : `int`
+        For lists: the fixed list length.
+    units : `str`
+        Units, "unitless" if none.
+    description : `str`
+        Description (arbitrary text).
+    """
 
-        name: str
-        sal_type: str
-        count: int = 1
-        units: str = "unitless"
-        description: str = ""
-
-    @dataclasses.dataclass
-    class TopicInfo:
-        """Information about one SAL topic.
-
-        Abbreviated version of salobj (Kafka version) TopicInfo
-
-        Parameters
-        ----------
-        component_name : `str`
-            SAL component name
-        topic_subname : `str`
-            Sub-namespace for topic names and schema subject and namespace.
-        sal_name : `str`
-            SAL topic name, e.g. logevent_summaryState
-        fields : `dict` [`str`, `FieldInfo`]
-            Dict of field name: field info
-        """
-
-        component_name: str
-        topic_subname: str
-        sal_name: str
-        fields: dict[str, FieldInfo]
+    name: str
+    sal_type: str
+    count: int = 1
+    units: str = "unitless"
+    description: str = ""
 
 
 # Dict of field name: FieldInfo
 FieldsType = dict[str, FieldInfo]
 
-# Dict of topic attr_name: TopicInfo
-TopicsType = dict[str, TopicInfo]
+
+@dataclasses.dataclass
+class TelemetryTopicInfo:
+    """Information about one SAL MTMount telemetry topic.
+
+    Minor, but incomptatible, variant of salobj (Kafka version) TopicInfo.
+
+    Parameters
+    ----------
+    topic_id : `int`
+        TMA topic ID.
+    sal_name : `str`
+        SAL topic name, e.g. logevent_summaryState.
+    fields : `dict` [`str`, `FieldInfo`]
+        Dict of field name: field info.
+    """
+
+    topic_id: int
+    sal_name: str
+    fields: dict[str, FieldInfo]
+
+
+# Dict of topic attr_name: TelemetryTopicInfo
+TopicsType = dict[str, TelemetryTopicInfo]
 
 
 class TMATelemetryConfigParser:
@@ -478,8 +479,8 @@ class TMATelemetryConfigParser:
             The base names all match.
         sequence_numbers : `list` [`int`]
             The sequence number of each entry in sequence_field_names.
-            The sequence is written as a single entry in consolidated_fields
-            only if this list starts at 1 and increases by 1s.
+            The sequence is written as a single entry in consolidated_fields,
+            but only if this list starts at 1 and increases by 1s.
         """
         num_members = len(sequence_numbers)
         if len(sequence_numbers) > 1 and sorted(sequence_numbers) == list(
@@ -508,7 +509,11 @@ class TMATelemetryConfigParser:
         for section in self.config.values():
             if section.name == "DEFAULT":
                 continue
-            topic_sal_name = section.name[0].lower() + section.name[1:].replace(" ", "")
+            topic_sal_name = TOPIC_NAME_TRANSLATION_DICT.get(section.name)
+            if topic_sal_name is None:
+                topic_sal_name = section.name[0].lower() + section.name[1:].replace(
+                    " ", ""
+                )
             topic_attr_name = f"tel_{topic_sal_name}"
 
             # Dict of field_name: FieldInfo
@@ -528,9 +533,8 @@ class TMATelemetryConfigParser:
                     f"consolidated from {len(fields)}"
                 )
 
-                topics[topic_attr_name] = TopicInfo(
-                    component_name="MTMount",
-                    topic_subname="",
+                topics[topic_attr_name] = TelemetryTopicInfo(
+                    topic_id=topic_id,
                     sal_name=topic_sal_name,
                     fields=consolidated_fields,
                 )
@@ -543,6 +547,15 @@ class TMATelemetryConfigParser:
         topics: TopicsType,
         xml_telemetry_path: pathlib.Path | str,
     ) -> None:
+        """Write data for MTMount_Telemetry.xml
+
+        Parameters
+        ----------
+        topics : `TopicsType`
+            Topics data as a dict of topic name: TopicInfo.
+        xml_telemetry_path : `str` | `pathlib.Path`
+            Path to output file, which should be named MTMount_Telemetry.xml.
+        """
         with open(xml_telemetry_path, "w") as outfile:
             outfile.write(
                 """<?xml version="1.0" encoding="UTF-8"?>
@@ -579,6 +592,28 @@ class TMATelemetryConfigParser:
 """
             )
 
+    def write_telemetry_map(
+        self,
+        topics: TopicsType,
+    ) -> None:
+        """Write the data for RAW_TELEMETRY_MAP in telemetry_map.py
+
+        Parameters
+        ----------
+        topics : `TopicsType`
+            Topics data as a dict of topic name: TopicInfo.
+        """
+        outfile = sys.stdout
+        print("*** BEGIN RAW_TELEMETRY_MAP DATA ***")
+        for topic_info in topics.values():
+            outfile.write(f"\n{topic_info.topic_id}:\n")
+            outfile.write(f"- {topic_info.sal_name}\n")
+            field_prefix = "- "
+            for field_name, field_info in topic_info.fields.items():
+                outfile.write(f"{field_prefix}{field_name}: {field_info.count}\n")
+                field_prefix = "  "
+        print("\n*** END RAW_TELEMETRY_MAP DATA ***")
+
 
 def run_tma_telemetry_config_parser():
     """Generate MTMount_Telemetry.xml from the TMA's telemetry config file."""
@@ -597,3 +632,4 @@ def run_tma_telemetry_config_parser():
     processor = TMATelemetryConfigParser(args.tma_config_path)
     topics = processor.process_file()
     processor.write_xml(xml_telemetry_path=args.output, topics=topics)
+    processor.write_telemetry_map(topics=topics)
