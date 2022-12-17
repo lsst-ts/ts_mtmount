@@ -16,6 +16,8 @@ v0.24.0
     * When disconnecting give control to nobody instead of to the EUI (now that the TMA has been updated to make this practical).
     * Handle the OIL_SUPPLY_SYSTEM_STATE low-level event.
     * Fix a resource leak in the command cache: commands that were done when acknowledged were not removed.
+    * Improve robustness of the trackTarget command by waiting for the communication lock to be available before measuring whether the command is too late.
+    * Improve robustness of camera cable wrap following by waiting for the communication lock to be available before computing the camera cable wrap target.
 
 * `TelemetryClient`:
 
