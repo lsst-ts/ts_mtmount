@@ -1199,7 +1199,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_trackTarget(self, data):
         """Handle the trackTarget command."""
         self.assert_enabled()
-        advance_time = data.taiTime - utils.current_tai()
+        start_tai = utils.current_tai()
+        advance_time = data.taiTime - start_tai
         if advance_time < MIN_TRACKING_ADVANCE_TIME:
             self.log.warning(
                 f"Ignoring late tracking command with taiTime={data.taiTime}: "
@@ -1207,18 +1208,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             return
 
-        await self.send_command(
-            # TODO DM-37115: remove the minus signs on azimuth
-            # once the TMA uses the correct sign for azimuth
-            commands.BothAxesTrackTarget(
+        async with self.command_lock:
+            send_tai = utils.current_tai()
+            track_command = commands.BothAxesTrackTarget(
                 azimuth=-data.azimuth,
                 azimuth_velocity=-data.azimuthVelocity,
                 elevation=data.elevation,
                 elevation_velocity=data.elevationVelocity,
                 tai=data.taiTime,
-            ),
-            do_lock=True,
-        )
+            )
+            await self.send_command(
+                # TODO DM-37115: remove the minus signs on azimuth
+                # once the TMA uses the correct sign for azimuth
+                track_command,
+                do_lock=False,
+            )
+        done_tai = utils.current_tai()
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
@@ -1229,6 +1234,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
             tracksys=data.tracksys,
             radesys=data.radesys,
             force_output=True,
+        )
+        self.log.log(
+            LOG_LEVEL_COMMANDS,
+            f"trackTarget seqId={track_command.sequence_id}: "
+            f"started processing {advance_time:0.2f} sec in advance of taiTime; "
+            f"waited {send_tai - start_tai:0.2f} sec to get comm lock; "
+            f"waited {done_tai - send_tai:0.2f} sec to send command and get ack",
         )
 
     async def do_startTracking(self, data):
