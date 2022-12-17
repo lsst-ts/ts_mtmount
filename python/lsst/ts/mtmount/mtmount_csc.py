@@ -487,11 +487,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
         for process in processes:
             await process.wait()
 
-    async def get_camera_cable_wrap_demand(self):
-        """Get camera cable wrap tracking command data.
+    def compute_camera_cable_wrap_demand(self, rot_data):
+        """Compute camera cable wrap tracking command data from rotation data.
 
-        Read the position and velocity of the camera rotator
-        and compute an optimum demand for camera cable wrap.
+        Parameters
+        ----------
+        rot_data : `salobj.BaseMsgType`
+            Current MTRotator rotation telemetry data.
 
         Returns
         -------
@@ -503,17 +505,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Desired camera cable wrap time (TAI unix seconds).
             This will be ``config.camera_cable_wrap_advance_time``
             seconds in the future.
-
-        Raises
-        ------
-        asyncio.TimeoutError
-            If data not seen in ROTATOR_TELEMETRY_TIMEOUT seconds.
         """
-
-        rot_data = await self.rotator.tel_rotation.next(
-            flush=True, timeout=ROTATOR_TELEMETRY_TIMEOUT
-        )
-
         desired_tai = utils.current_tai() + self.config.camera_cable_wrap_advance_time
         dt = desired_tai - rot_data.timestamp
 
@@ -1044,13 +1036,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
             while self.camera_cable_wrap_following_enabled:
                 try:
-                    position_velocity_tai = await self.get_camera_cable_wrap_demand()
+                    rot_data = await self.rotator.tel_rotation.next(
+                        flush=True, timeout=ROTATOR_TELEMETRY_TIMEOUT
+                    )
                 except asyncio.TimeoutError:
                     if not paused:
                         paused = True
                         self.log.warning(
-                            "Rotator data not available; stopping the camera "
-                            "cable wrap until rotator data is available"
+                            "Rotator data not available; stopping the camera cable wrap "
+                            "and pausing camera cable wrap following until rotator data is available"
                         )
                         print(
                             "pausing camera cable wrap following: stopping camera cable wrap"
@@ -1059,32 +1053,34 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             commands.CameraCableWrapStop(), do_lock=False
                         )
                     else:
-                        print("get_camera_cable_wrap_demand timed out while paused")
+                        print("compute_camera_cable_wrap_demand timed out while paused")
                     continue
 
                 if paused:
                     paused = False
                     self.log.info(
-                        "Rotator data received; resume making "
-                        "the camera cable wrap follow the rotator"
+                        "Rotator data received; resuming camera cable wrap following"
                     )
                     await self.send_command(
                         commands.CameraCableWrapEnableTracking(on=True), do_lock=False
                     )
 
-                position, velocity, tai = position_velocity_tai
-                command = commands.CameraCableWrapTrackTarget(
-                    position=position,
-                    velocity=velocity,
-                    tai=tai,
-                )
-                try:
-                    await asyncio.wait_for(
-                        self.send_command(command, do_lock=False), timeout=1
+                async with self.command_lock:
+                    (position, velocity, tai) = self.compute_camera_cable_wrap_demand(
+                        rot_data
                     )
-                except asyncio.TimeoutError:
-                    print("*** CameraCableWrapTrackTarget timed out ***")
-                    raise
+                    command = commands.CameraCableWrapTrackTarget(
+                        position=position,
+                        velocity=velocity,
+                        tai=tai,
+                    )
+                    try:
+                        await asyncio.wait_for(
+                            self.send_command(command, do_lock=False), timeout=1
+                        )
+                    except asyncio.TimeoutError:
+                        print("*** CameraCableWrapTrackTarget timed out ***")
+                        raise
                 await self.evt_cameraCableWrapTarget.set_write(
                     position=position, velocity=velocity, taiTime=tai
                 )
@@ -1200,16 +1196,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Handle the trackTarget command."""
         self.assert_enabled()
         start_tai = utils.current_tai()
-        advance_time = data.taiTime - start_tai
-        if advance_time < MIN_TRACKING_ADVANCE_TIME:
-            self.log.warning(
-                f"Ignoring late tracking command with taiTime={data.taiTime}: "
-                f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=}"
-            )
-            return
 
         async with self.command_lock:
             send_tai = utils.current_tai()
+            advance_time = data.taiTime - send_tai
+            if advance_time < MIN_TRACKING_ADVANCE_TIME:
+                self.log.warning(
+                    f"Ignoring late tracking command with taiTime={data.taiTime}: "
+                    f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=}"
+                )
+                return
+
             track_command = commands.BothAxesTrackTarget(
                 azimuth=-data.azimuth,
                 azimuth_velocity=-data.azimuthVelocity,
