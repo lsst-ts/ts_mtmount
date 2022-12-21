@@ -1060,22 +1060,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         commands.CameraCableWrapEnableTracking(on=True), do_lock=False
                     )
 
-                async with self.command_lock:
-                    (position, velocity, tai) = self.compute_camera_cable_wrap_demand(
-                        rot_data
+                position, velocity, tai = self.compute_camera_cable_wrap_demand(
+                    rot_data
+                )
+                command = commands.CameraCableWrapTrackTarget(
+                    position=position,
+                    velocity=velocity,
+                    tai=tai,
+                )
+                try:
+                    await asyncio.wait_for(
+                        self.send_command(command, do_lock=False), timeout=1
                     )
-                    command = commands.CameraCableWrapTrackTarget(
-                        position=position,
-                        velocity=velocity,
-                        tai=tai,
-                    )
-                    try:
-                        await asyncio.wait_for(
-                            self.send_command(command, do_lock=False), timeout=1
-                        )
-                    except asyncio.TimeoutError:
-                        print("*** CameraCableWrapTrackTarget timed out ***")
-                        raise
+                except asyncio.TimeoutError:
+                    print("*** CameraCableWrapTrackTarget timed out ***")
+                    raise
+
                 await self.evt_cameraCableWrapTarget.set_write(
                     position=position, velocity=velocity, taiTime=tai
                 )
