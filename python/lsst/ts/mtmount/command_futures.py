@@ -39,16 +39,16 @@ class CommandFutures:
     ack : `asyncio.Future`
         Future which ends as follows:
 
-        * result = timeout (in sec) when the command is acknowledged
-          (an Ack reply is read).
-        * exception = `lsst.ts.salobj.ExpectedError` if the command fails
-          (a NoAck reply is read) before the command is acknowledged.
+        * result = timeout (in sec) when the command is acknowledged, and
+          the command is not one of those that is done when acknowledged.
+        * exception = `lsst.ts.salobj.ExpectedError` if the command
+          is rejected (fails before it is acknowledged).
     done : `asyncio.Future`
         Future which ends as follows:
 
-        * result = `None` when the command finishes successfully
-          (a Done reply is read).
-        * exception = `lsst.ts.salobj.ExpectedError` if the command fails.
+        * result = `None` when the command finishes successfully.
+        * exception = `lsst.ts.salobj.ExpectedError` if the command
+          is rejected or fails.
     """
 
     def __init__(self, command):
@@ -58,6 +58,10 @@ class CommandFutures:
 
     def setack(self, timeout):
         """Report a command as started.
+
+        Call this when the command receives ReplyId.CMD_ACKNOWLEDGED,
+        but only if the command is not done (a few commands are done
+        when acknowledged). If the command is done, call `setdone`.
 
         Parameters
         ----------
@@ -69,6 +73,9 @@ class CommandFutures:
 
     def setnoack(self, explanation):
         """Report a command as failed.
+
+        Call this if the command receives ReplyId.CMD_REJECTED
+        or ReplyId.CMD_FAILED.
 
         Parameters
         ----------
@@ -88,7 +95,12 @@ class CommandFutures:
             self.done.set_exception(salobj.ExpectedError(explanation))
 
     def setdone(self):
-        """Report a command as done."""
+        """Report a command as finished successfully.
+
+        Call this if the command receives ReplyId.CMD_SUCCEEDED,
+        or if it is one of the few commands that is done when acknowledged
+        and the command receives ReplyId.CMD_ACKNOWLEDGED.
+        """
         if not self.ack.done():
             self.ack.set_result(0)
         if not self.done.done():

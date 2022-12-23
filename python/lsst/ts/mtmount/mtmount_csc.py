@@ -35,12 +35,10 @@ import types
 from lsst.ts import salobj, utils
 from lsst.ts.idl.enums.MTMount import AxisMotionState, PowerState, System
 
-from . import __version__, command_futures, commands, constants, enums
+from . import __version__, commands, constants, enums
+from .command_futures import CommandFutures
 from .config_schema import CONFIG_SCHEMA
 from .utils import truncate_value
-
-# Interval between consecutive commands to the same subsystem (sec).
-COMMAND_INTERVAL = 0.01
 
 # If a command ack is later than this value (seconds) log a warning.
 LATE_COMMAND_ACK_INTERVAL = 0.05
@@ -252,8 +250,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Subprocess running the mock controller
         self.mock_controller_process = None
 
-        # Dict of command sequence-id: command_futures.CommandFutures
-        self.command_dict = dict()
+        # Dict of command sequence-id: CommandFutures
+        self.command_futures_dict = dict()
 
         # Reply IDs that this code does not handle.
         self.unknown_reply_ids = set()
@@ -467,8 +465,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def close_tasks(self):
         """Shut down pending tasks. Called by `close`."""
-        while self.command_dict:
-            command = self.command_dict.popitem()[1]
+        while self.command_futures_dict:
+            command = self.command_futures_dict.popitem()[1]
             command.setnoack("Connection closed before command finished")
         await super().close_tasks()
 
@@ -486,11 +484,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
         for process in processes:
             await process.wait()
 
-    async def get_camera_cable_wrap_demand(self):
-        """Get camera cable wrap tracking command data.
+    def compute_camera_cable_wrap_demand(self, rot_data):
+        """Compute camera cable wrap tracking command data from rotation data.
 
-        Read the position and velocity of the camera rotator
-        and compute an optimum demand for camera cable wrap.
+        Parameters
+        ----------
+        rot_data : `salobj.BaseMsgType`
+            Current MTRotator rotation telemetry data.
 
         Returns
         -------
@@ -502,17 +502,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             Desired camera cable wrap time (TAI unix seconds).
             This will be ``config.camera_cable_wrap_advance_time``
             seconds in the future.
-
-        Raises
-        ------
-        asyncio.TimeoutError
-            If data not seen in ROTATOR_TELEMETRY_TIMEOUT seconds.
         """
-
-        rot_data = await self.rotator.tel_rotation.next(
-            flush=True, timeout=ROTATOR_TELEMETRY_TIMEOUT
-        )
-
         desired_tai = utils.current_tai() + self.config.camera_cable_wrap_advance_time
         dt = desired_tai - rot_data.timestamp
 
@@ -703,8 +693,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.should_be_connected = False
 
         # Cancel pending commands
-        while self.command_dict:
-            command = self.command_dict.popitem()[1]
+        while self.command_futures_dict:
+            command = self.command_futures_dict.popitem()[1]
             command.setnoack("Connection closed before command finished")
 
         self.monitor_telemetry_client_task.cancel()
@@ -780,7 +770,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             ):
                 try:
                     await self.send_command(command, do_lock=True)
-                    await asyncio.sleep(COMMAND_INTERVAL)
                 except Exception as e:
                     if must_succeed:
                         raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
@@ -818,7 +807,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ]:
             try:
                 await self.send_command(command, do_lock=True)
-                await asyncio.sleep(COMMAND_INTERVAL)
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
@@ -865,7 +853,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         Returns
         -------
-        command_futures : `command_futures.CommandFutures`
+        command_futures : `CommandFutures`
             Futures that monitor the command.
         """
         if do_lock:
@@ -884,7 +872,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         Returns
         -------
-        command_futures : `command_futures.CommandFutures`
+        command_futures : `CommandFutures`
             Futures that monitor the command.
         """
         if not self.connected:
@@ -894,32 +882,31 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     report="Connection lost to low-level controller (noticed in _basic_send_command)",
                 )
             raise salobj.ExpectedError("Not connected to the low-level controller.")
-        if command.sequence_id in self.command_dict:
+        if command.sequence_id in self.command_futures_dict:
             raise RuntimeError(
-                f"Bug! Duplicate sequence_id {command.sequence_id} in command_dict"
+                f"Bug! Duplicate sequence_id {command.sequence_id} in command_futures_dict"
             )
-        futures = command_futures.CommandFutures(command=command)
+        command_futures = CommandFutures(command=command)
         # Set the timestamp field to the time at which the command was sent.
         command.timestamp = utils.current_tai()
-        self.command_dict[command.sequence_id] = futures
+        self.command_futures_dict[command.sequence_id] = command_futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
         self.writer.write(command_bytes)
         await self.writer.drain()
-        timeout = await asyncio.wait_for(futures.ack, self.config.ack_timeout)
-        if timeout < 0:
-            # This command only receives an Ack; mark it done.
-            futures.done.set_result(None)
-        elif not futures.done.done():
+        timeout = await asyncio.wait_for(command_futures.ack, self.config.ack_timeout)
+        if not command_futures.done.done():
             try:
-                await asyncio.wait_for(futures.done, timeout=timeout + TIMEOUT_BUFFER)
+                await asyncio.wait_for(
+                    command_futures.done, timeout=timeout + TIMEOUT_BUFFER
+                )
             except asyncio.TimeoutError:
-                self.command_dict.pop(command.sequence_id, None)
+                self.command_futures_dict.pop(command.sequence_id, None)
                 raise asyncio.TimeoutError(
                     f"Timed out after {timeout + TIMEOUT_BUFFER} seconds "
                     f"waiting for the Done reply to {command}"
                 )
-        return futures
+        return command_futures
 
     async def send_commands(self, *commands, do_lock):
         """Run a set of operation manager commands.
@@ -1044,13 +1031,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
             while self.camera_cable_wrap_following_enabled:
                 try:
-                    position_velocity_tai = await self.get_camera_cable_wrap_demand()
+                    rot_data = await self.rotator.tel_rotation.next(
+                        flush=True, timeout=ROTATOR_TELEMETRY_TIMEOUT
+                    )
                 except asyncio.TimeoutError:
                     if not paused:
                         paused = True
                         self.log.warning(
-                            "Rotator data not available; stopping the camera "
-                            "cable wrap until rotator data is available"
+                            "Rotator data not available; stopping the camera cable wrap "
+                            "and pausing camera cable wrap following until rotator data is available"
                         )
                         print(
                             "pausing camera cable wrap following: stopping camera cable wrap"
@@ -1059,20 +1048,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             commands.CameraCableWrapStop(), do_lock=False
                         )
                     else:
-                        print("get_camera_cable_wrap_demand timed out while paused")
+                        print("compute_camera_cable_wrap_demand timed out while paused")
                     continue
 
                 if paused:
                     paused = False
                     self.log.info(
-                        "Rotator data received; resume making "
-                        "the camera cable wrap follow the rotator"
+                        "Rotator data received; resuming camera cable wrap following"
                     )
                     await self.send_command(
                         commands.CameraCableWrapEnableTracking(on=True), do_lock=False
                     )
 
-                position, velocity, tai = position_velocity_tai
+                position, velocity, tai = self.compute_camera_cable_wrap_demand(
+                    rot_data
+                )
                 command = commands.CameraCableWrapTrackTarget(
                     position=position,
                     velocity=velocity,
@@ -1085,6 +1075,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 except asyncio.TimeoutError:
                     print("*** CameraCableWrapTrackTarget timed out ***")
                     raise
+
                 await self.evt_cameraCableWrapTarget.set_write(
                     position=position, velocity=velocity, taiTime=tai
                 )
@@ -1199,26 +1190,35 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_trackTarget(self, data):
         """Handle the trackTarget command."""
         self.assert_enabled()
-        advance_time = data.taiTime - utils.current_tai()
-        if advance_time < MIN_TRACKING_ADVANCE_TIME:
-            self.log.warning(
-                f"Ignoring late tracking command with taiTime={data.taiTime}: "
-                f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=}"
-            )
-            return
+        start_tai = utils.current_tai()
 
-        await self.send_command(
-            # TODO DM-37115: remove the minus signs on azimuth
-            # once the TMA uses the correct sign for azimuth
-            commands.BothAxesTrackTarget(
+        async with self.command_lock:
+            # Note: the time now (the time at which the lock was obtained)
+            # is essentially the same as the time at which the command will be
+            # sent, because the intervening code is quick and has no awaits.
+            send_tai = utils.current_tai()
+            advance_time = data.taiTime - send_tai
+            if advance_time < MIN_TRACKING_ADVANCE_TIME:
+                self.log.warning(
+                    f"Ignoring late tracking command with taiTime={data.taiTime}: "
+                    f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=} "
+                    f"after a message delay of {start_tai - data.private_sndStamp:0.3f} seconds "
+                    f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the command lock"
+                )
+
+            track_command = commands.BothAxesTrackTarget(
                 azimuth=-data.azimuth,
                 azimuth_velocity=-data.azimuthVelocity,
                 elevation=data.elevation,
                 elevation_velocity=data.elevationVelocity,
                 tai=data.taiTime,
-            ),
-            do_lock=True,
-        )
+            )
+            await self.send_command(
+                # TODO DM-37115: remove the minus signs on azimuth
+                # once the TMA uses the correct sign for azimuth
+                track_command,
+                do_lock=False,
+            )
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
@@ -1329,10 +1329,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         reply_id = reply.id
         sequence_id = reply.sequenceId
         if reply_id == enums.ReplyId.CMD_ACKNOWLEDGED:
-            futures = self.command_dict.get(sequence_id, None)
+            command_futures = self.command_futures_dict.get(sequence_id, None)
         else:
-            futures = self.command_dict.pop(sequence_id, None)
-        if futures is None:
+            command_futures = self.command_futures_dict.pop(sequence_id, None)
+        if command_futures is None:
             self.log.warning(
                 f"Got reply with code {enums.ReplyId(reply_id)!r} "
                 f"for non-existent command {sequence_id}"
@@ -1340,30 +1340,44 @@ class MTMountCsc(salobj.ConfigurableCsc):
             return
         match reply_id:
             case enums.ReplyId.CMD_ACKNOWLEDGED:
-                # Command acknowledged: set timeout. Note that
-                # futures remains in command_dict (done above).
-                futures.setack(reply.timeout)
+                # Command acknowledged. Note that, unlike all other cases,
+                # command_futures is still in self.command_futures_dict,
+                # because it might not be done yet.
                 curr_tai = utils.current_tai()
-                if curr_tai - futures.command.timestamp > LATE_COMMAND_ACK_INTERVAL:
+                if command_futures.command.command_code in commands.AckOnlyCommandCodes:
+                    # This command is done when acked; mark it done
+                    # and remove it from self.command dict.
+                    command_futures.setdone()
+                    del self.command_futures_dict[sequence_id]
+                else:
+                    # This command is running; update the timeout
+                    # and leave it in self.command_futures_dict.
+                    command_futures.setack(reply.timeout)
+                if (
+                    curr_tai - command_futures.command.timestamp
+                    > LATE_COMMAND_ACK_INTERVAL
+                ):
                     self.log.warning(
-                        f"ack of command {futures.command}={futures.command.encode()} "
-                        f"took {curr_tai - futures.command.timestamp:0.2f} seconds"
+                        f"ack of command {command_futures.command}={command_futures.command.encode()} "
+                        f"took {curr_tai - command_futures.command.timestamp:0.2f} seconds"
                     )
             case enums.ReplyId.CMD_SUCCEEDED:
-                futures.setdone()
+                command_futures.setdone()
             case enums.ReplyId.CMD_REJECTED:
-                futures.setnoack(reply.explanation)
+                command_futures.setnoack(reply.explanation)
                 self.log.error(
-                    f"Command {futures.command}={futures.command.encode()} rejected: {reply.explanation}"
+                    f"Command {command_futures.command}={command_futures.command.encode()} "
+                    f"rejected: {reply.explanation}"
                 )
             case enums.ReplyId.CMD_FAILED:
-                futures.setnoack(reply.explanation)
+                command_futures.setnoack(reply.explanation)
                 self.log.error(
-                    f"Command {futures.command}={futures.command.encode()} failed: {reply.explanation}"
+                    f"Command {command_futures.command}={command_futures.command.encode()} "
+                    f"failed: {reply.explanation}"
                 )
             case enums.ReplyId.CMD_SUPERSEDED:
-                self.log.info(f"Command {futures.command} superseded")
-                futures.setnoack("Superseded")
+                self.log.info(f"Command {command_futures.command} superseded")
+                command_futures.setnoack("Superseded")
             case _:
                 raise RuntimeError(f"Bug: unsupported reply code {reply_id}")
 
