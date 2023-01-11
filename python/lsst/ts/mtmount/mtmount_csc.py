@@ -1205,6 +1205,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     f"after a message delay of {start_tai - data.private_sndStamp:0.3f} seconds "
                     f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the command lock"
                 )
+                return
 
             track_command = commands.BothAxesTrackTarget(
                 azimuth=-data.azimuth,
