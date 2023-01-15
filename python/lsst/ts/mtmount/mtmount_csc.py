@@ -87,7 +87,7 @@ TELEMETRY_START_TIMEOUT = 30
 TIMEOUT_BUFFER = 5
 
 # Minimum tracking advance time (sec) allowed in trackTarget commands
-MIN_TRACKING_ADVANCE_TIME = 0.02
+MIN_TRACKING_ADVANCE_TIME = 0.05
 
 
 class SystemStateInfo:
