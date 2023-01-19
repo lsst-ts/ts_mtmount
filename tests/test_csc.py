@@ -1076,10 +1076,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             tai = utils.current_tai()
             azimuth_pvt = mock_azimuth.actuator.path.at(tai)
-            # TODO DM-37115: remove these two lines
-            # when the TMA azimuth has the correct sign.
-            azimuth_pvt.position = -azimuth_pvt.position
-            azimuth_pvt.velocity = -azimuth_pvt.velocity
             elevation_pvt = mock_elevation.actuator.path.at(tai)
             assert elevation_pvt.velocity == pytest.approx(0)
             assert azimuth_pvt.velocity == pytest.approx(0)
@@ -1143,20 +1139,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             tai = utils.current_tai()
             elevation_pvt = mock_elevation.actuator.path.at(tai)
             azimuth_pvt = mock_azimuth.actuator.path.at(tai)
-            # TODO DM-37115: remove these two lines
-            # when the TMA azimuth has the correct sign.
-            azimuth_pvt.position = -azimuth_pvt.position
-            azimuth_pvt.velocity = -azimuth_pvt.velocity
             assert tai >= mock_elevation.actuator.path[-1].tai
             assert azimuth_pvt.position == pytest.approx(target_azimuth)
             assert elevation_pvt.position == pytest.approx(target_elevation)
             assert azimuth_pvt.velocity == pytest.approx(0)
             assert elevation_pvt.velocity == pytest.approx(0)
 
-            # TODO DM-37115: swap reverse and forward
-            # when the TMA azimuth has the correct sign.
             await self.assert_next_sample(
-                topic=self.remote.evt_azimuthToppleBlock, reverse=True, forward=False
+                topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=True
             )
 
             # Check that the camera cable wrap is still following the rotator.
@@ -1167,11 +1157,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # while leaving the mock devices enabled.
             for (azimuth, az_ok), (elevation, el_ok) in itertools.product(
                 (
-                    # TODO DM-37115: remove the minus signs
-                    # when the TMA azimuth has the correct sign.
-                    (-(mock_azimuth.cmd_limits.min_position - 0.001), False),
+                    (mock_azimuth.cmd_limits.min_position - 0.001, False),
                     (0, True),
-                    (-(mock_azimuth.cmd_limits.max_position + 0.001), False),
+                    (mock_azimuth.cmd_limits.max_position + 0.001, False),
                 ),
                 (
                     (mock_elevation.cmd_limits.min_position - 0.001, False),
@@ -1264,9 +1252,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             assert not mock_elevation.tracking_enabled
 
             tai = utils.current_tai() + TRACK_ADVANCE_TIME
-            # TODO DM-37115: remove the minus sign
-            # when the TMA azimuth has the correct sign.
-            initial_azimuth = -mock_azimuth.actuator.path.at(tai).position
+            initial_azimuth = mock_azimuth.actuator.path.at(tai).position
             initial_elevation = mock_elevation.actuator.path.at(tai).position
 
             # Check that tracking is rejected if not enabled
@@ -1341,11 +1327,9 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 (elevation_velocity, el_vel_ok),
             ) in itertools.product(
                 (
-                    # TODO DM-37115: remove the minus signs
-                    # when the TMA azimuth has the correct sign.
-                    (-(mock_azimuth.cmd_limits.min_position - 0.001), False),
+                    (mock_azimuth.cmd_limits.min_position - 0.001, False),
                     (0, True),
-                    (-(mock_azimuth.cmd_limits.max_position + 0.001), False),
+                    (mock_azimuth.cmd_limits.max_position + 0.001, False),
                 ),
                 (
                     (mock_elevation.cmd_limits.min_position - 0.001, False),
@@ -1433,13 +1417,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 taiTime=tai,
             )
             await self.remote.cmd_trackTarget.set_start(**kwargs, timeout=STD_TIMEOUT)
-            # TODO DM-37115: remove the minus signs
-            # when the TMA azimuth has the correct sign.
             assert mock_azimuth.actuator.target.position == pytest.approx(
-                -current_azimuth
+                current_azimuth
             )
             assert mock_azimuth.actuator.target.velocity == pytest.approx(
-                -azimuth_velocity
+                azimuth_velocity
             )
             assert mock_azimuth.actuator.target.tai == pytest.approx(tai, abs=0.001)
             assert mock_elevation.actuator.target.position == pytest.approx(
@@ -1467,12 +1449,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             az_actual = azimuth_actuator.path.at(tel_az_data.timestamp)
             az_target = azimuth_actuator.target.at(tel_az_data.timestamp)
-            # TODO DM-37115: remove the minus signs
-            # when the TMA azimuth has the correct sign.
-            assert tel_az_data.demandPosition == pytest.approx(-az_target.position)
-            assert tel_az_data.demandVelocity == pytest.approx(-az_target.velocity)
-            assert tel_az_data.actualPosition == pytest.approx(-az_actual.position)
-            assert tel_az_data.actualVelocity == pytest.approx(-az_actual.velocity)
+            assert tel_az_data.demandPosition == pytest.approx(az_target.position)
+            assert tel_az_data.demandVelocity == pytest.approx(az_target.velocity)
+            assert tel_az_data.actualPosition == pytest.approx(az_actual.position)
+            assert tel_az_data.actualVelocity == pytest.approx(az_actual.velocity)
 
             previous_tai = tai
 

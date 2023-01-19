@@ -1176,9 +1176,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Handle the moveToTarget command."""
         self.assert_enabled()
         cmd_futures = await self.send_command(
-            # TODO DM-37115: remove the minus sign on azimuth
-            # once the TMA uses the correct sign for azimuth
-            commands.BothAxesMove(azimuth=-data.azimuth, elevation=data.elevation),
+            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
             do_lock=True,
         )
         timeout = cmd_futures.timeout + TIMEOUT_BUFFER
@@ -1208,18 +1206,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 return
 
             track_command = commands.BothAxesTrackTarget(
-                azimuth=-data.azimuth,
-                azimuth_velocity=-data.azimuthVelocity,
+                azimuth=data.azimuth,
+                azimuth_velocity=data.azimuthVelocity,
                 elevation=data.elevation,
                 elevation_velocity=data.elevationVelocity,
                 tai=data.taiTime,
             )
-            await self.send_command(
-                # TODO DM-37115: remove the minus signs on azimuth
-                # once the TMA uses the correct sign for azimuth
-                track_command,
-                do_lock=False,
-            )
+            await self.send_command(track_command, do_lock=False)
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
@@ -1284,12 +1277,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     radesys="",
                 )
         elif axis == System.AZIMUTH:
-            # TODO DM-37115: remove the minus sign
-            # when the TMA azimuth has the correct sign.
             await self.evt_azimuthMotionState.set_write(state=state)
             if state == AxisMotionState.MOVING_POINT_TO_POINT:
                 await self.evt_target.set_write(
-                    azimuth=-reply.position,
+                    azimuth=reply.position,
                     azimuthVelocity=0,
                     taiTime=utils.current_tai(),
                     trackId=0,
