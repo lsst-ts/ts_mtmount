@@ -742,44 +742,37 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # such failures. It's a bit skanky, but avoids a race condition
             # in checking the subsystem power state and using that
             # to decide whether to reset alarms.
-            for command, must_succeed in (
-                (commands.MainCabinetThermalResetAlarm(), False),
+            for command in (
+                commands.MainCabinetThermalResetAlarm(),
                 # Disabled for 2022-10 commissioning
-                # (commands.TopEndChillerResetAlarm(), False),
-                (commands.OilSupplySystemResetAlarm(), False),
-                (commands.MainAxesPowerSupplyResetAlarm(), False),
-                (commands.MirrorCoverLocksResetAlarm(), False),
-                (commands.MirrorCoversResetAlarm(), False),
-                (commands.CameraCableWrapResetAlarm(), False),
+                # commands.TopEndChillerResetAlarm(),
+                commands.OilSupplySystemResetAlarm(),
+                commands.MainAxesPowerSupplyResetAlarm(),
+                commands.MirrorCoverLocksResetAlarm(),
+                commands.MirrorCoversResetAlarm(),
+                commands.CameraCableWrapResetAlarm(),
                 # Disabled for 2022-10 commissioning
-                # (commands.TopEndChillerPower(on=True), True),
-                # (commands.TopEndChillerTrackAmbient(
-                #     on=True, temperature=0), True),
-                (commands.MainAxesPowerSupplyPower(on=True), True),
+                # commands.TopEndChillerPower(on=True),
+                # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
+                commands.MainAxesPowerSupplyPower(on=True),
                 # Disabled for 2022-10 commissioning
-                (commands.OilSupplySystemSetMode(auto=True), False),
-                (commands.OilSupplySystemPower(on=True), True),
+                commands.OilSupplySystemSetMode(auto=True),
+                commands.OilSupplySystemPower(on=True),
                 # Cannot successfully reset the axes alarms
                 # until the main power supply is on.
                 # Sometimes a second reset is needed for the main axes
                 # (a known bug in the TMA as of 2022-11-03).
-                (commands.BothAxesResetAlarm(), False),
-                (commands.BothAxesResetAlarm(), False),
-                (commands.BothAxesPower(on=True), True),
-                (commands.CameraCableWrapPower(on=True), True),
+                commands.BothAxesResetAlarm(),
+                commands.BothAxesResetAlarm(),
+                commands.BothAxesPower(on=True),
+                commands.CameraCableWrapPower(on=True),
             ):
                 try:
                     await self.send_command(command, do_lock=True)
                 except Exception as e:
-                    if must_succeed:
-                        raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
-                    else:
-                        self.log.info(
-                            f"Reset command {command} failed; this is normal "
-                            "if the subsystem is already on"
-                        )
+                    raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
         except Exception as e:
-            self.log.error(f"Failed to power on one or more devices: {e!r}")
+            self.log.error(f"Failed to enable on one or more devices: {e!r}")
             raise
         self.camera_cable_wrap_follow_start_task = asyncio.create_task(
             self.start_camera_cable_wrap_following()
