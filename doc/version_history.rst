@@ -33,6 +33,7 @@ v0.24.0
 * `TMATelemetryConfigParser`: write the data needed for RAW_TELEMETRY_MAP.
 * `MTMountCommander`: show most telemetry (not ``encoder`` or ``oSS/oilSupplySystem``).
 * test_csc: test_tracking was not working as designed, and was ignoring some errors.
+* ``conda/meta.yaml``: remove redundant ``entry_points`` section.
 
 Requires:
 
