@@ -39,6 +39,7 @@ from lsst.ts.idl.enums.MTMount import (
 
 from .. import commands, constants, enums
 from ..exceptions import CommandSupersededException
+from ..telemetry_map import TelemetryTopicId
 
 # from . import device
 from .axis_device import AxisDevice
@@ -67,7 +68,7 @@ INITIAL_POSITION = {
 # Set of commands that are allowed when not the commander
 ALWAYS_ALLOWED_COMMANDS = {
     enums.CommandCode.ASK_FOR_COMMAND,
-    enums.CommandCode.ASK_FOR_SET_OF_SETTINGS,
+    enums.CommandCode.GET_AVAILABLE_SETTING_SETS,
     enums.CommandCode.GET_ACTUAL_SETTINGS,
     enums.CommandCode.STATE_INFO,
 }
@@ -243,6 +244,8 @@ class Controller:
         self.axis_motion_state_dict = {}
         # Dict of system_id: motion state for deployable devices
         self.deployable_motion_state_dict = {}
+        # Dict of system_id: homed
+        self.homed_dict = {}
         # Dict of system_id: in_position
         self.in_position_dict = {}
         # Dict of system_id: motion controller state
@@ -408,6 +411,11 @@ class Controller:
             System.MIRROR_COVERS: None,
         }
 
+        self.homed_dict = {
+            System.AZIMUTH: None,
+            System.ELEVATION: None,
+        }
+
         self.in_position_dict = {
             System.AZIMUTH: None,
             System.ELEVATION: None,
@@ -439,7 +447,8 @@ class Controller:
         In addition to telemetry, put the following events (if changed):
 
         * AXIS_MOTION_STATE
-        * IN_POSITION, if changed
+        * HOMED
+        * IN_POSITION
 
         Warning: this minimal and simplistic.
 
@@ -452,21 +461,24 @@ class Controller:
             This should be nearly the current time.
         """
         topic_id = {
-            System.AZIMUTH: enums.TelemetryTopicId.AZIMUTH,
-            System.ELEVATION: enums.TelemetryTopicId.ELEVATION,
-            System.CAMERA_CABLE_WRAP: enums.TelemetryTopicId.CAMERA_CABLE_WRAP,
+            System.AZIMUTH: TelemetryTopicId.azimuth,
+            System.ELEVATION: TelemetryTopicId.elevation,
+            System.CAMERA_CABLE_WRAP: TelemetryTopicId.cameraCableWrap,
         }[system_id]
         device = self.device_dict[system_id]
         actuator = device.actuator
         target = actuator.target.at(tai)
         actual = actuator.path.at(tai)
 
-        if system_id == System.CAMERA_CABLE_WRAP:
+        if topic_id == TelemetryTopicId.cameraCableWrap:
             torque_percent = 100 * actual.acceleration / actuator.max_acceleration
             data_dict = dict(
                 topicID=topic_id,
                 actualPosition=actual.position,
                 actualVelocity=actual.velocity,
+                actualAcceleration=actual.acceleration,
+                demandPosition=target.position,
+                demandVelocity=target.velocity,
                 actualTorquePercentage1=torque_percent,
                 actualTorquePercentage2=torque_percent,
                 timestamp=tai,
@@ -504,6 +516,23 @@ class Controller:
                     axis=axis,
                     state=motion_state,
                     position=device.point_to_point_target,
+                )
+            )
+
+        if (
+            system_id != System.CAMERA_CABLE_WRAP
+            and device.homed != self.homed_dict[system_id]
+        ):
+            self.homed_dict[system_id] = device.homed
+
+            if not self.command_server.connected:
+                return
+
+            await self.write_reply(
+                make_reply_dict(
+                    id=enums.ReplyId.HOMED,
+                    axis=axis,
+                    homed=device.homed,
                 )
             )
 
@@ -710,8 +739,7 @@ class Controller:
         if not self.command_server.connected:
             raise RuntimeError("Command client not connected")
         reply_str = json.dumps(reply_dict)
-        self.command_server.writer.write(reply_str.encode())
-        self.command_server.writer.write(constants.LINE_TERMINATOR)
+        self.command_server.writer.write(reply_str.encode() + constants.LINE_TERMINATOR)
         await self.command_server.writer.drain()
 
     async def write_telemetry(self, data_dict):

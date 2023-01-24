@@ -53,4 +53,4 @@ Contributing
 ============
 
 ``lsst.ts.mtmount`` is developed at https://github.com/lsst-ts/ts_mtmount.
-Bug reports and feature requests use `Jira with labels=ts_mtmount <https://jira.lsstcorp.org/issues/?jql=project%20%3D%20DM%20AND%20labels%20%20%3D%20ts_mtmount>`_.
+Bug reports and feature requests use `Jira with labels=ts_mtmount <https://jira.lsstcorp.org/issues/?jql=project%3DDM%20AND%20labels%3Dts_mtmount>`_.
