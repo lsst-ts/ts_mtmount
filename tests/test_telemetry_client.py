@@ -184,13 +184,6 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                         for i in range(fieldlen):
                             tma_data[f"{fieldname}{i+1}"] = values[i]
 
-                # TODO DM-37115: remove this block
-                # when the TMA azimuth has the correct sign.
-                if sal_topic_name == "azimuth":
-                    for field, value in tma_data.items():
-                        if field in {"topicID", "timestamp"}:
-                            continue
-                        tma_data[field] = -value
                 await self.publish_data(tma_data)
                 await self.assert_next_telemetry(topic, desired_sal_data)
 

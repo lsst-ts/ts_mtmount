@@ -978,9 +978,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.power_on
         assert not device.alarm_on
 
-        # Cannot reset alarms once the power is on (alas)
-        with pytest.raises(RuntimeError):
-            await self.run_command(reset_alarm_command)
+        # Check that we can reset alarms when the device is on.
+        await self.run_command(reset_alarm_command)
         assert device.power_on
         assert not device.alarm_on
 

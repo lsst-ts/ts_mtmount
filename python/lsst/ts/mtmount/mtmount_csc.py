@@ -87,7 +87,7 @@ TELEMETRY_START_TIMEOUT = 30
 TIMEOUT_BUFFER = 5
 
 # Minimum tracking advance time (sec) allowed in trackTarget commands
-MIN_TRACKING_ADVANCE_TIME = 0.02
+MIN_TRACKING_ADVANCE_TIME = 0.05
 
 
 class SystemStateInfo:
@@ -742,44 +742,37 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # such failures. It's a bit skanky, but avoids a race condition
             # in checking the subsystem power state and using that
             # to decide whether to reset alarms.
-            for command, must_succeed in (
-                (commands.MainCabinetThermalResetAlarm(), False),
+            for command in (
+                commands.MainCabinetThermalResetAlarm(),
                 # Disabled for 2022-10 commissioning
-                # (commands.TopEndChillerResetAlarm(), False),
-                (commands.OilSupplySystemResetAlarm(), False),
-                (commands.MainAxesPowerSupplyResetAlarm(), False),
-                (commands.MirrorCoverLocksResetAlarm(), False),
-                (commands.MirrorCoversResetAlarm(), False),
-                (commands.CameraCableWrapResetAlarm(), False),
+                # commands.TopEndChillerResetAlarm(),
+                commands.OilSupplySystemResetAlarm(),
+                commands.MainAxesPowerSupplyResetAlarm(),
+                commands.MirrorCoverLocksResetAlarm(),
+                commands.MirrorCoversResetAlarm(),
+                commands.CameraCableWrapResetAlarm(),
                 # Disabled for 2022-10 commissioning
-                # (commands.TopEndChillerPower(on=True), True),
-                # (commands.TopEndChillerTrackAmbient(
-                #     on=True, temperature=0), True),
-                (commands.MainAxesPowerSupplyPower(on=True), True),
+                # commands.TopEndChillerPower(on=True),
+                # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
+                commands.MainAxesPowerSupplyPower(on=True),
                 # Disabled for 2022-10 commissioning
-                (commands.OilSupplySystemSetMode(auto=True), False),
-                (commands.OilSupplySystemPower(on=True), True),
+                commands.OilSupplySystemSetMode(auto=True),
+                commands.OilSupplySystemPower(on=True),
                 # Cannot successfully reset the axes alarms
                 # until the main power supply is on.
                 # Sometimes a second reset is needed for the main axes
                 # (a known bug in the TMA as of 2022-11-03).
-                (commands.BothAxesResetAlarm(), False),
-                (commands.BothAxesResetAlarm(), False),
-                (commands.BothAxesPower(on=True), True),
-                (commands.CameraCableWrapPower(on=True), True),
+                commands.BothAxesResetAlarm(),
+                commands.BothAxesResetAlarm(),
+                commands.BothAxesPower(on=True),
+                commands.CameraCableWrapPower(on=True),
             ):
                 try:
                     await self.send_command(command, do_lock=True)
                 except Exception as e:
-                    if must_succeed:
-                        raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
-                    else:
-                        self.log.info(
-                            f"Reset command {command} failed; this is normal "
-                            "if the subsystem is already on"
-                        )
+                    raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
         except Exception as e:
-            self.log.error(f"Failed to power on one or more devices: {e!r}")
+            self.log.error(f"Failed to enable on one or more devices: {e!r}")
             raise
         self.camera_cable_wrap_follow_start_task = asyncio.create_task(
             self.start_camera_cable_wrap_following()
@@ -1176,9 +1169,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Handle the moveToTarget command."""
         self.assert_enabled()
         cmd_futures = await self.send_command(
-            # TODO DM-37115: remove the minus sign on azimuth
-            # once the TMA uses the correct sign for azimuth
-            commands.BothAxesMove(azimuth=-data.azimuth, elevation=data.elevation),
+            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
             do_lock=True,
         )
         timeout = cmd_futures.timeout + TIMEOUT_BUFFER
@@ -1205,20 +1196,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     f"after a message delay of {start_tai - data.private_sndStamp:0.3f} seconds "
                     f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the command lock"
                 )
+                return
 
             track_command = commands.BothAxesTrackTarget(
-                azimuth=-data.azimuth,
-                azimuth_velocity=-data.azimuthVelocity,
+                azimuth=data.azimuth,
+                azimuth_velocity=data.azimuthVelocity,
                 elevation=data.elevation,
                 elevation_velocity=data.elevationVelocity,
                 tai=data.taiTime,
             )
-            await self.send_command(
-                # TODO DM-37115: remove the minus signs on azimuth
-                # once the TMA uses the correct sign for azimuth
-                track_command,
-                do_lock=False,
-            )
+            await self.send_command(track_command, do_lock=False)
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
@@ -1283,12 +1270,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     radesys="",
                 )
         elif axis == System.AZIMUTH:
-            # TODO DM-37115: remove the minus sign
-            # when the TMA azimuth has the correct sign.
             await self.evt_azimuthMotionState.set_write(state=state)
             if state == AxisMotionState.MOVING_POINT_TO_POINT:
                 await self.evt_target.set_write(
-                    azimuth=-reply.position,
+                    azimuth=reply.position,
                     azimuthVelocity=0,
                     taiTime=utils.current_tai(),
                     trackId=0,

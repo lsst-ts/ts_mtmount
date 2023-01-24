@@ -327,18 +327,6 @@ class TelemetryClient:
             self.log.exception("read_loop failed; giving up.")
             asyncio.ensure_future(self.close())
 
-    # TODO DM-37115: remove this when the TMA azimuth has the correct sign.
-    def _preprocess_azimuth(self, llv_data):
-        """Invert azimuth data"""
-        for field in (
-            "actualPosition",
-            "demandPosition",
-            "actualVelocity",
-            "demandVelocity",
-            "actualTorque",
-        ):
-            llv_data[field] = -llv_data[field]
-
 
 def run_mtmount_telemetry_client():
     """Run MTMount telemetry client."""
