@@ -6,6 +6,22 @@
 Version History
 ###############
 
+v0.24.1
+-------
+
+* `MTMountCsc`:
+
+    * Reduce latency in camera cable wrap following the rotator.
+    * Improve logging in camera cable wrap following code.
+
+Requires:
+
+* ts_salobj 7.1
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 14
+
 v0.24.0
 -------
 
