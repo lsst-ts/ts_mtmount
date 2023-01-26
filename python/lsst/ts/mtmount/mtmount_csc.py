@@ -1034,14 +1034,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             "Rotator data not available; stopping the camera cable wrap "
                             "and pausing camera cable wrap following until rotator data is available"
                         )
-                        print(
-                            "pausing camera cable wrap following: stopping camera cable wrap"
-                        )
                         await self.send_command(
                             commands.CameraCableWrapStop(), do_lock=False
                         )
                     else:
-                        print("compute_camera_cable_wrap_demand timed out while paused")
+                        self.log.debug(
+                            "Rotator data still not available; "
+                            "camera cable wrap following remains paused"
+                        )
                     continue
 
                 if paused:
@@ -1066,20 +1066,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         self.send_command(command, do_lock=False), timeout=1
                     )
                 except asyncio.TimeoutError:
-                    print("*** CameraCableWrapTrackTarget timed out ***")
-                    raise
+                    raise salobj.ExpectedError("CameraCableWrapTrackTarget timed out")
 
                 await self.evt_cameraCableWrapTarget.set_write(
                     position=position, velocity=velocity, taiTime=tai
                 )
                 if self.camera_cable_wrap_following_enabled:
                     await asyncio.sleep(self.config.camera_cable_wrap_interval)
-            print(
-                "_camera_cable_wrap_follow_loop while loop ends: "
-                f"{self.camera_cable_wrap_following_enabled=}"
-            )
+            self.log.info("Camera cable wrap follow loop ends")
         except asyncio.CancelledError:
-            self.log.info("Camera cable wrap following ends")
+            self.log.info("Camera cable wrap following ends (loop cancelled)")
         except salobj.ExpectedError as e:
             self.log.error(f"Camera cable wrap following failed: {e!r}")
         except Exception:
