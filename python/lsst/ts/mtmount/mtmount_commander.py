@@ -23,6 +23,7 @@ __all__ = ["MTMountCommander", "command_mtmount"]
 
 import asyncio
 import dataclasses
+import inspect
 
 from lsst.ts import salobj, simactuators, utils
 
@@ -187,8 +188,10 @@ class MTMountCommander(salobj.CscCommander):
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
         print("Ramp done")
 
-    def telemetry_callback(self, data, name, digits=1):
-        super().telemetry_callback(data=data, name=name, digits=digits)
+    async def telemetry_callback(self, data, name, digits=1):
+        result = super().telemetry_callback(data=data, name=name, digits=digits)
+        if inspect.isawaitable(result):
+            await result
 
 
 def command_mtmount():
