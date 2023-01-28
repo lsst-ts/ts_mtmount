@@ -60,8 +60,8 @@ class ValidationTestCase(unittest.TestCase):
             #  ("host", "invalid hostname"),  # jsonschema 3.0.1 doesn't raise
             ("ack_timeout", "1"),  # wrong type
             ("ack_timeout", 0),  # not positive
-            ("ack_timeout_track_timeout", "1"),  # wrong type
-            ("ack_timeout_track_timeout", 0),  # not positive
+            ("ack_timeout_track_target", "1"),  # wrong type
+            ("ack_timeout_track_target", 0),  # not positive
             ("connection_timeout", "1"),  # wrong type
             ("connection_timeout", 0),  # not positive
             ("host", 5),  # wrong type
