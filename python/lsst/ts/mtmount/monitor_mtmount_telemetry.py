@@ -20,33 +20,89 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import argparse
 import asyncio
+import functools
 
 from lsst.ts import salobj
 
-num_messages = 0
+num_messages_by_topic_name = dict()
 
 
-def topic_callback(data):
-    global num_messages
+def topic_callback(data, topic_name, skip):
+    """Handle data for a telemetry topic.
+
+    Intended to be used as a salobj.topics.ReadTopic callback function
+    (specifying topic_name and skip using functools.partial).
+
+    Parameters
+    ----------
+    topic_name : `str`
+        Telemetry topic name, e.g. "azimuth"
+    skip : `int`
+        How many messages to skip.
+    """
+    global num_messages_by_topic_name
+    num_messages = num_messages_by_topic_name.get(topic_name, 0)
     num_messages += 1
-    if num_messages % 10 == 0:
-        print(f"Read {num_messages} messages")
+    num_messages_by_topic_name[topic_name] = num_messages
+    if num_messages % (skip + 1) == 0:
+        dt = data.private_sndStamp - data.timestamp
+        print(f"Read {num_messages} {topic_name} messages; {dt=:0.3f} sec; {data=}")
 
 
-async def monitor_tel_azimuth() -> None:
-    """A trivial method to moninor azimuth telemetry for 600s seconds."""
+async def _monitor_mtmount_telemetry(topic_names, duration, skip):
+    """Monitor specified MTMount Telemetry topics.
+
+    Parameters
+    ----------
+    topic_names : `list` [`str`]
+        Telemetry topic names, e.g. "azimuth"
+    duration : `float`
+        How long to monitor?
+    skip : `int`
+        How many messages to skip (for each topic).
+    """
+    print(f"monitor topics {topic_names} for {duration} seconds")
+
     async with salobj.Domain() as domain, salobj.Remote(
-        domain=domain,
-        name="MTMount",
-        include=["azimuth"],
+        domain=domain, name="MTMount", include=topic_names
     ) as remote:
-        print("monitor_mtmount_telemetry monitoring the azimuth topic")
-        remote.tel_azimuth.callback = topic_callback
-        await asyncio.sleep(10 * 60)
+        for topic_name in topic_names:
+            topic = getattr(remote, f"tel_{topic_name}")
+            topic.callback = functools.partial(
+                topic_callback, topic_name=topic_name, skip=skip
+            )
+        await asyncio.sleep(duration)
 
 
 def monitor_mtmount_telemetry():
-    """Run Monitor MTMount Telemetry."""
-    asyncio.run(monitor_tel_azimuth())
-    print("monitor_mtmount_telemetry done")
+    """Monitor a specified set of topics for a specified duration."""
+    parser = argparse.ArgumentParser("Monitor a few telemetry topics")
+    parser.add_argument(
+        "topics",
+        nargs="*",
+        default=["azimuth", "cameraCableWrap"],
+        help="Which topics to monitor, e.g. 'azimuth'",
+    )
+    parser.add_argument(
+        "-d",
+        "--duration",
+        type=float,
+        help="How long to monitor (seconds)?",
+        default=10,
+    )
+    parser.add_argument(
+        "-s",
+        "--skip",
+        type=int,
+        help="How many messages to skip? Must be >= 0",
+        default=9,
+    )
+    args = parser.parse_args()
+    assert args.skip >= 0
+    asyncio.run(
+        _monitor_mtmount_telemetry(
+            topic_names=args.topics, duration=args.duration, skip=args.skip
+        )
+    )
