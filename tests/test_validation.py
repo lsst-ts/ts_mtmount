@@ -37,8 +37,8 @@ class ValidationTestCase(unittest.TestCase):
             telemetry_host="ccw-mgmt.cp.lsst.org",
             connection_timeout=10,
             ack_timeout=10,
+            ack_timeout_track_target=1,
             camera_cable_wrap_advance_time=0.02,
-            camera_cable_wrap_interval=0.1,
             max_rotator_position_error=0.1,
         )
         self.nondefault = dict(
@@ -46,8 +46,8 @@ class ValidationTestCase(unittest.TestCase):
             telemetry_host="5.6.7.8",
             connection_timeout=3.4,
             ack_timeout=4.5,
+            ack_timeout_track_target=0.5,
             camera_cable_wrap_advance_time=0.13,
-            camera_cable_wrap_interval=0.4,
             max_rotator_position_error=1.5,
         )
 
@@ -60,7 +60,8 @@ class ValidationTestCase(unittest.TestCase):
             #  ("host", "invalid hostname"),  # jsonschema 3.0.1 doesn't raise
             ("ack_timeout", "1"),  # wrong type
             ("ack_timeout", 0),  # not positive
-            ("camera_cable_wrap_interval", -1),  # < 0
+            ("ack_timeout_track_timeout", "1"),  # wrong type
+            ("ack_timeout_track_timeout", 0),  # not positive
             ("connection_timeout", "1"),  # wrong type
             ("connection_timeout", 0),  # not positive
             ("host", 5),  # wrong type
