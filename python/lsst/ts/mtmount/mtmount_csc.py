@@ -242,6 +242,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
         self.command_port = command_port
         self.telemetry_port = telemetry_port
+        self.sequence_id_generator = utils.index_generator(
+            imin=1, imax=commands.MAX_SEQUENCE_ID
+        )
 
         self.run_mock_controller = run_mock_controller
 
@@ -855,6 +858,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         -------
         command_futures : `CommandFutures`
             Futures that monitor the command.
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If the timeout is exceeded.
+        salobj.ExpectedError
+            If not connected to the low-level controller.
+        RuntimeError
+            If the sequence_id is already in use.
+            This indicates an internal error.
         """
         if do_lock:
             async with self.command_lock:
@@ -868,7 +881,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         Parameters
         ----------
         command : `Command`
-            Command to send.
+            Command to send. This method sets the ``timestamp`` and
+            ``sequence_id`` fields.
         timeout : `float` | `None`
             Timeout for initial ack.
             If None then use self.config.ack_timeout.
@@ -877,6 +891,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         -------
         command_futures : `CommandFutures`
             Futures that monitor the command.
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If the timeout is exceeded.
+        salobj.ExpectedError
+            If not connected to the low-level controller.
+        RuntimeError
+            If the sequence_id is already in use.
+            This indicates an internal error.
         """
         if not self.connected:
             if self.should_be_connected:
@@ -885,13 +909,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     report="Connection lost to low-level controller (noticed in _basic_send_command)",
                 )
             raise salobj.ExpectedError("Not connected to the low-level controller.")
+
+        command.timestamp = utils.current_tai()
+        command.sequence_id = next(self.sequence_id_generator)
         if command.sequence_id in self.command_futures_dict:
             raise RuntimeError(
                 f"Bug! Duplicate sequence_id {command.sequence_id} in command_futures_dict"
             )
         command_futures = CommandFutures(command=command)
-        # Set the timestamp field to the time at which the command was sent.
-        command.timestamp = utils.current_tai()
         self.command_futures_dict[command.sequence_id] = command_futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
@@ -927,6 +952,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands can run simultaneously, so specify True when practical.
             Specify False for stop commands and the camera cable wrap
             tracking command (so rotator following is not blocked).
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If the timeout is exceeded.
+        salobj.ExpectedError
+            If not connected to the low-level controller.
+        RuntimeError
+            If the sequence_id is already in use.
+            This indicates an internal error.
         """
         future = None
         try:
