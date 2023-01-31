@@ -73,6 +73,9 @@ MOCK_CTRL_START_TIMEOUT = 30
 # on the velocity and acceleration).
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
+# Max timeout (sec) for commands that are expected to reply quickly.
+SHORT_COMMAND_TIMEOUT = 0.25
+
 # Maximum time (sec) to for the startTracking command.
 START_TRACKING_TIMEOUT = 7
 
@@ -801,7 +804,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands.CameraCableWrapPower(on=False),
         ]:
             try:
-                await self.send_command(command, do_lock=True)
+                await self.retry_command(command)
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
@@ -832,7 +835,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             await self.disconnect()
 
-    async def send_command(self, command, do_lock, timeout=None):
+    async def send_command(self, command, *, do_lock, timeout=None):
         """Send a command to the operation manager and wait for it to finish.
 
         Parameters
@@ -870,7 +873,37 @@ class MTMountCsc(salobj.ConfigurableCsc):
         else:
             return await self._basic_send_command(command=command, timeout=timeout)
 
-    async def _basic_send_command(self, command, timeout=None):
+    async def retry_command(
+        self, command, *, max_tries=3, timeout=SHORT_COMMAND_TIMEOUT
+    ):
+        """Send a low-level command, retrying up to max_tries times.
+
+        Parameters
+        ----------
+        command : `commands.Command`
+            Class of command to send
+        max_tries : `int`
+            Maximum number of times to issue the command.
+        timeout : `float`
+            Timeout (sec) for the command (applied to each retry).
+            Keep it short to avoid blocking the command lock for a long time.
+        """
+        async with self.command_lock:
+            try_num = 0
+            while True:
+                try_num += 1
+                try:
+                    await self.send_command(command, do_lock=False, timeout=timeout)
+                    return
+                except Exception as e:
+                    if try_num < max_tries:
+                        self.log.warning(
+                            f"command {command} try {try_num} of {max_tries} failed; try again: {e!r}"
+                        )
+                    else:
+                        raise RuntimeError(f"command {command} failed: {e!r}")
+
+    async def _basic_send_command(self, command, *, timeout=None):
         """Implementation of send_command. Ignores the command lock.
 
         Parameters
@@ -1111,13 +1144,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following ends")
-        except salobj.ExpectedError as e:
-            self.log.error(f"Camera cable wrap following failed: {e!r}")
         except Exception as e:
-            self.log.exception(f"Camera cable wrap following failed: {e!r}")
-        finally:
-            await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
+            if isinstance(e, salobj.ExpectedError):
+                self.log.error(f"Camera cable wrap following failed: {e!r}")
+            else:
+                self.log.exception(f"Camera cable wrap following failed: {e!r}")
+            await self.retry_command(commands.CameraCableWrapStop())
             await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
+            raise
 
     async def clear_target(self):
         """Clear the target event."""
@@ -1769,6 +1803,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Stop the camera cable wrap from following the rotator."""
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
+        await self.retry_command(commands.CameraCableWrapStop())
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
 
 
