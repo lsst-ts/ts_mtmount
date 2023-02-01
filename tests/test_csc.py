@@ -237,6 +237,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     device.power_on = False
                     device.alarm_on = True
                     await self.assert_next_summary_state(salobj.State.FAULT)
+                    assert self.csc.connected
 
     async def test_bin_script(self):
         await self.check_bin_script(

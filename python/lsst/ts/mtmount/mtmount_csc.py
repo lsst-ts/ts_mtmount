@@ -277,9 +277,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = utils.make_done_future()
 
-        # Task to track enabling and disabling
-        self.enable_task = utils.make_done_future()
-        self.disable_task = utils.make_done_future()
+        # Tasks to track enabling and disabling devices
+        self.enable_devices_task = utils.make_done_future()
+        self.disable_devices_task = utils.make_done_future()
 
         self.mock_controller_started_task = asyncio.Future()
         self.monitor_telemetry_client_task = utils.make_done_future()
@@ -412,6 +412,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # but the simulation_mode attribute is usually set by super().start().
         self.evt_simulationMode.set(mode=simulation_mode)
 
+    async def begin_disable(self, data):
+        await super().begin_disable(data)
+        self.disable_devices_task.cancel()
+        self.disable_devices_task = asyncio.create_task(self.disable_devices())
+        await self.disable_devices_task
+
     async def begin_enable(self, data):
         """Take control of the mount and initialize devices.
 
@@ -421,8 +427,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         If initializing fails, first try to disable the axis controllers,
         then raise an exception in order to leave the state as DISABLED.
         """
-        self.disable_task.cancel()
-        self.enable_task.cancel()
+        self.disable_devices_task.cancel()
+        self.enable_devices_task.cancel()
         await super().begin_enable(data)
         try:
             self.log.info("Ask for permission to command the mount.")
@@ -439,26 +445,26 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 f"The CSC was not allowed to command the mount: {e!r}"
             )
 
-        self.enable_task = asyncio.create_task(self.enable_devices())
+        self.enable_devices_task = asyncio.create_task(self.enable_devices())
         try:
-            await self.enable_task
+            await self.enable_devices_task
         except Exception:
             self.log.warning(
                 "Could not enable devices; disabling devices and giving up control."
             )
-            self.disable_task = asyncio.create_task(self.disable_devices())
-            await self.disable_task
+            self.disable_devices_task = asyncio.create_task(self.disable_devices())
+            await self.disable_devices_task
             raise
 
-    async def begin_disable(self, data):
-        """Disable the axis controllers and yield control.
+    async def begin_start(self, data):
+        await super().begin_start(data)
+        self.connect_task.cancel()
+        self.connect_task = asyncio.create_task(self.connect())
+        await self.connect_task
 
-        Leave the top end chiller and oils supply system running.
-        """
-        await super().begin_disable(data)
-        self.disable_task.cancel()
-        self.disable_task = asyncio.create_task(self.disable_devices())
-        await self.disable_task
+    async def end_standby(self, data):
+        await super().begin_standby(data)
+        await self.disconnect()
 
     @property
     def connected(self):
@@ -482,8 +488,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await super().close_tasks()
 
         self.connect_task.cancel()
-        self.enable_task.cancel()
-        self.disable_task.cancel()
+        self.enable_devices_task.cancel()
+        self.disable_devices_task.cancel()
         self.monitor_telemetry_client_task.cancel()
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
@@ -742,7 +748,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         Call this when going to ENABLED state.
         """
         self.log.info("Enable devices")
-        self.disable_task.cancel()
+        self.disable_devices_task.cancel()
         try:
             # Reset commands will fail if the subsystem is already on.
             # Also they will claim to succeed if the subsystem is off
@@ -790,14 +796,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.camera_cable_wrap_follow_start_task
 
     async def disable_devices(self):
-        """Disable the axis controllers and yield control.
+        """Stop and turn off azimuth, elevation, and camera cable wrap
+        controllers, then yield control.
 
         Leave the top end chiller and oils supply system running.
 
-        Call this when going to DISABLED state.
+        Notes
+        -----
+        Try to disable everything, even if one or more commands fails.
+
+        The TMA manages the azimuth cable wrap automatically,
+        so this code does not explicitly stop it or power it off.
         """
         self.log.info("Disable devices")
-        self.enable_task.cancel()
+        self.enable_devices_task.cancel()
         await self.stop_camera_cable_wrap_following()
         if not self.connected:
             return
@@ -824,21 +836,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.send_command(
                 commands.AskForCommand(commander=enums.Source.NONE), do_lock=False
             )
-            self.llv_heartbeat_loop_task.cancel()
-            self.has_control = False
         except Exception as e:
             self.log.warning(
-                f"The CSC was not able to give up command of the mount: {e!r}"
+                "AskForCommand(commander=None) failed, but will still give up command "
+                f"by stopping the low-level heartbeat loop: {e!r}"
             )
+        finally:
+            self.llv_heartbeat_loop_task.cancel()
+            self.has_control = False
 
     async def handle_summary_state(self):
-        if self.disabled_or_enabled:
-            if not self.connected:
-                self.connect_task.cancel()
-                self.connect_task = asyncio.create_task(self.connect())
-                await self.connect_task
-        else:
-            await self.disconnect()
+        if self.summary_state == salobj.State.FAULT:
+            await self.disable_devices()
 
     async def send_command(self, command, *, do_lock, timeout=None):
         """Send a command to the operation manager and wait for it to finish.
@@ -1716,7 +1725,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
-                return
+                break
             except Exception as e:
                 if self.should_be_connected:
                     if self.connected:
