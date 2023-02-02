@@ -21,8 +21,8 @@
 
 __all__ = [
     "get_random_value",
-    "make_random_message",
-    "make_random_message_with_defaults",
+    "make_random_command",
+    "make_random_command_with_defaults",
 ]
 
 import datetime
@@ -81,12 +81,10 @@ def get_random_value(finfo):
     elif isinstance(finfo, field_info.StrFieldInfo):
         nchar = random.randint(1, 100)
         return "".join(random.sample(string.printable, nchar))
-    elif isinstance(finfo, field_info.TimestampFieldInfo):
-        return random.uniform(1000000000, 2000000000)
     raise ValueError(f"Unrecognized field type {finfo!r}")
 
 
-def make_random_message(message_type):
+def make_random_command(command_type):
     """Given a Message class, construct a message with random data
     for all fields.
 
@@ -94,35 +92,35 @@ def make_random_message(message_type):
 
     Parameters
     ----------
-    message_type : `BaseMessage`
+    command_type : `BaseCommand`
         Message type
 
     Returns
     -------
-    message : ``message_type``
+    message : ``command_type``
         Message constructed with random data.
     """
-    kwargs = {finfo.name: get_random_value(finfo) for finfo in message_type.field_infos}
-    return message_type(**kwargs)
+    kwargs = {finfo.name: get_random_value(finfo) for finfo in command_type.field_infos}
+    return command_type(**kwargs)
 
 
-def make_random_message_with_defaults(message_type):
+def make_random_command_with_defaults(command_type):
     """Given a Message class, construct a message with default values for
     fields that have them, and random values for fields that do not.
 
     Parameters
     ----------
-    message_type : `BaseMessage`
+    command_type : `BaseCommand`
         Message type
 
     Returns
     -------
-    message : ``message_type``
+    message : ``command_type``
         Message constructed with random data.
     """
     kwargs = {
         finfo.name: get_random_value(finfo)
-        for finfo in message_type.field_infos
+        for finfo in command_type.field_infos
         if finfo.default is None
     }
-    return message_type(**kwargs)
+    return command_type(**kwargs)

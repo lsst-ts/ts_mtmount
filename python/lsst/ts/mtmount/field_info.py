@@ -27,15 +27,12 @@ __all__ = [
     "FloatFieldInfo",
     "IntFieldInfo",
     "StrFieldInfo",
-    "TimestampFieldInfo",
     "CommandCodeFieldInfo",
     "SourceFieldInfo",
 ]
 
 import abc
 import enum
-
-from lsst.ts import utils
 
 from . import enums
 
@@ -276,21 +273,6 @@ class StrFieldInfo(BaseFieldInfo):
 
 
 # Convenience versions of the fields above
-
-
-class TimestampFieldInfo(FloatFieldInfo):
-    """Timestamp field (TAI, unix seconds)."""
-
-    def __init__(self):
-        super().__init__(
-            name="timestamp",
-            doc="Time at which the message was sent.",
-            default=None,
-        )
-
-    @property
-    def default(self):
-        return utils.current_tai()
 
 
 class CommandCodeFieldInfo(FixedEnumFieldInfo):
