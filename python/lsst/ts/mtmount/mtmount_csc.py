@@ -50,6 +50,9 @@ LLV_HEARTBEAT_INTERVAL = 1
 # Log level for commands and command replies.
 LOG_LEVEL_COMMANDS = (logging.DEBUG + logging.INFO) // 2
 
+# Max sequence_id for low-level commands.
+MAX_SEQUENCE_ID = (1 << 31) - 1
+
 # Maximum time (sec) to fully deploy or retract the mirror covers,
 # including dealing with the mirror cover locks.
 # 60 is the maximum allowed by our requirements,
@@ -245,9 +248,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
         self.command_port = command_port
         self.telemetry_port = telemetry_port
-        self.sequence_id_generator = utils.index_generator(
-            imin=1, imax=commands.MAX_SEQUENCE_ID
-        )
+        self.sequence_id_generator = utils.index_generator(imin=1, imax=MAX_SEQUENCE_ID)
 
         self.run_mock_controller = run_mock_controller
 
