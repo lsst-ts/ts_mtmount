@@ -22,7 +22,6 @@
 __all__ = [
     "NUM_HEADER_FIELDS",
     "AckOnlyCommandCodes",
-    "Command",
     "AskForCommand",
     "AzimuthDriveEnable",
     "AzimuthDriveReset",
@@ -91,12 +90,8 @@ __all__ = [
     "parse_command",
 ]
 
-from lsst.ts import utils
-
-from . import base_message, enums, field_info
-from .utils import wrap_parameter_doc
-
-MAX_SEQUENCE_ID = (1 << 31) - 1
+from . import enums, field_info
+from .base_command import BaseCommand
 
 # Number of required fields, before the optional arguments start
 NUM_HEADER_FIELDS = 4
@@ -112,40 +107,6 @@ AckOnlyCommandCodes = set(
         enums.CommandCode.CAMERA_CABLE_WRAP_TRACK_TARGET,
     )
 )
-
-
-class Command(base_message.BaseMessage):
-    """Base class for commands.
-
-    Set sequence_id to an incrementing integer (that eventually
-    wraps around), by default.
-    """
-
-    sequence_id_generator = utils.index_generator(imax=MAX_SEQUENCE_ID)
-
-    def __init__(self, **kwargs):
-        if kwargs.get("sequence_id") is None:
-            kwargs["sequence_id"] = next(self.sequence_id_generator)
-        return super().__init__(**kwargs)
-
-
-def make_command_doc(cls):
-    """Make and attach a doc string to a command class."""
-    param_strings = []
-    for finfo in cls.field_infos:
-        param_doc = wrap_parameter_doc(finfo.doc)
-        is_optional = finfo.default is not None or finfo.name == "sequence_id"
-        optional_str = ", optional" if is_optional else ""
-        param_strings.append(
-            f"{finfo.name} : `{finfo.dtype.__name__}{optional_str}`\n{param_doc}"
-        )
-    param_block = "\n".join(param_strings)
-    cls.__doc__ = f"""{cls.__name__} command.
-
-Parameters
-----------
-{param_block}
-"""
 
 
 def make_command_field_infos(command_code, parameters=()):
@@ -167,10 +128,15 @@ def make_command_field_infos(command_code, parameters=()):
         field_info.IntFieldInfo(
             name="sequence_id",
             doc="Sequence number; used to identify replies to this command.",
+            default=0,  # MTMountCsc sets this just before sending a command
         ),
         field_info.CommandCodeFieldInfo(command_code),
         field_info.SourceFieldInfo(what="command"),
-        field_info.TimestampFieldInfo(),
+        field_info.FloatFieldInfo(
+            name="timestamp",
+            doc="Time at which the message was sent.",
+            default=0,  # MTMountCsc sets this just before sending the command
+        ),
     ) + tuple(parameters)
 
 
@@ -222,7 +188,7 @@ Other elevation and azimuth axis commands:
 """
 
 
-class AskForCommand(Command):
+class AskForCommand(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ASK_FOR_COMMAND,
         (
@@ -236,7 +202,7 @@ class AskForCommand(Command):
     )
 
 
-class AzimuthDriveEnable(Command):
+class AzimuthDriveEnable(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_DRIVE_ENABLE,
         (
@@ -250,7 +216,7 @@ class AzimuthDriveEnable(Command):
     )
 
 
-class AzimuthDriveReset(Command):
+class AzimuthDriveReset(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_DRIVE_RESET,
         (
@@ -261,51 +227,51 @@ class AzimuthDriveReset(Command):
     )
 
 
-class AzimuthEnableTracking(Command):
+class AzimuthEnableTracking(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_ENABLE_TRACKING, _OnOffParameters
     )
 
 
-class AzimuthHome(Command):
+class AzimuthHome(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_HOME)
 
 
-class AzimuthMove(Command):
+class AzimuthMove(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_MOVE, _MoveParameters
     )
 
 
-class AzimuthPower(Command):
+class AzimuthPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_POWER, _OnOffParameters
     )
 
 
-class AzimuthResetAlarm(Command):
+class AzimuthResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_RESET_ALARM)
 
 
-class AzimuthStop(Command):
+class AzimuthStop(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.AZIMUTH_STOP)
 
 
-class AzimuthTrackTarget(Command):
+class AzimuthTrackTarget(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_TRACK_TARGET, _TrackingParameters
     )
 
 
-class BothAxesEnableTracking(Command):
+class BothAxesEnableTracking(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_ENABLE_TRACKING)
 
 
-class BothAxesHome(Command):
+class BothAxesHome(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_HOME)
 
 
-class BothAxesMove(Command):
+class BothAxesMove(BaseCommand):
     """Move both axes to a specified position and stop."""
 
     field_infos = make_command_field_infos(
@@ -347,23 +313,23 @@ class BothAxesMove(Command):
     )
 
 
-class BothAxesPower(Command):
+class BothAxesPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.BOTH_AXES_POWER, _OnOffParameters
     )
 
 
-class BothAxesResetAlarm(Command):
+class BothAxesResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_RESET_ALARM)
 
 
-class BothAxesStop(Command):
+class BothAxesStop(BaseCommand):
     """Stop both axes."""
 
     field_infos = make_command_field_infos(enums.CommandCode.BOTH_AXES_STOP)
 
 
-class BothAxesTrackTarget(Command):
+class BothAxesTrackTarget(BaseCommand):
     """Specify the tracking target for both axes."""
 
     field_infos = make_command_field_infos(
@@ -391,7 +357,7 @@ class BothAxesTrackTarget(Command):
     )
 
 
-class CameraCableWrapDriveEnable(Command):
+class CameraCableWrapDriveEnable(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_ENABLE,
         (
@@ -404,56 +370,56 @@ class CameraCableWrapDriveEnable(Command):
     )
 
 
-class CameraCableWrapDriveReset(Command):
+class CameraCableWrapDriveReset(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_RESET,
         (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),),
     )
 
 
-class CameraCableWrapEnableTracking(Command):
+class CameraCableWrapEnableTracking(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING, _OnOffParameters
     )
 
 
-class CameraCableWrapMove(Command):
+class CameraCableWrapMove(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_MOVE, _MoveParameters
     )
 
 
-class CameraCableWrapPower(Command):
+class CameraCableWrapPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_POWER, _OnOffParameters
     )
 
 
-class CameraCableWrapResetAlarm(Command):
+class CameraCableWrapResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_RESET_ALARM,
     )
 
 
-class CameraCableWrapStop(Command):
+class CameraCableWrapStop(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.CAMERA_CABLE_WRAP_STOP)
 
 
-class CameraCableWrapTrackTarget(Command):
+class CameraCableWrapTrackTarget(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_TRACK_TARGET, _TrackingParameters
     )
 
 
-class Disable(Command):
+class Disable(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.DISABLE)
 
 
-class Enable(Command):
+class Enable(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.ENABLE)
 
 
-class ElevationDriveEnable(Command):
+class ElevationDriveEnable(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_DRIVE_ENABLE,
         (
@@ -467,7 +433,7 @@ class ElevationDriveEnable(Command):
     )
 
 
-class ElevationDriveReset(Command):
+class ElevationDriveReset(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_DRIVE_RESET,
         (
@@ -478,75 +444,75 @@ class ElevationDriveReset(Command):
     )
 
 
-class ElevationEnableTracking(Command):
+class ElevationEnableTracking(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_ENABLE_TRACKING, _OnOffParameters
     )
 
 
-class ElevationHome(Command):
+class ElevationHome(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_HOME)
 
 
-class ElevationMove(Command):
+class ElevationMove(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_MOVE, _MoveParameters
     )
 
 
-class ElevationPower(Command):
+class ElevationPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_POWER, _OnOffParameters
     )
 
 
-class ElevationResetAlarm(Command):
+class ElevationResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_RESET_ALARM,
     )
 
 
-class ElevationStop(Command):
+class ElevationStop(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.ELEVATION_STOP)
 
 
-class ElevationTrackTarget(Command):
+class ElevationTrackTarget(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_TRACK_TARGET, _TrackingParameters
     )
 
 
-class GetActualSettings(Command):
+class GetActualSettings(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.GET_ACTUAL_SETTINGS)
 
 
-class Heartbeat(Command):
+class Heartbeat(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.HEARTBEAT)
 
 
-class MainAxesPowerSupplyPower(Command):
+class MainAxesPowerSupplyPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MAIN_AXES_POWER_SUPPLY_POWER, _OnOffParameters
     )
 
 
-class MainAxesPowerSupplyResetAlarm(Command):
+class MainAxesPowerSupplyResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MAIN_AXES_POWER_SUPPLY_RESET_ALARM
     )
 
 
-class MainCabinetThermalResetAlarm(Command):
+class MainCabinetThermalResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MAIN_CABINET_THERMAL_RESET_ALARM
     )
 
 
-class MirrorCoverSystemDeploy(Command):
+class MirrorCoverSystemDeploy(BaseCommand):
     field_infos = make_command_field_infos(enums.CommandCode.MIRROR_COVER_SYSTEM_DEPLOY)
 
 
-class MirrorCoverSystemRetract(Command):
+class MirrorCoverSystemRetract(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_SYSTEM_RETRACT
     )
@@ -560,7 +526,7 @@ Unsupported mirror cover locks commands:
 """
 
 
-class MirrorCoverLocksMoveAll(Command):
+class MirrorCoverLocksMoveAll(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_LOCKS_MOVE_ALL,
         (
@@ -574,7 +540,7 @@ class MirrorCoverLocksMoveAll(Command):
     )
 
 
-class MirrorCoverLocksPower(Command):
+class MirrorCoverLocksPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_LOCKS_POWER,
         (
@@ -586,7 +552,7 @@ class MirrorCoverLocksPower(Command):
     )
 
 
-class MirrorCoverLocksResetAlarm(Command):
+class MirrorCoverLocksResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_LOCKS_RESET_ALARM,
         (
@@ -597,7 +563,7 @@ class MirrorCoverLocksResetAlarm(Command):
     )
 
 
-class MirrorCoverLocksStop(Command):
+class MirrorCoverLocksStop(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVER_LOCKS_STOP,
         (
@@ -616,7 +582,7 @@ Unsupported mirror cover commands:
 """
 
 
-class MirrorCoversDeploy(Command):
+class MirrorCoversDeploy(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVERS_DEPLOY,
         (
@@ -627,7 +593,7 @@ class MirrorCoversDeploy(Command):
     )
 
 
-class MirrorCoversRetract(Command):
+class MirrorCoversRetract(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVERS_RETRACT,
         (
@@ -638,7 +604,7 @@ class MirrorCoversRetract(Command):
     )
 
 
-class MirrorCoversPower(Command):
+class MirrorCoversPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVERS_POWER,
         (
@@ -650,7 +616,7 @@ class MirrorCoversPower(Command):
     )
 
 
-class MirrorCoversResetAlarm(Command):
+class MirrorCoversResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVERS_RESET_ALARM,
         (
@@ -661,7 +627,7 @@ class MirrorCoversResetAlarm(Command):
     )
 
 
-class MirrorCoversStop(Command):
+class MirrorCoversStop(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MIRROR_COVERS_STOP,
         (
@@ -672,41 +638,41 @@ class MirrorCoversStop(Command):
     )
 
 
-class OilSupplySystemPower(Command):
+class OilSupplySystemPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER,
         _OnOffParameters,
     )
 
 
-class OilSupplySystemPowerCirculationPump(Command):
+class OilSupplySystemPowerCirculationPump(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_CIRCULATION_PUMP,
         _OnOffParameters,
     )
 
 
-class OilSupplySystemPowerCooling(Command):
+class OilSupplySystemPowerCooling(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_COOLING,
         _OnOffParameters,
     )
 
 
-class OilSupplySystemPowerMainPump(Command):
+class OilSupplySystemPowerMainPump(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_MAIN_PUMP,
         _OnOffParameters,
     )
 
 
-class OilSupplySystemResetAlarm(Command):
+class OilSupplySystemResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_RESET_ALARM,
     )
 
 
-class OilSupplySystemSetMode(Command):
+class OilSupplySystemSetMode(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_SET_MODE,
         (
@@ -717,7 +683,7 @@ class OilSupplySystemSetMode(Command):
     )
 
 
-class SafetyReset(Command):
+class SafetyReset(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.SAFETY_RESET,
         (
@@ -729,26 +695,26 @@ class SafetyReset(Command):
     )
 
 
-class StateInfo(Command):
+class StateInfo(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.STATE_INFO,
     )
 
 
-class TopEndChillerPower(Command):
+class TopEndChillerPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.TOP_END_CHILLER_POWER,
         _OnOffParameters,
     )
 
 
-class TopEndChillerResetAlarm(Command):
+class TopEndChillerResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.TOP_END_CHILLER_RESET_ALARM,
     )
 
 
-class TopEndChillerTrackAmbient(Command):
+class TopEndChillerTrackAmbient(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.TOP_END_CHILLER_TRACK_AMBIENT,
         _OnOffParameters + (field_info.FloatFieldInfo(name="temperature", doc="???"),),
@@ -822,7 +788,7 @@ Commands = (
 )
 
 for command in Commands:
-    make_command_doc(command)
+    command.make_command_doc()
 
 
 def _make_command_dict():
@@ -869,7 +835,7 @@ def parse_command(command_str):
     fields = command_str.strip().split("\n")
     if len(fields) < NUM_HEADER_FIELDS:
         raise ValueError(
-            f"A command has at least {NUM_HEADER_FIELDS} fields; only got {len(fields)}"
+            f"A command must have at least {NUM_HEADER_FIELDS} fields; got {fields=}"
         )
     command_code = enums.CommandCode(int(fields[1]))
     try:

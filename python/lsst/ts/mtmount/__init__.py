@@ -25,7 +25,7 @@ try:
 except ImportError:
     __version__ = "?"
 
-from . import base_message, commands, field_info, mock, testutils
+from . import base_command, commands, field_info, mock, testutils
 from .command_futures import *
 from .config_schema import *
 from .constants import *

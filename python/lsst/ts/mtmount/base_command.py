@@ -19,15 +19,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["BaseMessage"]
+__all__ = ["BaseCommand"]
 
 import enum
 
 from . import constants
+from .utils import wrap_parameter_doc
 
 
-class BaseMessage:
-    """BaseMessage data.
+class BaseCommand:
+    """Base class for low-level controller commands.
 
     Parameters
     ----------
@@ -77,7 +78,7 @@ class BaseMessage:
 
     @classmethod
     def from_str_fields(cls, fields):
-        """Construct a BaseMessage from a list of string fields.
+        """Construct a BaseCommand from a list of string fields.
 
         Parameters
         ----------
@@ -116,6 +117,25 @@ class BaseMessage:
         if cls.has_extra_data:
             kwargs["extra_data"] = tuple(fields[num_field_infos:])
         return cls(**kwargs)
+
+    @classmethod
+    def make_command_doc(cls):
+        """Make and attach a doc string to the command class."""
+        param_strings = []
+        for finfo in cls.field_infos:
+            param_doc = wrap_parameter_doc(finfo.doc)
+            is_optional = finfo.default is not None or finfo.name == "sequence_id"
+            optional_str = ", optional" if is_optional else ""
+            param_strings.append(
+                f"{finfo.name} : `{finfo.dtype.__name__}{optional_str}`\n{param_doc}"
+            )
+        param_block = "\n".join(param_strings)
+        cls.__doc__ = f"""{cls.__name__} command.
+
+Parameters
+----------
+{param_block}
+"""
 
     def encode(self):
         """Return the data encoded as a bytes string,
