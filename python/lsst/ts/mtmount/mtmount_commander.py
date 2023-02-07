@@ -23,7 +23,7 @@ __all__ = ["MTMountCommander", "command_mtmount"]
 
 import asyncio
 import dataclasses
-import inspect
+import functools
 
 from lsst.ts import salobj, simactuators, utils
 
@@ -62,12 +62,13 @@ class MTMountCommander(salobj.CscCommander):
                 "current",
                 "powerSupplyCurrent",
                 "timestamp",
+                "taiTime",
             ),
         )
 
         # Disable telemetry from topics we don't care about
         # (and are too much work to filter out noise)
-        for topic_name in (
+        for telemetry_topic_name in (
             "auxiliaryBoxes",
             "azimuthDrivesThermal",
             "cabinet0101",
@@ -78,15 +79,19 @@ class MTMountCommander(salobj.CscCommander):
             "encoder",
             "generalPurposeGlycolWater",
             "mountControlMainCabinet",
+            "oilSupplySystem",
         ):
-            topic = getattr(self.remote, f"tel_{topic_name}")
+            topic = getattr(self.remote, f"tel_{telemetry_topic_name}")
             topic.callback = None
-        # TODO 37114: once ts_xml 15 is released,
-        # use the above loop to block oilSupplySubsystem
-        for topic_name in ("oSS", "oilSupplySubsystem"):
-            topic = getattr(self.remote, f"tel_{topic_name}", None)
-            if topic is not None:
-                topic.callback = None
+
+        # Treat a few events like telemetry, to reduce chatter.
+        for event_topic_name in ("clockOffset", "cameraCableWrapTarget"):
+            topic = getattr(self.remote, f"evt_{event_topic_name}")
+            # TODO DM-37947: omit this line once we have ts_salobj > 3.7.
+            setattr(self, f"previous_tel_{event_topic_name}", None)
+            topic.callback = functools.partial(
+                self.telemetry_callback, name=event_topic_name
+            )
 
         self.tracking_task = utils.make_done_future()
 
@@ -131,6 +136,20 @@ class MTMountCommander(salobj.CscCommander):
     async def do_stopTracking(self, args):
         self.tracking_task.cancel()
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
+
+    # TODO DM-37947: remove this method once we use salobj > 3.7.
+    async def evt_logMessage_callback(self, data):
+        """Abbreviate the log output by omitting less-interesting fields.
+
+        Omit traceback unless it is non-blank.
+        Always omit filePath, functionName, lineNumber, process, and timestamp.
+        """
+        public_data = {key: getattr(data, key) for key in ("name", "level", "message")}
+        if data.traceback:
+            public_data["traceback"] = data.traceback
+        self.output(
+            f"{data.private_sndStamp:0.3f}: logMessage: {self.format_dict(public_data)}"
+        )
 
     async def _ramp(self, ramp_args):
         """Track a "ramp" (a path of constant velocity)
@@ -189,9 +208,7 @@ class MTMountCommander(salobj.CscCommander):
         print("Ramp done")
 
     async def telemetry_callback(self, data, name, digits=1):
-        result = super().telemetry_callback(data=data, name=name, digits=digits)
-        if inspect.isawaitable(result):
-            await result
+        await super().telemetry_callback(data=data, name=name, digits=digits)
 
 
 def command_mtmount():
