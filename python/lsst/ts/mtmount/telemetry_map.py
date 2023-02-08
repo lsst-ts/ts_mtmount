@@ -153,19 +153,17 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   setpointValvePositionElevation: 2
   timestamp: 1
 
-# TODO DM-37114: enable this topic once ts_xml 15 is deployed.
-# Until then the encoder ints are too short in ts_xml.
-# 16:
-# - encoder
-# - azimuthEncoderAbsolutePosition: 4
-#   azimuthEncoderPosition: 4
-#   azimuthEncoderRelativePosition: 4
-#   elevationEncoderAbsolutePosition: 4
-#   elevationEncoderPosition: 4
-#   elevationEncoderRelativePosition: 4
-#   encoderHeadReadReferenceAZ: 4
-#   encoderHeadReadReferenceEL: 4
-#   timestamp: 1
+16:
+- encoder
+- azimuthEncoderAbsolutePosition: 4
+  azimuthEncoderPosition: 4
+  azimuthEncoderRelativePosition: 4
+  elevationEncoderAbsolutePosition: 4
+  elevationEncoderPosition: 4
+  elevationEncoderRelativePosition: 4
+  encoderHeadReadReferenceAZ: 4
+  encoderHeadReadReferenceEL: 4
+  timestamp: 1
 
 24:
 - mountControlMainCabinet
@@ -229,9 +227,6 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   timestamp: 1
 
 25:
-# TODO DM-37114: ditch this comment once ts_xml 15 is deployed:
-# This topic name is oSS in ts_xml 14.0 and oilSupplySystem in its successor.
-# Use the final name here, and hack around it in code for ts_xml 14.0.
 - oilSupplySystem
 - ambientTemperature: 1
   computedOilFilmThicknessAzimuthBearing5004: 1

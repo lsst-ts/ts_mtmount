@@ -1525,7 +1525,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         ccw_settings = reply.CW["CCW"]
         await self.evt_cameraCableWrapControllerSettings.set_write(
-            # TODO DM-37114: enable these once ts_xml 15 is deployed
+            # TODO DM-37910: uncomment once ts_xml 16 is deployed:
             # minL1LimitEnabled=ccw_settings["NegativeSoftwareLimitEnable"],
             # maxL1LimitEnabled=ccw_settings["PositiveSoftwareLimitEnable"],
             # minL2LimitEnabled=ccw_settings["NegativeLimitSwitchEnable"],
@@ -1616,8 +1616,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_oil_supply_system_state(self, reply):
         await self.evt_oilSupplySystemState.set_write(
             coolingPowerState=reply.cooling,
-            # TODO DM-37114: enable this once ts_xml 15 is deployed
-            # circulationPumpPowerState=reply.oil,
+            circulationPumpPowerState=reply.oil,
             mainPumpPowerState=reply.mainPump,
         )
 
