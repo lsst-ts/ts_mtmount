@@ -148,11 +148,6 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                 sal_topic_name,
                 field_len_dict,
             ) in mtmount.RAW_TELEMETRY_MAP.items():
-                # TODO DM-37114: remove this if/else once XML 14.1 is deployed.
-                if sal_topic_name == "oilSupplySystem" and hasattr(
-                    self.remote, "tel_oSS"
-                ):
-                    sal_topic_name = "oSS"
                 topic = getattr(self.remote, f"tel_{sal_topic_name}")
 
                 desired_sal_data = dict()
