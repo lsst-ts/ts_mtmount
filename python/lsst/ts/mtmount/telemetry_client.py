@@ -271,6 +271,9 @@ class TelemetryClient:
     async def read_loop(self):
         """Read and process status from the low-level controller."""
         self.log.info("telemetry client read loop begins")
+        # IDs for some azimuth and elevation telemetry topics suitable
+        # for detecting clock offset.
+        azel_topic_ids = frozenset((5, 6, 14, 15))
         try:
             while True:
                 data = await asyncio.wait_for(
@@ -280,7 +283,11 @@ class TelemetryClient:
                 try:
                     decoded_data = data.decode()
                     llv_data = json.loads(decoded_data)
-                    if self.next_clock_offset_task.done():
+                    topic_id = llv_data["topicID"]
+                    if (
+                        self.next_clock_offset_task.done()
+                        and topic_id in azel_topic_ids
+                    ):
                         clock_offset = llv_data["timestamp"] - utils.current_tai()
                         await self.controller.evt_clockOffset.set_write(
                             offset=clock_offset,
@@ -288,7 +295,6 @@ class TelemetryClient:
                         self.next_clock_offset_task = asyncio.create_task(
                             asyncio.sleep(CLOCK_OFFSET_EVENT_INTERVAL)
                         )
-                    topic_id = llv_data["topicID"]
                     topic_handler = self.topic_handlers.get(topic_id)
                     if topic_handler is None:
                         if topic_id not in self.unsupported_topic_ids:
