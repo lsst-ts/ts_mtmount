@@ -384,15 +384,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             enums.ReplyId.SAFETY_INTERLOCKS: self.handle_safety_interlocks,
             enums.ReplyId.WARNING: self.handle_warning,
         }
-        # Make sure all the dispatchers are coroutines, to catch future
-        # code errors. The check for an instance of partial is needed with
-        # Python 3.8 and older, based on https://stackoverflow.com/a/52422903.
+        # Make sure all the dispatchers are coroutines, to catch code errors.
         for key, value in self.reply_dispatch.items():
-            if isinstance(value, functools.partial):
-                coro = value.func
-            else:
-                coro = value
-            if not inspect.iscoroutinefunction(coro):
+            if not inspect.iscoroutinefunction(value):
                 raise RuntimeError(
                     f"Bug: the dispatch function for ReplyId={key!r} is not a coroutine"
                 )
