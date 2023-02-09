@@ -275,7 +275,7 @@ class TelemetryClient:
         # for detecting clock offset.
         azel_topic_ids = frozenset((5, 6, 14, 15))
         try:
-            while True:
+            while self.connected:
                 data = await asyncio.wait_for(
                     self.reader.readuntil(constants.LINE_TERMINATOR),
                     timeout=TELEMETRY_TIMEOUT,
@@ -308,6 +308,7 @@ class TelemetryClient:
                     self.log.exception(
                         f"read_loop could not handle {data}; continuing."
                     )
+            self.log.info("telemetry client read loop ends: not connected")
         except asyncio.CancelledError:
             self.log.info("telemetry client read loop cancelled")
         except asyncio.TimeoutError:
