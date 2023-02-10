@@ -41,11 +41,11 @@ properties:
     type: string
     format: hostname
   connection_timeout:
-    description: Time limit for connecting to the TCP/IP command interface (sec)
+    description: Time limit for connecting to the TCP/IP command interface (sec).
     type: number
     exclusiveMinimum: 0
   ack_timeout:
-    description: Time limit for reading a command acknowledgement from the TCP/IP interface (sec)
+    description: Time limit for reading a command acknowledgement from the TCP/IP interface (sec).
     type: number
     exclusiveMinimum: 0
   camera_cable_wrap_advance_time:
@@ -61,9 +61,9 @@ properties:
     type: number
   camera_cable_wrap_interval:
     description: >-
-      Interval between camera cable wrap tracking commands (sec).
-      The actual time between commans will be this interval
-      plus the time it takes to compute and issue the tracking command.
+      DEPRECATED and IGNORED. Was the interval between camera cable wrap
+      tracking commands (sec). That is now determined by the cadence of the
+      rotation telemetry received from MTRotator.
     type: number
     minimum: 0
   max_rotator_position_error:

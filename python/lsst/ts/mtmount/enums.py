@@ -213,6 +213,7 @@ class CscErrorCode(enum.IntEnum):
     CONNECTION_LOST = 2  # Lost connection to low-level controller
     TELEMETRY_CLIENT_ERROR = 3  # Telemetry client failed
     AXIS_FAULT = 4  # One or more axes faulted
+    TRACK_TARGET_TIMED_OUT = 5  # A main axes tracking command timed out
     MOCK_CONTROLLER_ERROR = 98
     INTERNAL_ERROR = 99
 

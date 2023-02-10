@@ -23,7 +23,7 @@ import enum
 import unittest
 
 import pytest
-from lsst.ts import mtmount, utils
+from lsst.ts import mtmount
 
 
 class ExampleEnum(enum.Enum):
@@ -181,25 +181,6 @@ class FieldInfoTestCase(unittest.TestCase):
             mtmount.field_info.CommandCodeFieldInfo,
             dtype=mtmount.CommandCode,
             expected_name="command_code",
-        )
-
-    def test_timestamp_field_info(self):
-        field_info = mtmount.field_info.TimestampFieldInfo()
-        t0 = utils.current_tai()
-        default = field_info.default
-        t1 = utils.current_tai()
-        assert field_info.name == "timestamp"
-        # The constant works around a non-monotonic time bug in macOS Docker.
-        assert t0 - 0.2 <= default
-        assert t1 + 0.2 >= default
-        valid_times = (
-            1614451963.1,
-            1000000000.2,
-        )
-        self.check_field_basics(
-            field_info=field_info,
-            str_value_dict={str(t): t for t in valid_times},
-            bad_values=("2020-04-06T22:33:57.335",),
         )
 
     def test_source_field_info(self):

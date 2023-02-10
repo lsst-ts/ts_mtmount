@@ -124,16 +124,6 @@ class TelemetryClient:
         self.controller = salobj.Controller(name="MTMount", write_only=True)
         self.log = self.controller.log.getChild("TelemetryClient")
 
-        # TODO DM-37114: ditch name_translation_dict once ts_xml 15
-        # is deployed.
-        name_translation_dict = (
-            {"oilSupplySystem": "oSS"} if hasattr(self.controller, "tel_oSS") else {}
-        )
-
-        # TODO DM-37114: ditch is_ts_xml_14 and assume it is always true
-        # once ts_xml 15 is deployed.
-        self.is_ts_xml_14 = not hasattr(self.controller, "evt_clockOffset")
-
         # read_loop should output the clockOffset event
         # for the next telemetry received when this timer expires
         self.next_clock_offset_task = utils.make_done_future()
@@ -142,10 +132,7 @@ class TelemetryClient:
         # dict of low-level controller topic ID: TelemetryTopicHandler
         self.topic_handlers = {
             topic_id: TelemetryTopicHandler(
-                topic=getattr(
-                    self.controller,
-                    f"tel_{name_translation_dict.get(sal_topic_name, sal_topic_name)}",
-                ),
+                topic=getattr(self.controller, f"tel_{sal_topic_name}"),
                 field_dict=field_dict,
                 preprocessor=self.get_preprocessor(sal_topic_name),
             )
@@ -284,8 +271,11 @@ class TelemetryClient:
     async def read_loop(self):
         """Read and process status from the low-level controller."""
         self.log.info("telemetry client read loop begins")
+        # IDs for some azimuth and elevation telemetry topics suitable
+        # for detecting clock offset.
+        azel_topic_ids = frozenset((5, 6, 14, 15))
         try:
-            while True:
+            while self.connected:
                 data = await asyncio.wait_for(
                     self.reader.readuntil(constants.LINE_TERMINATOR),
                     timeout=TELEMETRY_TIMEOUT,
@@ -293,7 +283,11 @@ class TelemetryClient:
                 try:
                     decoded_data = data.decode()
                     llv_data = json.loads(decoded_data)
-                    if not self.is_ts_xml_14 and self.next_clock_offset_task.done():
+                    topic_id = llv_data["topicID"]
+                    if (
+                        self.next_clock_offset_task.done()
+                        and topic_id in azel_topic_ids
+                    ):
                         clock_offset = llv_data["timestamp"] - utils.current_tai()
                         await self.controller.evt_clockOffset.set_write(
                             offset=clock_offset,
@@ -301,7 +295,6 @@ class TelemetryClient:
                         self.next_clock_offset_task = asyncio.create_task(
                             asyncio.sleep(CLOCK_OFFSET_EVENT_INTERVAL)
                         )
-                    topic_id = llv_data["topicID"]
                     topic_handler = self.topic_handlers.get(topic_id)
                     if topic_handler is None:
                         if topic_id not in self.unsupported_topic_ids:
@@ -315,6 +308,7 @@ class TelemetryClient:
                     self.log.exception(
                         f"read_loop could not handle {data}; continuing."
                     )
+            self.log.info("telemetry client read loop ends: not connected")
         except asyncio.CancelledError:
             self.log.info("telemetry client read loop cancelled")
         except asyncio.TimeoutError:

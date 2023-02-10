@@ -6,21 +6,49 @@
 Version History
 ###############
 
-v0.24.1
+v0.25.0
 -------
 
 * `MTMountCsc`:
 
+    * When going to fault, try to stay connected while giving up control.
+      This will improve output if an axis goes to fault, and generally give more useful output while in fault state.
+    * Retry low-level commands that stop motion and turn off subsystems.
+    * Go to fault if a ``trackTarget`` command times out.
     * Reduce latency in camera cable wrap following the rotator.
     * Improve logging in camera cable wrap following code.
+    * Remove ts_xml 14 backwards compatibility code (DM-37114).
+    * Remove Python 3.8 backwards compatibility code.
+
+* `MTMountCommander`:
+
+    * Hide more unwanted data, to avoid overwhelming the display, including:
+
+      * Never publish oilSupplySystem telemetry.
+      * Only publish cameraCableWrapTarget and clockOffset if values change significantly.
+      * Only publish the most important fields of logMessage: level, name, message, and (if not empty) traceback.
+
+    * Use an async callback for telemetry handling.
+      This requires ts_salobj 7.3.
+
+* `monitor_mtmount_telemetry`: make this command-line utility much more flexible.
+  You can now specify which topics to monitor, how long to monitor them, and how many messages to skip (per topic).
+
+* Simplify the code for low-level commands (cleanup that has been pending since the low-level controller started issuing replies as yaml):
+
+    * Change commands to set ``sequence_id`` and ``timestamp`` fields to zero, instead of guessing correct values.
+      `MTMountCsc` is now setting those fields, as are unit tests that generate low-level commands.
+    * Rename ``BaseMessage`` to ``BaseCommand``, since we no longer use it for replies.
+    * Delete the ``Command`` class and use ``BaseCommand`` instead.
+    * Delete the ``TimestampFieldInfo`` class; use ``FloatFieldInfo`` instead.
 
 Requires:
 
-* ts_salobj 7.1
+* ts_salobj 7.3
 * ts_simactuators 2
 * ts_tcpip 0.3.7
 * ts_idl 3.2
-* IDL files for MTMount and MTRotator from ts_xml 14
+* IDL files for MTMount and MTRotator from ts_xml 15
 
 v0.24.0
 -------

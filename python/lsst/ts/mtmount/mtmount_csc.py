@@ -50,6 +50,9 @@ LLV_HEARTBEAT_INTERVAL = 1
 # Log level for commands and command replies.
 LOG_LEVEL_COMMANDS = (logging.DEBUG + logging.INFO) // 2
 
+# Max sequence_id for low-level commands.
+MAX_SEQUENCE_ID = (1 << 31) - 1
+
 # Maximum time (sec) to fully deploy or retract the mirror covers,
 # including dealing with the mirror cover locks.
 # 60 is the maximum allowed by our requirements,
@@ -73,6 +76,9 @@ MOCK_CTRL_START_TIMEOUT = 30
 # on the velocity and acceleration).
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
+# Max timeout (sec) for commands that are expected to reply quickly.
+SHORT_COMMAND_TIMEOUT = 0.25
+
 # Maximum time (sec) to for the startTracking command.
 START_TRACKING_TIMEOUT = 7
 
@@ -85,6 +91,11 @@ TELEMETRY_START_TIMEOUT = 30
 # Extra time to wait for low-level commands to be done;
 # added to the time estimate reported by the low-level controller (sec).
 TIMEOUT_BUFFER = 5
+
+# Timeout for tracking commands (sec). I would prefer this be 0.1 sec
+# so only a few tracking commands can pile up, but the TMA has a bug
+# whereby sometimes it only acks after 0.5 seconds, so use 1 for now.
+TRACK_COMMAND_TIMEOUT = 1
 
 # Minimum tracking advance time (sec) allowed in trackTarget commands
 MIN_TRACKING_ADVANCE_TIME = 0.05
@@ -237,6 +248,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
         self.command_port = command_port
         self.telemetry_port = telemetry_port
+        self.sequence_id_generator = utils.index_generator(imin=1, imax=MAX_SEQUENCE_ID)
 
         self.run_mock_controller = run_mock_controller
 
@@ -266,9 +278,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = utils.make_done_future()
 
-        # Task to track enabling and disabling
-        self.enable_task = utils.make_done_future()
-        self.disable_task = utils.make_done_future()
+        # Tasks to track enabling and disabling devices
+        self.enable_devices_task = utils.make_done_future()
+        self.disable_devices_task = utils.make_done_future()
 
         self.mock_controller_started_task = asyncio.Future()
         self.monitor_telemetry_client_task = utils.make_done_future()
@@ -372,15 +384,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             enums.ReplyId.SAFETY_INTERLOCKS: self.handle_safety_interlocks,
             enums.ReplyId.WARNING: self.handle_warning,
         }
-        # Make sure all the dispatchers are coroutines, to catch future
-        # code errors. The check for an instance of partial is needed with
-        # Python 3.8 and older, based on https://stackoverflow.com/a/52422903.
+        # Make sure all the dispatchers are coroutines, to catch code errors.
         for key, value in self.reply_dispatch.items():
-            if isinstance(value, functools.partial):
-                coro = value.func
-            else:
-                coro = value
-            if not inspect.iscoroutinefunction(coro):
+            if not inspect.iscoroutinefunction(value):
                 raise RuntimeError(
                     f"Bug: the dispatch function for ReplyId={key!r} is not a coroutine"
                 )
@@ -401,6 +407,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # but the simulation_mode attribute is usually set by super().start().
         self.evt_simulationMode.set(mode=simulation_mode)
 
+    async def begin_disable(self, data):
+        await super().begin_disable(data)
+        self.disable_devices_task.cancel()
+        self.disable_devices_task = asyncio.create_task(self.disable_devices())
+        await self.disable_devices_task
+
     async def begin_enable(self, data):
         """Take control of the mount and initialize devices.
 
@@ -410,8 +422,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         If initializing fails, first try to disable the axis controllers,
         then raise an exception in order to leave the state as DISABLED.
         """
-        self.disable_task.cancel()
-        self.enable_task.cancel()
+        self.disable_devices_task.cancel()
+        self.enable_devices_task.cancel()
         await super().begin_enable(data)
         try:
             self.log.info("Ask for permission to command the mount.")
@@ -428,26 +440,26 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 f"The CSC was not allowed to command the mount: {e!r}"
             )
 
-        self.enable_task = asyncio.create_task(self.enable_devices())
+        self.enable_devices_task = asyncio.create_task(self.enable_devices())
         try:
-            await self.enable_task
+            await self.enable_devices_task
         except Exception:
             self.log.warning(
                 "Could not enable devices; disabling devices and giving up control."
             )
-            self.disable_task = asyncio.create_task(self.disable_devices())
-            await self.disable_task
+            self.disable_devices_task = asyncio.create_task(self.disable_devices())
+            await self.disable_devices_task
             raise
 
-    async def begin_disable(self, data):
-        """Disable the axis controllers and yield control.
+    async def begin_start(self, data):
+        await super().begin_start(data)
+        self.connect_task.cancel()
+        self.connect_task = asyncio.create_task(self.connect())
+        await self.connect_task
 
-        Leave the top end chiller and oils supply system running.
-        """
-        await super().begin_disable(data)
-        self.disable_task.cancel()
-        self.disable_task = asyncio.create_task(self.disable_devices())
-        await self.disable_task
+    async def end_standby(self, data):
+        await super().begin_standby(data)
+        await self.disconnect()
 
     @property
     def connected(self):
@@ -471,8 +483,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await super().close_tasks()
 
         self.connect_task.cancel()
-        self.enable_task.cancel()
-        self.disable_task.cancel()
+        self.enable_devices_task.cancel()
+        self.disable_devices_task.cancel()
         self.monitor_telemetry_client_task.cancel()
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
@@ -613,12 +625,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.send_command(commands.GetActualSettings(), do_lock=True)
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
-            err_msg = "Could not connect to the low-level controller: "
-            f"host={command_host}, port={self.command_port}"
-            self.log.exception(err_msg)
-            await self.fault(
-                code=enums.CscErrorCode.COULD_NOT_CONNECT, report=f"{err_msg}: {e!r}"
+            err_msg = (
+                "Could not connect to low-level controller at "
+                f"host={command_host}, port={self.command_port}: {e!r}"
             )
+            self.log.exception(err_msg)
+            await self.fault(code=enums.CscErrorCode.COULD_NOT_CONNECT, report=err_msg)
             return
 
         await self.evt_connected.set_write(connected=self.connected)
@@ -635,11 +647,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.telemetry_client_process = await asyncio.create_subprocess_exec(*args)
         except Exception as e:
             cmdstr = " ".join(args)
-            err_msg = f"Could not start MTMount telemetry client with {cmdstr!r}"
+            err_msg = f"Could not start MTMount telemetry client with {cmdstr!r}: {e!r}"
             self.log.exception(err_msg)
             await self.fault(
-                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR,
-                report=f"{err_msg}: {e!r}",
+                code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg
             )
             return
         try:
@@ -732,7 +743,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         Call this when going to ENABLED state.
         """
         self.log.info("Enable devices")
-        self.disable_task.cancel()
+        self.disable_devices_task.cancel()
         try:
             # Reset commands will fail if the subsystem is already on.
             # Also they will claim to succeed if the subsystem is off
@@ -780,14 +791,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.camera_cable_wrap_follow_start_task
 
     async def disable_devices(self):
-        """Disable the axis controllers and yield control.
+        """Stop and turn off azimuth, elevation, and camera cable wrap
+        controllers, then yield control.
 
         Leave the top end chiller and oils supply system running.
 
-        Call this when going to DISABLED state.
+        Notes
+        -----
+        Try to disable everything, even if one or more commands fails.
+
+        The TMA manages the azimuth cable wrap automatically,
+        so this code does not explicitly stop it or power it off.
         """
         self.log.info("Disable devices")
-        self.enable_task.cancel()
+        self.enable_devices_task.cancel()
         await self.stop_camera_cable_wrap_following()
         if not self.connected:
             return
@@ -799,7 +816,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands.CameraCableWrapPower(on=False),
         ]:
             try:
-                await self.send_command(command, do_lock=True)
+                await self.retry_command(command)
             except Exception as e:
                 self.log.warning(f"Command {command} failed; continuing: {e!r}")
 
@@ -814,23 +831,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.send_command(
                 commands.AskForCommand(commander=enums.Source.NONE), do_lock=False
             )
-            self.llv_heartbeat_loop_task.cancel()
-            self.has_control = False
         except Exception as e:
             self.log.warning(
-                f"The CSC was not able to give up command of the mount: {e!r}"
+                "AskForCommand(commander=None) failed, but will still give up command "
+                f"by stopping the low-level heartbeat loop: {e!r}"
             )
+        finally:
+            self.llv_heartbeat_loop_task.cancel()
+            self.has_control = False
 
     async def handle_summary_state(self):
-        if self.disabled_or_enabled:
-            if not self.connected:
-                self.connect_task.cancel()
-                self.connect_task = asyncio.create_task(self.connect())
-                await self.connect_task
-        else:
-            await self.disconnect()
+        if self.summary_state == salobj.State.FAULT:
+            await self.disable_devices()
 
-    async def send_command(self, command, do_lock):
+    async def send_command(self, command, *, do_lock, timeout=None):
         """Send a command to the operation manager and wait for it to finish.
 
         Parameters
@@ -843,30 +857,87 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands can run simultaneously, so specify True when practical.
             Specify False for stop commands and the camera cable wrap
             tracking command (so rotator following is not blocked).
+        timeout : `float` | `None`
+            Timeout for initial ack.
+            If None then use self.config.ack_timeout.
 
         Returns
         -------
         command_futures : `CommandFutures`
             Futures that monitor the command.
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If the timeout is exceeded.
+        salobj.ExpectedError
+            If not connected to the low-level controller.
+        RuntimeError
+            If the sequence_id is already in use.
+            This indicates an internal error.
         """
         if do_lock:
             async with self.command_lock:
-                return await self._basic_send_command(command=command)
+                return await self._basic_send_command(command=command, timeout=timeout)
         else:
-            return await self._basic_send_command(command=command)
+            return await self._basic_send_command(command=command, timeout=timeout)
 
-    async def _basic_send_command(self, command):
+    async def retry_command(
+        self, command, *, max_tries=3, timeout=SHORT_COMMAND_TIMEOUT
+    ):
+        """Send a low-level command, retrying up to max_tries times.
+
+        Parameters
+        ----------
+        command : `commands.Command`
+            Class of command to send
+        max_tries : `int`
+            Maximum number of times to issue the command.
+        timeout : `float`
+            Timeout (sec) for the command (applied to each retry).
+            Keep it short to avoid blocking the command lock for a long time.
+        """
+        async with self.command_lock:
+            try_num = 0
+            while True:
+                try_num += 1
+                try:
+                    await self.send_command(command, do_lock=False, timeout=timeout)
+                    return
+                except Exception as e:
+                    if try_num < max_tries:
+                        self.log.warning(
+                            f"command {command} try {try_num} of {max_tries} failed; try again: {e!r}"
+                        )
+                    else:
+                        raise RuntimeError(f"command {command} failed: {e!r}")
+
+    async def _basic_send_command(self, command, *, timeout=None):
         """Implementation of send_command. Ignores the command lock.
 
         Parameters
         ----------
         command : `Command`
-            Command to send.
+            Command to send. This method sets the ``timestamp`` and
+            ``sequence_id`` fields.
+        timeout : `float` | `None`
+            Timeout for initial ack.
+            If None then use self.config.ack_timeout.
 
         Returns
         -------
         command_futures : `CommandFutures`
             Futures that monitor the command.
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If the timeout is exceeded.
+        salobj.ExpectedError
+            If not connected to the low-level controller.
+        RuntimeError
+            If the sequence_id is already in use.
+            This indicates an internal error.
         """
         if not self.connected:
             if self.should_be_connected:
@@ -875,29 +946,30 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     report="Connection lost to low-level controller (noticed in _basic_send_command)",
                 )
             raise salobj.ExpectedError("Not connected to the low-level controller.")
+
+        command.timestamp = utils.current_tai()
+        command.sequence_id = next(self.sequence_id_generator)
         if command.sequence_id in self.command_futures_dict:
             raise RuntimeError(
                 f"Bug! Duplicate sequence_id {command.sequence_id} in command_futures_dict"
             )
         command_futures = CommandFutures(command=command)
-        # Set the timestamp field to the time at which the command was sent.
-        command.timestamp = utils.current_tai()
         self.command_futures_dict[command.sequence_id] = command_futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
         self.writer.write(command_bytes)
         await self.writer.drain()
-        timeout = await asyncio.wait_for(command_futures.ack, self.config.ack_timeout)
+        initial_timeout = self.config.ack_timeout if timeout is None else timeout
+        new_timeout = await asyncio.wait_for(command_futures.ack, initial_timeout)
         if not command_futures.done.done():
             try:
                 await asyncio.wait_for(
-                    command_futures.done, timeout=timeout + TIMEOUT_BUFFER
+                    command_futures.done, timeout=new_timeout + TIMEOUT_BUFFER
                 )
             except asyncio.TimeoutError:
                 self.command_futures_dict.pop(command.sequence_id, None)
                 raise asyncio.TimeoutError(
-                    f"Timed out after {timeout + TIMEOUT_BUFFER} seconds "
-                    f"waiting for the Done reply to {command}"
+                    f"Command {command} timed out after {new_timeout + TIMEOUT_BUFFER} seconds"
                 )
         return command_futures
 
@@ -917,6 +989,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
             commands can run simultaneously, so specify True when practical.
             Specify False for stop commands and the camera cable wrap
             tracking command (so rotator following is not blocked).
+
+        Raises
+        ------
+        asyncio.TimeoutError
+            If the timeout is exceeded.
+        salobj.ExpectedError
+            If not connected to the low-level controller.
+        RuntimeError
+            If the sequence_id is already in use.
+            This indicates an internal error.
         """
         future = None
         try:
@@ -994,9 +1076,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
             raise
         except Exception as e:
-            err_msg = "Camera cable wrap following could not be started"
+            err_msg = f"Camera cable wrap following could not be started: {e!r}"
             if isinstance(e, salobj.ExpectedError):
-                self.log.error(f"{err_msg}: {e!r}")
+                self.log.error(err_msg)
             else:
                 self.log.exception(err_msg)
             await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
@@ -1024,6 +1106,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             paused = False
             while True:
                 try:
+                    # Use flush=True to avoid falling behind, in case
+                    # this loop cannot keep up with the rotation data.
                     rot_data = await self.rotator.tel_rotation.next(
                         flush=True, timeout=ROTATOR_TELEMETRY_TIMEOUT
                     )
@@ -1061,25 +1145,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     velocity=velocity,
                     tai=tai,
                 )
-                try:
-                    await asyncio.wait_for(
-                        self.send_command(command, do_lock=False), timeout=1
-                    )
-                except asyncio.TimeoutError:
-                    raise salobj.ExpectedError("CameraCableWrapTrackTarget timed out")
-
+                await self.send_command(
+                    command, do_lock=False, timeout=TRACK_COMMAND_TIMEOUT
+                )
                 await self.evt_cameraCableWrapTarget.set_write(
                     position=position, velocity=velocity, taiTime=tai
                 )
         except asyncio.CancelledError:
             self.log.info("Camera cable wrap following ends")
-        except salobj.ExpectedError as e:
-            self.log.error(f"Camera cable wrap following failed: {e!r}")
-        except Exception:
-            self.log.exception("Camera cable wrap following failed")
-        finally:
-            await self.send_command(commands.CameraCableWrapStop(), do_lock=False)
+        except Exception as e:
+            if isinstance(e, salobj.ExpectedError):
+                self.log.error(f"Camera cable wrap following failed: {e!r}")
+            else:
+                self.log.exception(f"Camera cable wrap following failed: {e!r}")
+            await self.retry_command(commands.CameraCableWrapStop())
             await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
+            raise
 
     async def clear_target(self):
         """Clear the target event."""
@@ -1193,7 +1274,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 elevation_velocity=data.elevationVelocity,
                 tai=data.taiTime,
             )
-            await self.send_command(track_command, do_lock=False)
+            try:
+                await self.send_command(
+                    track_command, do_lock=False, timeout=TRACK_COMMAND_TIMEOUT
+                )
+            except asyncio.TimeoutError as e:
+                message = str(e)
+                await self.fault(
+                    code=enums.CscErrorCode.TRACK_TARGET_TIMED_OUT, report=message
+                )
+                raise salobj.ExpectedError(message)
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
@@ -1432,7 +1522,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         ccw_settings = reply.CW["CCW"]
         await self.evt_cameraCableWrapControllerSettings.set_write(
-            # TODO DM-37114: enable these once ts_xml 15 is deployed
+            # TODO DM-37910: uncomment once ts_xml 16 is deployed:
             # minL1LimitEnabled=ccw_settings["NegativeSoftwareLimitEnable"],
             # maxL1LimitEnabled=ccw_settings["PositiveSoftwareLimitEnable"],
             # minL2LimitEnabled=ccw_settings["NegativeLimitSwitchEnable"],
@@ -1523,8 +1613,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_oil_supply_system_state(self, reply):
         await self.evt_oilSupplySystemState.set_write(
             coolingPowerState=reply.cooling,
-            # TODO DM-37114: enable this once ts_xml 15 is deployed
-            # circulationPumpPowerState=reply.oil,
+            circulationPumpPowerState=reply.oil,
             mainPumpPowerState=reply.mainPump,
         )
 
@@ -1630,15 +1719,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
-                return
+                break
             except Exception as e:
                 if self.should_be_connected:
                     if self.connected:
-                        err_msg = "Read loop failed; possibly a bug"
+                        err_msg = f"Read loop failed; possibly a bug: {e!r}"
                         self.log.exception(err_msg)
                         await self.fault(
-                            code=enums.CscErrorCode.INTERNAL_ERROR,
-                            report=f"{err_msg}: {e!r}",
+                            code=enums.CscErrorCode.INTERNAL_ERROR, report=err_msg
                         )
                     else:
                         await self.fault(
@@ -1668,8 +1756,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await asyncio.sleep(LLV_HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass
-        except Exception:
-            self.log.exception("Heartbeat loop failed")
+        except Exception as e:
+            self.log.exception(f"Heartbeat loop failed: {e!r}")
 
     def signal_handler(self):
         """Handle signals such as SIGTERM."""
@@ -1694,11 +1782,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
             except Exception as e:
                 cmdstr = " ".join(args)
-                err_msg = f"Mock controller process command {cmdstr!r} failed"
+                err_msg = f"Mock controller process command {cmdstr!r} failed: {e!r}"
                 self.log.exception(err_msg)
                 await self.fault(
-                    code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR,
-                    report=f"{err_msg}: {e!r}",
+                    code=enums.CscErrorCode.MOCK_CONTROLLER_ERROR, report=err_msg
                 )
                 return
 
@@ -1722,6 +1809,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Stop the camera cable wrap from following the rotator."""
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
+        await self.retry_command(commands.CameraCableWrapStop())
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
 
 
