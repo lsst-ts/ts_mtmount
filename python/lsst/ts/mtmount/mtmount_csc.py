@@ -252,6 +252,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.run_mock_controller = run_mock_controller
 
+        # Set True if the CSC should be the commander.
+        self.should_be_commander = False
+
         # Connection to the low-level controller, or None if not connected.
         self.reader = None  # asyncio.StreamReader if connected
         self.writer = None  # asyncio.StreamWriter if connected
@@ -269,11 +272,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.unknown_reply_ids = set()
 
         self.command_lock = asyncio.Lock()
-
-        # Does the CSC have control of the mount?
-        # Once the low-level controller reports this in an event,
-        # add a SAL event and get the value from that.
-        self.has_control = False
 
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = utils.make_done_future()
@@ -407,16 +405,19 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # but the simulation_mode attribute is usually set by super().start().
         self.evt_simulationMode.set(mode=simulation_mode)
 
+    @property
+    def has_command(self):
+        """Does the CSC have command of the low-level controller?"""
+        return self.evt_commander.data.commander == enums.Source.CSC
+
     async def begin_disable(self, data):
         await super().begin_disable(data)
-        self.disable_devices_task.cancel()
-        self.disable_devices_task = asyncio.create_task(self.disable_devices())
-        await self.disable_devices_task
+        await self.disable_devices()
 
     async def begin_enable(self, data):
-        """Take control of the mount and initialize devices.
+        """Take command of the low-level controller and initialize devices.
 
-        If taking control fails, raise an exception in order to leave
+        If taking command fails, raise an exception in order to leave
         the state as DISABLED.
 
         If initializing fails, first try to disable the axis controllers,
@@ -430,11 +431,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.send_command(
                 commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
             )
+            self.should_be_commander = True
+            for i in range(50):
+                await asyncio.sleep(0.1)
+                if self.has_command:
+                    break
+            else:
+                self.should_be_commander = False
+                raise salobj.ExpectedError(
+                    "Timed out waiting for the low-level commander event"
+                )
+            self.log.info("Got low level commander event in {i * 0.1} seconds")
             self.llv_heartbeat_loop_task.cancel()
             self.llv_heartbeat_loop_task = asyncio.create_task(
                 self.llv_heartbeat_loop()
             )
-            self.has_control = True
         except Exception as e:
             raise salobj.ExpectedError(
                 f"The CSC was not allowed to command the mount: {e!r}"
@@ -445,10 +456,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.enable_devices_task
         except Exception:
             self.log.warning(
-                "Could not enable devices; disabling devices and giving up control."
+                "Could not enable devices; disabling devices and giving up "
+                "command of the low-level controller."
             )
-            self.disable_devices_task = asyncio.create_task(self.disable_devices())
-            await self.disable_devices_task
+            await self.disable_devices()
             raise
 
     async def begin_start(self, data):
@@ -791,54 +802,86 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.camera_cable_wrap_follow_start_task
 
     async def disable_devices(self):
-        """Stop and turn off azimuth, elevation, and camera cable wrap
-        controllers, then yield control.
+        """Stop and turn off azimuth, elevation, and camera cable wrap,
+        then give up command of the low-level controller.
 
-        Leave the top end chiller and oils supply system running.
+        Leave the top end chiller and oil supply system running
+        and the main axis power supply on.
 
         Notes
         -----
-        Try to disable everything, even if one or more commands fails.
+        This is a "best effort" attempt that should not raise an exception.
+
+        Try to disable all subsystems, even if one or more commands fails.
 
         The TMA manages the azimuth cable wrap automatically,
-        so this code does not explicitly stop it or power it off.
+        so this code does not explicitly stop it or turn it off.
         """
-        self.log.info("Disable devices")
-        self.enable_devices_task.cancel()
-        await self.stop_camera_cable_wrap_following()
-        if not self.connected:
-            return
-        for command in [
-            commands.BothAxesStop(),
-            commands.CameraCableWrapStop(),
-            commands.AzimuthPower(on=False),
-            commands.ElevationPower(on=False),
-            commands.CameraCableWrapPower(on=False),
-        ]:
-            try:
-                await self.retry_command(command)
-            except Exception as e:
-                self.log.warning(f"Command {command} failed; continuing: {e!r}")
-
-        await self.evt_elevationInPosition.set_write(inPosition=False)
-        await self.evt_azimuthInPosition.set_write(inPosition=False)
-
         try:
-            self.log.info("Give up command of the mount.")
-            # Give control to EUI so the TMA keeps receiving heartbeats;
-            # this prevents it from shutting off the oil supply system,
-            # main axes power supply, and top-end chiller.
-            await self.send_command(
-                commands.AskForCommand(commander=enums.Source.NONE), do_lock=False
+            self.disable_devices_task.cancel()
+            self.disable_devices_task = asyncio.create_task(
+                self._disable_devices_impl()
             )
+            await self.disable_devices_task
         except Exception as e:
-            self.log.warning(
-                "AskForCommand(commander=None) failed, but will still give up command "
-                f"by stopping the low-level heartbeat loop: {e!r}"
-            )
+            # All exceptions should be caught by_disable_devices_impl.
+            # This is a fail-safe, in case that does not happen.
+            self.log.exception(f"Bug: unexpected error in disable_devices: {e!r}")
+
+    async def _disable_devices_impl(self):
+        """Do the work for disable_devices."""
+
+        self.log.info("Disable devices")
+        try:
+            self.enable_devices_task.cancel()
+            self.camera_cable_wrap_follow_start_task.cancel()
+            self.camera_cable_wrap_follow_loop_task.cancel()
+            try:
+                await self.stop_camera_cable_wrap_following()
+            except Exception as e:
+                self.log.warning(
+                    "stop_camera_cable_wrap_following failed in disable_devices; "
+                    f"continuing: {e!r}"
+                )
+            if not self.connected or not self.has_command:
+                return
+            for command in [
+                commands.BothAxesStop(),
+                commands.CameraCableWrapStop(),
+                commands.AzimuthPower(on=False),
+                commands.ElevationPower(on=False),
+                commands.CameraCableWrapPower(on=False),
+            ]:
+                try:
+                    await self.retry_command(command)
+                except Exception as e:
+                    self.log.warning(
+                        f"Command {command} failed in disable_devices; "
+                        f"continuing: {e!r}"
+                    )
+
+            try:
+                self.log.info("Give up command of the mount.")
+                self.should_be_commander = False
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.NONE),
+                    do_lock=False,
+                )
+            except Exception as e:
+                self.log.warning(
+                    "AskForCommand(commander=None) failed in disable_devices; will still "
+                    f"give up command by stopping the low-level heartbeat loop: {e!r}"
+                )
         finally:
             self.llv_heartbeat_loop_task.cancel()
-            self.has_control = False
+            try:
+                await self.evt_elevationInPosition.set_write(inPosition=False)
+                await self.evt_azimuthInPosition.set_write(inPosition=False)
+            except Exception as e:
+                self.log.warning(
+                    "Could not write evt_elevationInPosition and/or evt_azimuthInPosition "
+                    f"in disable_devices: {e!r}"
+                )
 
     async def handle_summary_state(self):
         if self.summary_state == salobj.State.FAULT:
@@ -1447,6 +1490,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_commander(self, reply):
         """Handle a `ReplyId.COMMANDER` reply."""
         await self.evt_commander.set_write(commander=reply.actualCommander)
+        if self.should_be_commander and not self.has_command:
+            # Control has been taken away; go to fault state.
+            try:
+                commander = enums.Source(reply.actualCommander)
+            except ValueError:
+                commander = reply.actualCommander
+            log_msg = f"Control of the CSC was taken away; new commander={commander!r}"
+            self.log.error(log_msg)
+            await self.fault(code=enums.CscErrorCode.COMMAND_LOST, report=log_msg)
 
     async def handle_deployable_motion_state(self, reply, topic):
         """Handle a generic position event.
@@ -1808,10 +1860,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.clear_target()
 
     async def stop_camera_cable_wrap_following(self):
-        """Stop the camera cable wrap from following the rotator."""
+        """Stop the camera cable wrap from following the rotator.
+
+        This will only issue the CameraCableWrapStop command
+        if connected to and commanding the low-level controller.
+        """
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
-        await self.retry_command(commands.CameraCableWrapStop())
+        if self.connected and self.has_command:
+            await self.retry_command(commands.CameraCableWrapStop())
+        else:
+            self.log.info(
+                "stop_camera_cable_wrap_following not sending CameraCableWrapStop: "
+                f"{self.connected=} and {self.has_command=} not both true"
+            )
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
 
 
