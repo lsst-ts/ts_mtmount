@@ -14,7 +14,11 @@ v0.25.0
     * When going to fault, try to stay connected while giving up control.
       This will improve output if an axis goes to fault, and generally give more useful output while in fault state.
     * Retry low-level commands that stop motion and turn off subsystems.
+    * Fix a bug that prevented leaving enabled state if something went wrong while disabling (DM-37972).
     * Go to fault if a ``trackTarget`` command times out.
+    * Go to fault if the CSC loses command (e.g. if the EUI or HHD takes command).
+    * Do not try to disable TMA components if the CSC is no longer the commander.
+      This should reduce noise when going to disabled or fault.
     * Reduce latency in camera cable wrap following the rotator.
     * Improve logging in camera cable wrap following code.
     * Remove ts_xml 14 backwards compatibility code (DM-37114).
@@ -41,6 +45,9 @@ v0.25.0
     * Rename ``BaseMessage`` to ``BaseCommand``, since we no longer use it for replies.
     * Delete the ``Command`` class and use ``BaseCommand`` instead.
     * Delete the ``TimestampFieldInfo`` class; use ``FloatFieldInfo`` instead.
+
+* pre-commit: update black to 23.1.0, isort to 5.12.0, mypy to 1.0.0, and pre-commit-hooks to v4.4.0.
+* ``Jenkinsfile``: do not run as root.
 
 Requires:
 
