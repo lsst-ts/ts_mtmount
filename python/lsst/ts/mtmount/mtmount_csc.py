@@ -464,6 +464,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def begin_start(self, data):
         await super().begin_start(data)
+        await self.cmd_start.ack_in_progress(
+            data=data,
+            timeout=self.config.connection_timeout,
+        )
         self.connect_task.cancel()
         self.connect_task = asyncio.create_task(self.connect())
         await self.connect_task
