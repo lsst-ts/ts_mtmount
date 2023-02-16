@@ -1705,7 +1705,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         **reply_dict["parameters"],
                     )
                 except Exception as e:
-                    self.log.warning(f"Ignoring unparsable reply: {read_bytes}: {e!r}")
+                    self.log.exception(
+                        f"Ignoring unparsable reply: {read_bytes}: {e!r}"
+                    )
                     continue
 
                 handler = self.reply_dispatch.get(reply.id, None)
@@ -1713,7 +1715,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     try:
                         await handler(reply)
                     except Exception as e:
-                        self.log.error(
+                        self.log.exception(
                             f"Failed to handle reply: {reply}={read_bytes}: {e!r}"
                         )
                 else:
