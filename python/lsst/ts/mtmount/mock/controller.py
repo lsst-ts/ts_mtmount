@@ -1005,7 +1005,6 @@ class Controller:
         timeouts = []
         tasks = []
         for command in commands:
-
             command_func = self.command_dict.get(command.command_code)
             if command_func is None:
                 raise RuntimeError(f"command {command} is not supported")

@@ -765,7 +765,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_both_axes_move(self):
         """Test the BothAxesMove command and InPosition replies."""
         async with self.make_controller():
-
             n_in_position = len(self.controller.in_position_dict)
             n_motion_controller_state = len(
                 self.controller.motion_controller_state_dict

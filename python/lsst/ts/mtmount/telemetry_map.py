@@ -618,7 +618,7 @@ for topic_id, topic_data in RAW_TELEMETRY_MAP.items():
     sal_topic_name = topic_data[0]
     field_len_dict = topic_data[1]
     field_extraction_func_dict = dict()
-    for (field_name, num_elements) in field_len_dict.items():
+    for field_name, num_elements in field_len_dict.items():
         try:
             if num_elements == 1:
                 field_extraction_func = ScalarTelemetryFieldFunctor(
