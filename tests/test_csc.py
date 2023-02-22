@@ -833,6 +833,24 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             with salobj.assertRaisesAckError(ack=salobj.SalRetCode.CMD_FAILED):
                 await task
 
+    async def test_lose_command(self):
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.assert_next_summary_state(salobj.State.ENABLED)
+            await self.assert_next_sample(
+                topic=self.remote.evt_commander, commander=mtmount.Source.NONE
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_commander, commander=mtmount.Source.CSC
+            )
+            # Change the commander to something other than CSC.
+            # The CSC should transition to FAULT state.
+            self.mock_controller.commander = mtmount.Source.EUI
+            await self.mock_controller.write_commander()
+            await self.assert_next_sample(
+                topic=self.remote.evt_commander, commander=mtmount.Source.EUI
+            )
+            await self.assert_next_summary_state(salobj.State.FAULT)
+
     async def test_unmocked_events(self):
         """Test low-level events not output by the mock controller
         (other than output the STATE_INFO command).
