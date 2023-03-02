@@ -1369,6 +1369,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_startTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
+    async def fault(self, code, report, traceback=""):
+        self.should_be_commander = False
+        await super().fault(code=code, report=report, traceback=traceback)
+
     async def handle_available_settings(self, reply):
         """Handle a `ReplyId.AVAILABLE_SETTINGS` reply."""
         await self.evt_availableSettings.set_write(

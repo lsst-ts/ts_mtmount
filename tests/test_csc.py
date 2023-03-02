@@ -238,6 +238,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     device.alarm_on = True
                     await self.assert_next_summary_state(salobj.State.FAULT)
                     assert self.csc.connected
+                    assert not self.csc.should_be_commander
 
     async def test_bin_script(self):
         await self.check_bin_script(
@@ -260,6 +261,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_summary_state(salobj.State.ENABLED)
             await self.mock_controller.close()
             await self.assert_next_summary_state(salobj.State.FAULT)
+            assert not self.csc.connected
+            assert not self.csc.should_be_commander
 
     async def test_initial_state(self):
         async with self.make_csc(
@@ -850,6 +853,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 topic=self.remote.evt_commander, commander=mtmount.Source.EUI
             )
             await self.assert_next_summary_state(salobj.State.FAULT)
+            assert self.csc.connected
+            assert not self.csc.should_be_commander
 
     async def test_unmocked_events(self):
         """Test low-level events not output by the mock controller
@@ -1247,6 +1252,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 self.remote.evt_telemetryConnected, connected=False
             )
             await self.assert_next_summary_state(salobj.State.FAULT)
+            assert self.csc.connected
+            assert not self.csc.should_be_commander
 
     async def test_tracking(self):
         async with salobj.Controller(
