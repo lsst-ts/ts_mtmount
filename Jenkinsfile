@@ -14,22 +14,21 @@ properties([
 ])
 pipeline {
     agent {
-        // Run as root to avoid permission issues when creating files.
         // To run on a specific node, e.g. for a specific architecture, add `label '...'`.
         docker {
             alwaysPull true
             image 'lsstts/develop-env:develop'
-            args "-u root --entrypoint=''"
+            args "--entrypoint=''"
         }
     }
     environment {
         // Python module name.
-        MODULE_NAME = "lsst.ts.mtmount"
+        MODULE_NAME = 'lsst.ts.mtmount'
         // Space-separated list of SAL component names for all IDL files required.
-        IDL_NAMES = "MTMount MTRotator"
+        IDL_NAMES = 'MTMount MTRotator'
         // Product name for documentation upload; the associated
         // documentation site is `https://{DOC_PRODUCT_NAME}.lsst.io`.
-        DOC_PRODUCT_NAME = "ts-mtmount"
+        DOC_PRODUCT_NAME = 'ts-mtmount'
 
         WORK_BRANCHES = "${GIT_BRANCH} ${CHANGE_BRANCH} develop"
         LSST_IO_CREDS = credentials('lsst-io')
@@ -67,15 +66,15 @@ pipeline {
 
                         # Update additional required packages
                         cd /home/saluser/repos/ts_config_mttcs
-                        /home/saluser/.checkout_repo.sh ${work_branches}
+                        /home/saluser/.checkout_repo.sh ${WORK_BRANCHES}
                         git pull
 
                         cd /home/saluser/repos/ts_simactuators
-                        /home/saluser/.checkout_repo.sh ${work_branches}
+                        /home/saluser/.checkout_repo.sh ${WORK_BRANCHES}
                         git pull
 
                         cd /home/saluser/repos/ts_tcpip
-                        /home/saluser/.checkout_repo.sh ${work_branches}
+                        /home/saluser/.checkout_repo.sh ${WORK_BRANCHES}
                         git pull
 
                         # Make IDL files
@@ -123,11 +122,6 @@ pipeline {
     }
     post {
         always {
-            // Change ownership of the workspace to Jenkins for clean up.
-            withEnv(["HOME=${env.WORKSPACE}"]) {
-                sh 'chown -R 1003:1003 ${HOME}/'
-            }
-
             // The path of xml needed by JUnit is relative to the workspace.
             junit 'jenkinsReport/*.xml'
 

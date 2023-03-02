@@ -54,11 +54,14 @@ UNSUPPORTED_COMMAND_CODE = (
 )
 
 
-class UnsupportedCommand(mtmount.commands.Command):
+class UnsupportedCommand(mtmount.base_command.BaseCommand):
     field_infos = mtmount.commands.make_command_field_infos(UNSUPPORTED_COMMAND_CODE)
 
 
 class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.sequence_id_generator = utils.index_generator()
+
     @contextlib.asynccontextmanager
     async def make_controller(self, commander=mtmount.Source.CSC):
         """Make a mock controller as self.controller.
@@ -366,6 +369,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         ----------
         command : `mtmount.Command`
             Command to send.
+            This method sets the ``sequence_id`` and ``timestamp`` fields.
         use_read_loop : `bool`
             If True then send the command via TCP/IP.
             If False then call self.controller.handle_command directly.
@@ -442,6 +446,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
         if flush:
             await self.flush_replies()
+
+        command.sequence_id = next(self.sequence_id_generator)
+        command.timestamp = utils.current_tai()
         if use_read_loop:
             self.command_writer.write(command.encode())
             await self.command_writer.drain()
@@ -758,7 +765,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_both_axes_move(self):
         """Test the BothAxesMove command and InPosition replies."""
         async with self.make_controller():
-
             n_in_position = len(self.controller.in_position_dict)
             n_motion_controller_state = len(
                 self.controller.motion_controller_state_dict

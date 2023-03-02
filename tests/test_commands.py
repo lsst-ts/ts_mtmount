@@ -27,34 +27,34 @@ from lsst.ts import mtmount
 random.seed(314)
 
 
-class MessageTestCase(unittest.TestCase):
+class CommandTestCase(unittest.TestCase):
     def setUp(self):
         self.name = "otho"
         self.doc = f"a doc string for the field named {self.name}"
 
-    def check_round_trip(self, message):
-        """Check that Message.str_fields and <message_type>.from_str_fields
+    def check_round_trip(self, command):
+        """Check that Command.str_fields and <command_type>.from_str_fields
         are inverses.
 
-        Convert a message to str fields, then back to a message
+        Convert a command to str fields, then back to a command
         and check that it matches the original.
         """
-        str_fields = message.str_fields()
-        message_round_trip = type(message).from_str_fields(str_fields)
-        assert message == message_round_trip
+        str_fields = command.str_fields()
+        command_round_trip = type(command).from_str_fields(str_fields)
+        assert command == command_round_trip
 
-    def check_message_type(self, message_type):
-        """For a given message type: make several random messages and call
+    def check_command_type(self, command_type):
+        """For a given command type: make several random commands and call
         check_round_trip.
         """
         for i in range(10):
-            message = mtmount.testutils.make_random_message(message_type)
-            self.check_round_trip(message)
+            command = mtmount.testutils.make_random_command(command_type)
+            self.check_round_trip(command)
 
-            message2 = mtmount.testutils.make_random_message_with_defaults(message_type)
-            self.check_round_trip(message2)
+            command2 = mtmount.testutils.make_random_command_with_defaults(command_type)
+            self.check_round_trip(command2)
 
     def test_commands(self):
         for command_type in mtmount.commands.Commands:
             with self.subTest(command_type=command_type.__name__):
-                self.check_message_type(command_type)
+                self.check_command_type(command_type)

@@ -237,6 +237,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     device.power_on = False
                     device.alarm_on = True
                     await self.assert_next_summary_state(salobj.State.FAULT)
+                    assert self.csc.connected
+                    assert not self.csc.should_be_commander
 
     async def test_bin_script(self):
         await self.check_bin_script(
@@ -259,6 +261,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_summary_state(salobj.State.ENABLED)
             await self.mock_controller.close()
             await self.assert_next_summary_state(salobj.State.FAULT)
+            assert not self.csc.connected
+            assert not self.csc.should_be_commander
 
     async def test_initial_state(self):
         async with self.make_csc(
@@ -332,7 +336,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]
             await self.assert_next_sample(
                 topic=self.remote.evt_cameraCableWrapControllerSettings,
-                # TODO DM-37114: enable these once XML 14.1 is deployed
+                # TODO DM-37910: uncomment once ts_xml 16 is deployed:
                 # minL1LimitEnabled=True,
                 # maxL1LimitEnabled=True,
                 # minL2LimitEnabled=True,
@@ -832,6 +836,26 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             with salobj.assertRaisesAckError(ack=salobj.SalRetCode.CMD_FAILED):
                 await task
 
+    async def test_lose_command(self):
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.assert_next_summary_state(salobj.State.ENABLED)
+            await self.assert_next_sample(
+                topic=self.remote.evt_commander, commander=mtmount.Source.NONE
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_commander, commander=mtmount.Source.CSC
+            )
+            # Change the commander to something other than CSC.
+            # The CSC should transition to FAULT state.
+            self.mock_controller.commander = mtmount.Source.EUI
+            await self.mock_controller.write_commander()
+            await self.assert_next_sample(
+                topic=self.remote.evt_commander, commander=mtmount.Source.EUI
+            )
+            await self.assert_next_summary_state(salobj.State.FAULT)
+            assert self.csc.connected
+            assert not self.csc.should_be_commander
+
     async def test_unmocked_events(self):
         """Test low-level events not output by the mock controller
         (other than output the STATE_INFO command).
@@ -1228,6 +1252,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 self.remote.evt_telemetryConnected, connected=False
             )
             await self.assert_next_summary_state(salobj.State.FAULT)
+            assert self.csc.connected
+            assert not self.csc.should_be_commander
 
     async def test_tracking(self):
         async with salobj.Controller(

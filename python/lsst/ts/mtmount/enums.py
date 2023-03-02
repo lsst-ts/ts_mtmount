@@ -213,6 +213,9 @@ class CscErrorCode(enum.IntEnum):
     CONNECTION_LOST = 2  # Lost connection to low-level controller
     TELEMETRY_CLIENT_ERROR = 3  # Telemetry client failed
     AXIS_FAULT = 4  # One or more axes faulted
+    TRACK_TARGET_TIMED_OUT = 5  # A main axes tracking command timed out
+    DISABLE_FAILED = 6  # Could not disable the CSC
+    COMMAND_LOST = 7  # Control taken away from the CSC by the EUI or HHD
     MOCK_CONTROLLER_ERROR = 98
     INTERNAL_ERROR = 99
 
@@ -280,11 +283,8 @@ class ReplyId(enum.IntEnum):
 
 
 class Source(enum.IntEnum):
-    """Values for the ``source`` field of a message and AskForCommand command.
-
-    Note: these values may change in Tekniker's upgrade.
-    1 was originally TCS (Tekniker's CSC).
-    """
+    """Values for the ``source`` field of a message and the AskForCommand
+    command."""
 
     NONE = 0
     CSC = 1
