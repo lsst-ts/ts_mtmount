@@ -441,7 +441,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 raise salobj.ExpectedError(
                     "Timed out waiting for the low-level commander event"
                 )
-            self.log.info("Got low level commander event in {i * 0.1} seconds")
+            self.log.info(f"Got low level commander event in {i * 0.1} seconds")
             self.llv_heartbeat_loop_task.cancel()
             self.llv_heartbeat_loop_task = asyncio.create_task(
                 self.llv_heartbeat_loop()
