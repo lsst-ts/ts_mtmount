@@ -109,7 +109,9 @@ class BaseDevice:
         # Iterate over commands that this CSC supports,
         # which is probably not all commands in `CommandCode`.
         for command_code in commands.CommandDict:
-            if command_code.name.startswith(prefix):
+            if command_code.name.startswith(
+                prefix
+            ) and not command_code.name.startswith(prefix + "DRIVES_THERMAL_"):
                 command_name_lower = command_code.name[prefix_len:].lower()
                 do_method = getattr(self, f"do_{command_name_lower}")
                 if command_code in self.controller.command_dict:
