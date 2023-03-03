@@ -25,6 +25,9 @@ __all__ = [
     "AskForCommand",
     "AzimuthDriveEnable",
     "AzimuthDriveReset",
+    "AzimuthDrivesThermalControlMode",
+    "AzimuthDrivesThermalPower",
+    "AzimuthDrivesThermalResetAlarm",
     "AzimuthEnableTracking",
     "AzimuthHome",
     "AzimuthMove",
@@ -39,6 +42,9 @@ __all__ = [
     "BothAxesResetAlarm",
     "BothAxesStop",
     "BothAxesTrackTarget",
+    "Cabinet0101ThermalControlMode",
+    "Cabinet0101ThermalPower",
+    "Cabinet0101ThermalResetAlarm",
     "CameraCableWrapDriveEnable",
     "CameraCableWrapDriveReset",
     "CameraCableWrapEnableTracking",
@@ -48,9 +54,11 @@ __all__ = [
     "CameraCableWrapStop",
     "CameraCableWrapTrackTarget",
     "Disable",
-    "Enable",
     "ElevationDriveEnable",
     "ElevationDriveReset",
+    "ElevationDrivesThermalControlMode",
+    "ElevationDrivesThermalPower",
+    "ElevationDrivesThermalResetAlarm",
     "ElevationEnableTracking",
     "ElevationHome",
     "ElevationMove",
@@ -58,22 +66,28 @@ __all__ = [
     "ElevationResetAlarm",
     "ElevationStop",
     "ElevationTrackTarget",
+    "Enable",
     "GetActualSettings",
     "Heartbeat",
     "MainAxesPowerSupplyPower",
     "MainAxesPowerSupplyResetAlarm",
     "MainCabinetThermalResetAlarm",
-    "MirrorCoverSystemDeploy",
-    "MirrorCoverSystemRetract",
+    "MainCabinetThermalTrackAmbient",
     "MirrorCoverLocksMoveAll",
     "MirrorCoverLocksPower",
     "MirrorCoverLocksResetAlarm",
     "MirrorCoverLocksStop",
     "MirrorCoversDeploy",
-    "MirrorCoversRetract",
     "MirrorCoversPower",
     "MirrorCoversResetAlarm",
+    "MirrorCoversRetract",
     "MirrorCoversStop",
+    "MirrorCoverSystemDeploy",
+    "MirrorCoverSystemRetract",
+    "ModbusCabinetsThermalFanPower",
+    "ModbusCabinetsThermalResetAlarm",
+    "ModbusCabinetsThermalSetpoint",
+    "OilSupplySystemCabinetsThermalSetpoint",
     "OilSupplySystemPower",
     "OilSupplySystemPowerCirculationPump",
     "OilSupplySystemPowerCooling",
@@ -140,6 +154,18 @@ def make_command_field_infos(command_code, parameters=()):
     ) + tuple(parameters)
 
 
+_DriveParameter = (
+    field_info.IntFieldInfo(
+        name="drive", doc="Drive index: one of -1 (all), ?", default=-1
+    ),
+)
+
+_ItemParameter = (
+    field_info.IntFieldInfo(
+        name="drive", doc="Items to control: one of -1 (all), ?", default=-1
+    ),
+)
+
 _TrackingParameters = (
     field_info.FloatFieldInfo(name="position", doc="Target position (deg) at tai"),
     field_info.FloatFieldInfo(name="velocity", doc="Target velocity (deg/sec) at tai"),
@@ -168,7 +194,7 @@ _MoveParameters = (
     ),
 )
 
-_OnOffParameters = (
+_OnOffParameter = (
     field_info.BoolFieldInfo(name="on", doc="Turn on (True) or off (False)"),
 )
 
@@ -205,31 +231,57 @@ class AskForCommand(BaseCommand):
 class AzimuthDriveEnable(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_DRIVE_ENABLE,
-        (
-            (
-                field_info.IntFieldInfo(
-                    name="drive", doc="Drive index: one of -1 (all), ?", default=-1
-                ),
-            )
-            + _OnOffParameters
-        ),
+        _DriveParameter + _OnOffParameter,
     )
 
 
 class AzimuthDriveReset(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_DRIVE_RESET,
-        (
-            field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), ?", default=-1
+        _DriveParameter,
+    )
+
+
+class AzimuthDrivesThermalPower(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.AZIMUTH_DRIVES_THERMAL_POWER,
+        _ItemParameter + _OnOffParameter,
+    )
+
+
+class AzimuthDrivesThermalControlMode(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.AZIMUTH_DRIVES_THERMAL_CONTROL_MODE,
+        _ItemParameter
+        + (
+            field_info.EnumFieldInfo(
+                name="mode",
+                doc="Control mode",
+                dtype=enums.ThermalMode,
+                default=enums.ThermalMode.TRACK_SETPOINT,
+            ),
+            field_info.FloatFieldInfo(
+                name="setpoint",
+                doc="""Set point; the meaning depends on the mode:
+• TRACK_AMBIENT: ignored
+• TRACK_SETPOINT: the desired temperature (C)
+• MANAGE_VALVE_SETPOINT: valve setpoint (%)
+• MANAGE_AUTO_TUNE: start=1, stop=0""",
             ),
         ),
     )
 
 
+class AzimuthDrivesThermalResetAlarm(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.AZIMUTH_DRIVES_THERMAL_RESET_ALARM,
+        _ItemParameter,
+    )
+
+
 class AzimuthEnableTracking(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_ENABLE_TRACKING, _OnOffParameters
+        enums.CommandCode.AZIMUTH_ENABLE_TRACKING, _OnOffParameter
     )
 
 
@@ -245,7 +297,7 @@ class AzimuthMove(BaseCommand):
 
 class AzimuthPower(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.AZIMUTH_POWER, _OnOffParameters
+        enums.CommandCode.AZIMUTH_POWER, _OnOffParameter
     )
 
 
@@ -315,7 +367,7 @@ class BothAxesMove(BaseCommand):
 
 class BothAxesPower(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.BOTH_AXES_POWER, _OnOffParameters
+        enums.CommandCode.BOTH_AXES_POWER, _OnOffParameter
     )
 
 
@@ -357,6 +409,43 @@ class BothAxesTrackTarget(BaseCommand):
     )
 
 
+class Cabinet0101ThermalControlMode(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.CABINET_0101_THERMAL_CONTROL_MODE,
+        _ItemParameter
+        + (
+            field_info.EnumFieldInfo(
+                name="mode",
+                doc="Control mode",
+                dtype=enums.ThermalMode,
+                default=enums.ThermalMode.TRACK_SETPOINT,
+            ),
+            field_info.FloatFieldInfo(
+                name="setpoint",
+                doc="""Set point; the meaning depends on the mode:
+• TRACK_AMBIENT: ignored
+• TRACK_SETPOINT: the desired temperature (C)
+• MANAGE_VALVE_SETPOINT: valve setpoint (%)
+• MANAGE_AUTO_TUNE: start=1, stop=0""",
+            ),
+        ),
+    )
+
+
+class Cabinet0101ThermalPower(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.CABINET_0101_THERMAL_POWER,
+        _ItemParameter + _OnOffParameter,
+    )
+
+
+class Cabinet0101ThermalResetAlarm(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.CABINET_0101_THERMAL_RESET_ALARM,
+        _ItemParameter,
+    )
+
+
 class CameraCableWrapDriveEnable(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_ENABLE,
@@ -366,20 +455,20 @@ class CameraCableWrapDriveEnable(BaseCommand):
                 doc="Drive index; just one drive can be enabled, so enabling one disables the other",
             ),
         )
-        + _OnOffParameters,
+        + _OnOffParameter,
     )
 
 
 class CameraCableWrapDriveReset(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.CAMERA_CABLE_WRAP_DRIVE_RESET,
-        (field_info.IntFieldInfo(name="drive", doc="Drive index; one of -1=all, ?"),),
+        _DriveParameter,
     )
 
 
 class CameraCableWrapEnableTracking(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING, _OnOffParameters
+        enums.CommandCode.CAMERA_CABLE_WRAP_ENABLE_TRACKING, _OnOffParameter
     )
 
 
@@ -391,7 +480,7 @@ class CameraCableWrapMove(BaseCommand):
 
 class CameraCableWrapPower(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.CAMERA_CABLE_WRAP_POWER, _OnOffParameters
+        enums.CommandCode.CAMERA_CABLE_WRAP_POWER, _OnOffParameter
     )
 
 
@@ -422,31 +511,57 @@ class Enable(BaseCommand):
 class ElevationDriveEnable(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_DRIVE_ENABLE,
-        (
-            (
-                field_info.IntFieldInfo(
-                    name="drive", doc="Drive index: one of -1 (all), ?", default=-1
-                ),
-            )
-            + _OnOffParameters
-        ),
+        _DriveParameter + _OnOffParameter,
     )
 
 
 class ElevationDriveReset(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.ELEVATION_DRIVE_RESET,
-        (
-            field_info.IntFieldInfo(
-                name="drive", doc="Drive index: one of -1 (all), ?", default=-1
+        _DriveParameter,
+    )
+
+
+class ElevationDrivesThermalPower(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_DRIVES_THERMAL_POWER,
+        _ItemParameter + _OnOffParameter,
+    )
+
+
+class ElevationDrivesThermalControlMode(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_DRIVES_THERMAL_CONTROL_MODE,
+        _ItemParameter
+        + (
+            field_info.EnumFieldInfo(
+                name="mode",
+                doc="Control mode",
+                dtype=enums.ThermalMode,
+                default=enums.ThermalMode.TRACK_SETPOINT,
+            ),
+            field_info.FloatFieldInfo(
+                name="setpoint",
+                doc="""Set point; the meaning depends on the mode:
+• TRACK_AMBIENT: ignored
+• TRACK_SETPOINT: the desired temperature (C)
+• MANAGE_VALVE_SETPOINT: valve setpoint (%)
+• MANAGE_AUTO_TUNE: start=1, stop=0""",
             ),
         ),
     )
 
 
+class ElevationDrivesThermalResetAlarm(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.ELEVATION_DRIVES_THERMAL_RESET_ALARM,
+        _ItemParameter,
+    )
+
+
 class ElevationEnableTracking(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_ENABLE_TRACKING, _OnOffParameters
+        enums.CommandCode.ELEVATION_ENABLE_TRACKING, _OnOffParameter
     )
 
 
@@ -462,7 +577,7 @@ class ElevationMove(BaseCommand):
 
 class ElevationPower(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.ELEVATION_POWER, _OnOffParameters
+        enums.CommandCode.ELEVATION_POWER, _OnOffParameter
     )
 
 
@@ -492,7 +607,7 @@ class Heartbeat(BaseCommand):
 
 class MainAxesPowerSupplyPower(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MAIN_AXES_POWER_SUPPLY_POWER, _OnOffParameters
+        enums.CommandCode.MAIN_AXES_POWER_SUPPLY_POWER, _OnOffParameter
     )
 
 
@@ -505,6 +620,22 @@ class MainAxesPowerSupplyResetAlarm(BaseCommand):
 class MainCabinetThermalResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.MAIN_CABINET_THERMAL_RESET_ALARM
+    )
+
+
+class MainCabinetThermalTrackAmbient(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MAIN_CABINET_THERMAL_TRACK_AMBIENT,
+        (
+            field_info.BoolFieldInfo(
+                name="track_ambient",
+                doc="What to track: ambient if true, setpoint if false",
+            ),
+            field_info.FloatFieldInfo(
+                name="setpoint",
+                doc="Temperature setpoint (C); ignored if track is false",
+            ),
+        ),
     )
 
 
@@ -548,7 +679,7 @@ class MirrorCoverLocksPower(BaseCommand):
                 name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
         )
-        + _OnOffParameters,
+        + _OnOffParameter,
     )
 
 
@@ -612,7 +743,7 @@ class MirrorCoversPower(BaseCommand):
                 name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
             ),
         )
-        + _OnOffParameters,
+        + _OnOffParameter,
     )
 
 
@@ -638,31 +769,68 @@ class MirrorCoversStop(BaseCommand):
     )
 
 
+class ModbusCabinetsThermalFanPower(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MODBUS_CABINETS_THERMAL_FAN_POWER,
+        _ItemParameter + _OnOffParameter,
+    )
+
+
+class ModbusCabinetsThermalResetAlarm(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MODBUS_CABINETS_THERMAL_RESET_ALARM,
+        (
+            field_info.IntFieldInfo(
+                name="cabinet", doc="Cabinet index: one of -1 (all), ?", default=-1
+            ),
+        ),
+    )
+
+
+class ModbusCabinetsThermalSetpoint(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MODBUS_CABINETS_THERMAL_SETPOINT,
+        (
+            field_info.IntFieldInfo(
+                name="cabinet", doc="Cabinet index: one of -1 (all), ?", default=-1
+            ),
+            field_info.FloatFieldInfo(name="setpoint", doc="Temperature setpoint (C)"),
+        ),
+    )
+
+
+class OilSupplySystemCabinetsThermalSetpoint(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.OIL_SUPPLY_SYSTEM_CABINETS_THERMAL_SETPOINT,
+        (field_info.FloatFieldInfo(name="setpoint", doc="Temperature setpoint (C)"),),
+    )
+
+
 class OilSupplySystemPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER,
-        _OnOffParameters,
+        _OnOffParameter,
     )
 
 
 class OilSupplySystemPowerCirculationPump(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_CIRCULATION_PUMP,
-        _OnOffParameters,
+        _OnOffParameter,
     )
 
 
 class OilSupplySystemPowerCooling(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_COOLING,
-        _OnOffParameters,
+        _OnOffParameter,
     )
 
 
 class OilSupplySystemPowerMainPump(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.OIL_SUPPLY_SYSTEM_POWER_MAIN_PUMP,
-        _OnOffParameters,
+        _OnOffParameter,
     )
 
 
@@ -704,7 +872,7 @@ class StateInfo(BaseCommand):
 class TopEndChillerPower(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.TOP_END_CHILLER_POWER,
-        _OnOffParameters,
+        _OnOffParameter,
     )
 
 
@@ -717,7 +885,13 @@ class TopEndChillerResetAlarm(BaseCommand):
 class TopEndChillerTrackAmbient(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.TOP_END_CHILLER_TRACK_AMBIENT,
-        _OnOffParameters + (field_info.FloatFieldInfo(name="temperature", doc="???"),),
+        (
+            field_info.BoolFieldInfo(
+                name="track_ambient",
+                doc="What to track: ambient if true, setpoint if false",
+            ),
+            field_info.FloatFieldInfo(name="setpoint", doc="desired setpoint (C)"),
+        ),
     )
 
 
@@ -731,6 +905,9 @@ Commands = (
     AzimuthPower,
     AzimuthResetAlarm,
     AzimuthStop,
+    AzimuthDrivesThermalPower,
+    AzimuthDrivesThermalControlMode,
+    AzimuthDrivesThermalResetAlarm,
     AzimuthTrackTarget,
     BothAxesEnableTracking,
     BothAxesHome,
@@ -739,6 +916,9 @@ Commands = (
     BothAxesResetAlarm,
     BothAxesStop,
     BothAxesTrackTarget,
+    Cabinet0101ThermalControlMode,
+    Cabinet0101ThermalPower,
+    Cabinet0101ThermalResetAlarm,
     CameraCableWrapDriveEnable,
     CameraCableWrapDriveReset,
     CameraCableWrapEnableTracking,
@@ -757,12 +937,16 @@ Commands = (
     ElevationPower,
     ElevationResetAlarm,
     ElevationStop,
+    ElevationDrivesThermalPower,
+    ElevationDrivesThermalControlMode,
+    ElevationDrivesThermalResetAlarm,
     ElevationTrackTarget,
     GetActualSettings,
     Heartbeat,
     MainAxesPowerSupplyPower,
     MainAxesPowerSupplyResetAlarm,
     MainCabinetThermalResetAlarm,
+    MainCabinetThermalTrackAmbient,
     MirrorCoverSystemDeploy,
     MirrorCoverSystemRetract,
     MirrorCoverLocksMoveAll,
@@ -774,6 +958,10 @@ Commands = (
     MirrorCoversPower,
     MirrorCoversResetAlarm,
     MirrorCoversStop,
+    ModbusCabinetsThermalFanPower,
+    ModbusCabinetsThermalResetAlarm,
+    ModbusCabinetsThermalSetpoint,
+    OilSupplySystemCabinetsThermalSetpoint,
     OilSupplySystemPower,
     OilSupplySystemPowerCirculationPump,
     OilSupplySystemPowerCooling,
