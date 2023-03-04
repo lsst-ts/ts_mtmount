@@ -25,6 +25,7 @@ __all__ = [
     "EnabledState",
     "ReplyId",
     "Source",
+    "ThermalMode",
 ]
 
 import enum
@@ -150,7 +151,7 @@ class CommandCode(enum.IntEnum):
     DEPLOYABLE_PLATFORMS_LOCK_EXTENSION = 1206
     DEPLOYABLE_PLATFORMS_EXTEND_RETRACT = 1207
     # Main cabinet temperature controller.
-    MAIN_CABINET_THERMAL_TRACK_TEMPERATURE = 1301
+    MAIN_CABINET_THERMAL_TRACK_AMBIENT = 1301
     MAIN_CABINET_THERMAL_RESET_ALARM = 1302
     MAIN_CABINET_THERMAL_SET_TEMPERATURE = 1303
     LOCKING_PINS_POWER = 1401
