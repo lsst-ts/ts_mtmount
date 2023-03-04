@@ -28,7 +28,6 @@ import pathlib
 import time
 import unittest
 
-import numpy.testing
 import pytest
 from lsst.ts import mtmount, salobj, utils
 from lsst.ts.idl.enums.MTMount import (
@@ -37,7 +36,9 @@ from lsst.ts.idl.enums.MTMount import (
     ElevationLockingPinMotionState,
     PowerState,
     System,
+    ThermalCommandState,
 )
+from lsst.ts.mtmount.mtmount_csc import SET_THERMAL_FIELD_SYSTEM_ID_DICT
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
 
@@ -436,9 +437,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             expected_on_topic_attr_name = {
                 f"evt_{prefix}SystemState"
                 for prefix in (
-                    "azimuthDrivesThermal",
-                    "elevationDrivesThermal",
-                    "az0101CabinetThermal",
                     "modbusTemperatureControllers",
                     "mainCabinetThermal",
                 )
@@ -466,24 +464,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 if state_info.num_thermal > 0:
                     nskip += 1
                     if state_info.num_thermal == 1:
-                        system_state_kwargs["trackAmbient"] = True
+                        system_state_kwargs["trackAmbient"] = False
                     else:
                         system_state_kwargs["trackAmbient"] = [
-                            True
+                            False
                         ] * state_info.num_thermal
                 for i in range(nskip):
                     await topic.next(flush=False, timeout=STD_TIMEOUT)
-                data = await self.assert_next_sample(topic, **system_state_kwargs)
-                if state_info.num_thermal == 1:
-                    assert data.setTemperature == pytest.approx(
-                        self.mock_controller.ambient_temperature
-                    )
-                elif state_info.num_thermal > 1:
-                    numpy.testing.assert_allclose(
-                        data.setTemperature,
-                        [self.mock_controller.ambient_temperature]
-                        * state_info.num_thermal,
-                    )
 
             for topic in (
                 self.remote.evt_mirrorCoverLocksMotionState,
@@ -1260,6 +1247,55 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
             await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
             await self.assert_axes_in_position(elevation=False, azimuth=False)
+
+    async def test_set_thermal(self):
+        system_id_thermal_prefix_dict = {
+            value: key for key, value in SET_THERMAL_FIELD_SYSTEM_ID_DICT.items()
+        }
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            thermal_devices = {
+                system_id: self.mock_controller.device_dict[system_id]
+                for system_id in self.mock_controller.chiller_state_nelts
+            }
+            for device in thermal_devices.values():
+                assert device.track_setpoint
+                assert device.setpoint == 0
+                assert device.ambient_setpoint == 0
+                assert device.temperature == pytest.approx(
+                    0, abs=device.temperature_slop
+                )
+
+            # MTMountCsc cannot command the TEC yet.
+            with salobj.assertRaisesAckError():
+                for state in (ThermalCommandState.OFF, ThermalCommandState.ON):
+                    await self.remote.cmd_setThermal.set_start(
+                        topEndChillerState=state, timeout=STD_TIMEOUT
+                    )
+
+            for system_id, device in thermal_devices.items():
+                if system_id == System.TOP_END_CHILLER:
+                    continue  # already handled
+
+                field_prefix = system_id_thermal_prefix_dict[system_id]
+                device = thermal_devices[system_id]
+
+                # Use an arbitrary setpoint that is different for each system
+                setpoint = -5.3 + system_id.value
+                kwargs = {
+                    f"{field_prefix}State": ThermalCommandState.ON,
+                    f"{field_prefix}Setpoint": setpoint,
+                }
+                print(f"{kwargs=}")
+                await self.remote.cmd_setThermal.set_start(
+                    **kwargs, timeout=STD_TIMEOUT
+                )
+                assert device.track_setpoint
+                assert not device.track_ambient
+                assert device.setpoint == setpoint
+                assert device.temperature == pytest.approx(
+                    setpoint, abs=device.temperature_slop
+                )
 
     async def test_slowdown_detection(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):
