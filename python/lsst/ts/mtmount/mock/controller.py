@@ -172,7 +172,7 @@ class Controller:
         System.OIL_SUPPLY_SYSTEM: 3,
         System.AZIMUTH_DRIVES_THERMAL: 4,
         System.ELEVATION_DRIVES_THERMAL: 2,
-        System.AZ0101_CABINET_THERMAL: 1,
+        System.CABINET_0101_THERMAL: 1,
         System.MODBUS_TEMPERATURE_CONTROLLERS: 5,
         System.TOP_END_CHILLER: 1,
         System.MAIN_CABINET_THERMAL: 1,
@@ -220,7 +220,7 @@ class Controller:
         System.DEPLOYABLE_PLATFORMS: 2,
         System.AZIMUTH_DRIVES_THERMAL: 4,
         System.ELEVATION_DRIVES_THERMAL: 2,
-        System.AZ0101_CABINET_THERMAL: 1,
+        System.CABINET_0101_THERMAL: 1,
         System.MODBUS_TEMPERATURE_CONTROLLERS: 5,
         System.MAIN_CABINET_THERMAL: 1,
     }
@@ -1674,7 +1674,7 @@ class Controller:
             (System.DEPLOYABLE_PLATFORMS, PowerState.OFF),
             (System.AZIMUTH_DRIVES_THERMAL, PowerState.ON),
             (System.ELEVATION_DRIVES_THERMAL, PowerState.ON),
-            (System.AZ0101_CABINET_THERMAL, PowerState.ON),
+            (System.CABINET_0101_THERMAL, PowerState.ON),
             (System.MODBUS_TEMPERATURE_CONTROLLERS, PowerState.ON),
             (System.MAIN_CABINET_THERMAL, PowerState.ON),
         ):

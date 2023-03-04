@@ -1334,7 +1334,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     if reply.system in {
                         System.AZIMUTH_DRIVES_THERMAL,
                         System.ELEVATION_DRIVES_THERMAL,
-                        System.AZ0101_CABINET_THERMAL,
+                        System.CABINET_0101_THERMAL,
                         System.MODBUS_TEMPERATURE_CONTROLLERS,
                         System.MAIN_CABINET_THERMAL,
                     }:
