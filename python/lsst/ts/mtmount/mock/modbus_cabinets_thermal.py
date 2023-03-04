@@ -19,18 +19,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["TopEndChillerDevice"]
+__all__ = ["ModbusCabinetsThermalDevice"]
 
 from lsst.ts.idl.enums.MTMount import System
 
-from ..enums import ThermalMode
 from .base_thermal_device import BaseThermalDevice
 
 
-class TopEndChillerDevice(BaseThermalDevice):
-    """Top end chiller.
+class ModbusCabinetsThermalDevice(BaseThermalDevice):
+    """Mock the modbus cabinets thermal controller (which is always on).
 
-    This is a guess, since the command set and initial state are unknown.
+    Limitations:
+
+    * Ignores the "item" command parameter; it always controls all items.
+    * Instantly adjusts the actual temperature to almost match the setpoint.
 
     Parameters
     ----------
@@ -39,16 +41,24 @@ class TopEndChillerDevice(BaseThermalDevice):
     """
 
     def __init__(self, controller):
-        super().__init__(controller=controller, system_id=System.TOP_END_CHILLER)
-
-    def do_track_ambient(self, command):
-        self.assert_on()
-        self.thermal_mode = (
-            ThermalMode.TRACK_AMBIENT
-            if command.track_ambient
-            else ThermalMode.TRACK_SETPOINT
+        self.fans_on = False
+        super().__init__(
+            controller=controller, system_id=System.MODBUS_TEMPERATURE_CONTROLLERS
         )
-        if command.track_ambient:
-            self.set_ambient(setpoint=self.controller.ambient_temperature)
-        else:
-            self.set_setpoint(setpoint=command.setpoint)
+
+    @property
+    def power_on(self):
+        # This device is always on unless in alarm state.
+        return not self.alarm_on
+
+    @power_on.setter
+    def power_on(self, on):
+        raise RuntimeError("This device is always on, unless in fault.")
+
+    def do_fan_power(self, command):
+        if self.alarm_on:
+            raise RuntimeError("In fault state")
+        self.fans_on = command.on
+
+    def do_setpoint(self, command):
+        self.set_setpoint(command.setpoint)

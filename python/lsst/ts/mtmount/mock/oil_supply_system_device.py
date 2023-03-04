@@ -24,10 +24,10 @@ __all__ = ["OilSupplySystemDevice"]
 from lsst.ts import utils
 from lsst.ts.idl.enums.MTMount import System
 
-from .base_device import BaseDevice
+from .base_thermal_device import BaseThermalDevice
 
 
-class OilSupplySystemDevice(BaseDevice):
+class OilSupplySystemDevice(BaseThermalDevice):
     """Oil supply system supply.
 
     Parameters
@@ -78,13 +78,21 @@ class OilSupplySystemDevice(BaseDevice):
     @property
     def power_on(self):
         """Return True if all three subsystems are powered on."""
+        if self.alarm_on:
+            return False
         return self.cooling_on and self.main_pump_on and self.circulation_pump_on
 
     @power_on.setter
     def power_on(self, on):
+        if on and self.alarm_on:
+            raise RuntimeError("Cannot power on while an alarm is on")
         self.cooling_on = on
         self.main_pump_on = on
         self.circulation_pump_on = on
+
+    def do_cabinets_thermal_setpoint(self, command):
+        self.assert_on()
+        self.set_setpoint(command.setpoint)
 
     def do_power(self, command):
         if not self.auto_mode:
@@ -98,6 +106,8 @@ class OilSupplySystemDevice(BaseDevice):
     def do_power_cooling(self, command):
         if self.auto_mode:
             raise RuntimeError("Must be in manual mode")
+        if command.on and self.alarm_on:
+            raise RuntimeError("Cannot power on while an alarm is on")
         if not command.on and (self.circulation_pump_on or self.main_pump_on):
             raise RuntimeError(
                 "Cannot turn off cooling unless "
@@ -114,6 +124,8 @@ class OilSupplySystemDevice(BaseDevice):
     def do_power_circulation_pump(self, command):
         if self.auto_mode:
             raise RuntimeError("Must be in manual mode")
+        if command.on and self.alarm_on:
+            raise RuntimeError("Cannot power on while an alarm is on")
         if command.on and not self.cooling_on:
             raise RuntimeError(
                 f"Cannot turn on the circulation pump if cooling={self.cooling_on} is off."
@@ -127,6 +139,8 @@ class OilSupplySystemDevice(BaseDevice):
     def do_power_main_pump(self, command):
         if self.auto_mode:
             raise RuntimeError("Must be in manual mode")
+        if command.on and self.alarm_on:
+            raise RuntimeError("Cannot power on while an alarm is on")
         if command.on and not (self.cooling_on and self.circulation_pump_on):
             raise RuntimeError(
                 f"Cannot turn on the main pump if cooling={self.cooling_on} is off "
