@@ -355,7 +355,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 System.ELEVATION_DRIVES_THERMAL,
                 self.evt_elevationDrivesThermalSystemState,
             ),
-            (System.AZ0101_CABINET_THERMAL, self.evt_az0101CabinetThermalSystemState),
+            (System.CABINET_0101_THERMAL, self.evt_az0101CabinetThermalSystemState),
             (
                 System.MODBUS_TEMPERATURE_CONTROLLERS,
                 self.evt_modbusTemperatureControllersSystemState,
