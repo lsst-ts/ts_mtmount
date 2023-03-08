@@ -293,46 +293,6 @@ class Source(enum.IntEnum):
     PXI = 100
 
 
-class TelemetryTopicId(enum.IntEnum):
-    """Telemetry topic ID values.
-
-    These must match the data in `TELEMETRY_MAP`
-
-    From Julen 2022-06-08 here is the full set:
-    Azimuth 6
-    Safety 26 (maybe not reported)
-    Elevation 15
-    LockingPins (for elevation) 19
-    Deployable Platforms 11
-    Auxiliary cabinet AZ 0101 2
-    Azimuth Cable Wrap 3
-    Camera Cable Wrap 8
-    Balancing 7
-    Azimuth Drives 5
-    Azimuth Drives Thermal controller 4
-    Elevation drives 14
-    Elevation Drives Thermal controller 13
-    Encoder 16
-    The main cabinet thermal controller 24
-    Mirror Cover Locks 22
-    Mirror Cover 23
-    Main Power Supply (for AZ and EL) 21
-    Top End Chiller 27
-    Modbus temperature controllers distributed over the TMA 1
-    OSS 25
-    Comprssed Air pressures and temperatures 9
-    Cooling systems pressures and temperatures 10
-    Dynalene cooling pressures and temperatures 12
-    General Purpose Glycol pressures and temperatures 17
-    """
-
-    AZIMUTH = 6
-    AZIMUTH_DRIVE = 5
-    ELEVATION = 15
-    ELEVATION_DRIVE = 14
-    CAMERA_CABLE_WRAP = 8
-
-
 class ThermalMode(enum.IntEnum):
     """Thermal control mode for azimuth, elevation, and cabinet0101.
 
