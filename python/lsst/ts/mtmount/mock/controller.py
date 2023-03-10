@@ -26,6 +26,7 @@ import asyncio
 import copy
 import json
 import logging
+import math
 import signal
 
 import astropy.time
@@ -45,9 +46,12 @@ from ..telemetry_map import TelemetryTopicId
 from .axis_device import AxisDevice
 from .detailed_settings import detailed_settings
 from .main_axes_power_supply_device import MainAxesPowerSupplyDevice
+from .main_cabinet_thermal import MainCabinetThermalDevice
 from .mirror_cover_locks_device import MirrorCoverLocksDevice
 from .mirror_covers_device import MirrorCoversDevice
+from .modbus_cabinets_thermal import ModbusCabinetsThermalDevice
 from .oil_supply_system_device import OilSupplySystemDevice
+from .thermal_device import ThermalDevice
 from .top_end_chiller_device import TopEndChillerDevice
 
 # Initial ambient temperature, deg C
@@ -252,6 +256,8 @@ class Controller:
         self.motion_controller_state_dict = {}
         # Dict of system_id: power state
         self.power_state_dict = {}
+        # Dict of system_id: thermal state
+        self.thermal_state_dict = {}
         self.init_saved_state()
 
         # Current state of the reverse and forward  azimuth topple block
@@ -431,14 +437,19 @@ class Controller:
         }
 
         self.power_state_dict = {
-            System.MAIN_AXES_POWER_SUPPLY: None,
+            System.AZIMUTH_DRIVES_THERMAL: None,
             System.AZIMUTH: None,
-            System.ELEVATION: None,
+            System.CABINET_0101_THERMAL: None,
             System.CAMERA_CABLE_WRAP: None,
+            System.ELEVATION_DRIVES_THERMAL: None,
+            System.ELEVATION: None,
+            System.MAIN_AXES_POWER_SUPPLY: None,
+            System.MAIN_CABINET_THERMAL: None,
+            System.MIRROR_COVER_LOCKS: None,
+            System.MIRROR_COVERS: None,
+            System.MODBUS_TEMPERATURE_CONTROLLERS: None,
             System.OIL_SUPPLY_SYSTEM: None,
             System.TOP_END_CHILLER: None,
-            System.MIRROR_COVERS: None,
-            System.MIRROR_COVER_LOCKS: None,
         }
 
     async def put_axis_telemetry(self, system_id, tai):
@@ -583,6 +594,26 @@ class Controller:
                 id=enums.ReplyId.AZIMUTH_TOPPLE_BLOCK,
                 reverse=azimuth_topple_block_state[0],
                 forward=azimuth_topple_block_state[1],
+            )
+        )
+
+    async def put_chiller_state(self, system_id, tai):
+        """Put chiller state for thermal controllers, if changed."""
+        nelts = self.chiller_state_nelts[system_id]
+        device = self.device_dict[system_id]
+        track_ambient = device.track_ambient
+        if track_ambient:
+            setpoint = self.ambient_temperature
+        elif device.track_setpoint:
+            setpoint = device.setpoint
+        else:
+            setpoint = math.nan
+        await self.write_reply(
+            make_reply_dict(
+                id=enums.ReplyId.CHILLER_STATE,
+                system=system_id,
+                trackAmbient=[track_ambient] * nelts,
+                temperature=[setpoint] * nelts,
             )
         )
 
@@ -796,6 +827,9 @@ class Controller:
         for system_id in self.power_state_dict:
             await self.put_power_state(system_id=system_id, tai=tai)
 
+        for system_id in self.chiller_state_nelts:
+            await self.put_chiller_state(system_id=system_id, tai=tai)
+
     async def telemetry_loop(self):
         """Output telemetry at regular intervals."""
         try:
@@ -839,11 +873,20 @@ class Controller:
                 system_id=system_id,
                 start_position=INITIAL_POSITION[system_id],
             )
-        self.add_device(MainAxesPowerSupplyDevice)
-        self.add_device(MirrorCoverLocksDevice)
-        self.add_device(MirrorCoversDevice)
-        self.add_device(OilSupplySystemDevice)
-        self.add_device(TopEndChillerDevice)
+
+        for system_id in ThermalDevice.supported_system_ids:
+            self.add_device(ThermalDevice, system_id=system_id)
+
+        for device_class in (
+            MainAxesPowerSupplyDevice,
+            MainCabinetThermalDevice,
+            MirrorCoverLocksDevice,
+            MirrorCoversDevice,
+            ModbusCabinetsThermalDevice,
+            OilSupplySystemDevice,
+            TopEndChillerDevice,
+        ):
+            self.add_device(device_class=device_class)
 
     def add_device(self, device_class, **kwargs):
         """Add a mock device.
@@ -1672,11 +1715,6 @@ class Controller:
             (System.BALANCE, PowerState.OFF),
             (System.LOCKING_PINS, PowerState.OFF),
             (System.DEPLOYABLE_PLATFORMS, PowerState.OFF),
-            (System.AZIMUTH_DRIVES_THERMAL, PowerState.ON),
-            (System.ELEVATION_DRIVES_THERMAL, PowerState.ON),
-            (System.CABINET_0101_THERMAL, PowerState.ON),
-            (System.MODBUS_TEMPERATURE_CONTROLLERS, PowerState.ON),
-            (System.MAIN_CABINET_THERMAL, PowerState.ON),
         ):
             nelts = self.power_state_nelts[system_id]
             if not self.command_server.connected:
@@ -1731,17 +1769,6 @@ class Controller:
                     id=enums.ReplyId.LIMITS,
                     system=system,
                     limits=[0] * nelts,
-                )
-            )
-
-        # CHILLER_STATE, since we do not yet mock that.
-        for system, nelts in self.chiller_state_nelts.items():
-            await self.write_reply(
-                make_reply_dict(
-                    id=enums.ReplyId.CHILLER_STATE,
-                    system=system,
-                    trackAmbient=[True] * nelts,
-                    temperature=[self.ambient_temperature] * nelts,
                 )
             )
 

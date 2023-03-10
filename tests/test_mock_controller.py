@@ -53,6 +53,13 @@ UNSUPPORTED_COMMAND_CODE = (
     mtmount.enums.CommandCode.TRANSFER_FUNCTION_AZIMUTH_EXCITATION
 )
 
+SYSTEMS_INITIALLY_ON = frozenset(
+    (
+        System.MODBUS_CABINETS_THERMAL,
+        System.MAIN_CABINET_THERMAL,
+    )
+)
+
 
 class UnsupportedCommand(mtmount.base_command.BaseCommand):
     field_infos = mtmount.commands.make_command_field_infos(UNSUPPORTED_COMMAND_CODE)
@@ -255,9 +262,16 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         state == PowerState.OFF for state in reply.motionControllerState
                     )
                 case mtmount.ReplyId.POWER_STATE:
-                    assert reply.powerState == PowerState.OFF
+                    expected_power_state = (
+                        PowerState.ON
+                        if reply.system in SYSTEMS_INITIALLY_ON
+                        else PowerState.OFF
+                    )
+                    assert reply.powerState == expected_power_state
                     elements_state = getattr(reply, "elementsPowerState", ())
-                    assert all(state == PowerState.OFF for state in elements_state)
+                    assert all(
+                        state == expected_power_state for state in elements_state
+                    )
                 case mtmount.ReplyId.AXIS_MOTION_STATE:
                     assert reply.state == AxisMotionState.STOPPED
                 case _:
@@ -582,7 +596,10 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             devices = (azimuth_device, elevation_device)
             for device in devices:
                 assert not device.alarm_on
-                assert not device.power_on
+                if device.system_id in SYSTEMS_INITIALLY_ON:
+                    assert device.power_on
+                else:
+                    assert not device.power_on
                 assert not device.enabled
                 assert not device.homed
                 assert not device.tracking_enabled
@@ -797,7 +814,12 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         reply.system in self.controller.power_state_dict
                         or reply.system == System.AZIMUTH_CABLE_WRAP
                     )
-                    assert reply.powerState == PowerState.OFF
+                    expected_power_state = (
+                        PowerState.ON
+                        if reply.system in SYSTEMS_INITIALLY_ON
+                        else PowerState.OFF
+                    )
+                    assert reply.powerState == expected_power_state
                 elif reply.id == mtmount.ReplyId.AXIS_MOTION_STATE:
                     assert reply.axis in self.controller.axis_motion_state_dict
                     assert reply.state == AxisMotionState.STOPPED
@@ -1296,11 +1318,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 elif reply.id == mtmount.ReplyId.CHILLER_STATE:
                     chiller_state_systems.append(reply.system)
                     nelts = self.controller.chiller_state_nelts[reply.system]
-                    desired_trackAmbient = [True] * nelts
-                    desired_temperature = [self.controller.ambient_temperature] * nelts
-                    assert reply.trackAmbient == desired_trackAmbient
+                    assert reply.trackAmbient == [False] * nelts
+
+                    device = self.controller.device_dict[reply.system]
+                    desired_temperature = device.setpoint
                     numpy.testing.assert_allclose(
-                        reply.temperature, desired_temperature
+                        reply.temperature,
+                        [desired_temperature] * nelts,
+                        atol=device.temperature_slop,
                     )
                 elif reply.id == mtmount.ReplyId.COMMANDER:
                     assert reply.actualCommander == mtmount.Source.HHD
@@ -1332,9 +1357,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     power_state_systems.append(reply.system)
                     nelts = self.controller.power_state_nelts[reply.system]
                     if reply.system in {
-                        System.AZIMUTH_DRIVES_THERMAL,
-                        System.ELEVATION_DRIVES_THERMAL,
-                        System.CABINET_0101_THERMAL,
                         System.MODBUS_TEMPERATURE_CONTROLLERS,
                         System.MAIN_CABINET_THERMAL,
                     }:
@@ -1390,6 +1412,11 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 == self.controller.motion_controller_state_nelts.keys()
             )
             assert len(set(power_state_systems)) == len(power_state_systems)
+            print(f"{set(power_state_systems)=}")
+            power_state_system_ids = sorted(
+                [item.value for item in self.controller.power_state_nelts]
+            )
+            print(f"{power_state_system_ids=}")
             assert set(power_state_systems) == self.controller.power_state_nelts.keys()
 
     async def test_command_queue(self):
