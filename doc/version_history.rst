@@ -6,6 +6,24 @@
 Version History
 ###############
 
+v0.25.1
+-------
+
+* `MTMountCsc`:
+
+  * When disabling devices eliminate a source of cascading error messages by giving up after the first error
+    (and then trying to yield control and stopping the low level heartbeat command).
+  * Make retry_command more robust by giving the TMA time to fail a command with "no ack seen in 500ms".
+    This avoids prematurely retrying a command.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 15
+
 v0.25.0
 -------
 
