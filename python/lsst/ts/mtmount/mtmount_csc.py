@@ -77,7 +77,9 @@ MOCK_CTRL_START_TIMEOUT = 30
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
 # Max timeout (sec) for commands that are expected to reply quickly.
-SHORT_COMMAND_TIMEOUT = 0.25
+# This must be longer than 0.5 seconds in order to catch
+# "no ack seen in 500ms" errors from the TMA.
+SHORT_COMMAND_TIMEOUT = 0.75
 
 # Maximum time (sec) to for the startTracking command.
 START_TRACKING_TIMEOUT = 7
@@ -857,12 +859,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.CameraCableWrapPower(on=False),
             ]:
                 try:
-                    await self.retry_command(command)
+                    await self.send_command(command)
                 except Exception as e:
-                    self.log.warning(
-                        f"Command {command} failed in disable_devices; "
-                        f"continuing: {e!r}"
+                    self.log.error(
+                        f"Command {command} failed in disable_devices; skipping "
+                        "all remaining disable commands and going directly to "
+                        f"giving up command and stopping the heartbeat command: {e!r}"
                     )
+                    break
 
             try:
                 self.log.info("Give up command of the mount.")
@@ -938,9 +942,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         ----------
         command : `commands.Command`
             Class of command to send
-        max_tries : `int`
+        max_tries : `int`, optional
             Maximum number of times to issue the command.
-        timeout : `float`
+        timeout : `float`, optional
             Timeout (sec) for the command (applied to each retry).
             Keep it short to avoid blocking the command lock for a long time.
         """
@@ -1809,7 +1813,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # so we can tell the commands apart.
         heartbeat_command = commands.Heartbeat()
         try:
-            while self.connected:
+            while self.connected and self.should_be_commander:
                 heartbeat_command.timestamp = utils.current_tai()
                 command_bytes = heartbeat_command.encode()
                 self.log.debug("Send heartbeat command %s", command_bytes)
