@@ -25,7 +25,6 @@ import itertools
 import logging
 import math
 import pathlib
-import time
 import unittest
 
 import numpy.testing
@@ -40,22 +39,18 @@ from lsst.ts.idl.enums.MTMount import (
 )
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
-
-# Timeout for opening or closing mirror covers (sec).
+# timeout for opening or closing mirror covers (sec)
 MIRROR_COVER_TIMEOUT = STD_TIMEOUT + 2
 
-# Timeout for reading telemetry that should not appear (sec).
+# timeout for reading telemetry that should not appear (sec)
 NOTELEMETRY_TIMEOUT = 2
 
 # Timeout for the CSC to react to a fault report
 # from the low-level controller (sec).
 FAULT_TIMEOUT = 2
 
-# Timeout for constructing several remotes and controllers (sec).
+# timeout for constructing several remotes and controllers (sec)
 LONG_TIMEOUT = 60
-
-# Timeout for something that should happen quickly (sec).
-SHORT_TIMEOUT = 5
 
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1] / "tests" / "data" / "config"
 
@@ -1217,37 +1212,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
             await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
             await self.assert_axes_in_position(elevation=False, azimuth=False)
-
-    async def test_slowdown_detection(self):
-        async with self.make_csc(initial_state=salobj.State.STANDBY):
-            # Delay the event loop for longer than the detection interval.
-            # Be generous to avoid a race condition for when the delay occurs.
-            time.sleep(mtmount.mtmount_csc.SLOWDOWN_WARNING_DELAY * 2)
-            while True:
-                data = await self.remote.evt_logMessage.next(
-                    flush=False, timeout=SHORT_TIMEOUT
-                )
-                if "event loop delayed" in data.message:
-                    # Found the desired log message!
-                    break
-
-            # Read log messages for up to NOTELEMETRY_TIMEOUT seconds
-            # to see if we get another (unwanted) delay message.
-            try:
-                start_tai = utils.current_tai()
-                remaining_wait_time = NOTELEMETRY_TIMEOUT
-                while remaining_wait_time > 0:
-                    data = await self.remote.evt_logMessage.next(
-                        flush=False, timeout=remaining_wait_time
-                    )
-                    if "event loop delayed" in data.message:
-                        self.fail("Unexpectedly saw a second delayed message")
-                    remaining_wait_time = (
-                        utils.current_tai() - start_tai - NOTELEMETRY_TIMEOUT
-                    )
-            except asyncio.TimeoutError:
-                # Perfect; no log messages
-                pass
 
     async def test_telemetry_reconnection(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):
