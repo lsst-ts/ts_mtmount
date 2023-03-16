@@ -47,6 +47,17 @@ LATE_COMMAND_ACK_INTERVAL = 0.05
 # to the low-level controller (sec).
 LLV_HEARTBEAT_INTERVAL = 1
 
+# Interval to check for event loop slowdown (sec).
+# Should be significantly shorter than LLV_HEARTBEAT_INTERVAL
+SLOWDOWN_DETECTION_INTERVAL = 0.1
+
+# How much delay in the event loop before warning (sec).
+# The preferred value is large enough to avoid needless warnings,
+# while giving notice that tracking may fail due to no tracking command
+# seen in time. As of 2023-03-10 the maximum allowed delay between
+# tracking commands is 0.5 seconds.
+SLOWDOWN_WARNING_DELAY = 0.2
+
 # Log level for commands and command replies.
 LOG_LEVEL_COMMANDS = (logging.DEBUG + logging.INFO) // 2
 
@@ -291,6 +302,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.read_loop_task = utils.make_done_future()
         self.llv_heartbeat_loop_task = utils.make_done_future()
+        self.slowdown_detection_loop_task = utils.make_done_future()
 
         # Is camera rotator actual position - demand position
         # greater than config.max_rotator_position_error?
@@ -494,6 +506,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def close_tasks(self):
         """Shut down pending tasks. Called by `close`."""
+        self.slowdown_detection_loop_task.cancel()
         while self.command_futures_dict:
             command = self.command_futures_dict.popitem()[1]
             command.setnoack("Connection closed before command finished")
@@ -1801,6 +1814,29 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         )
         self.log.debug("Read loop ends")
 
+    async def slowdown_detection_loop(self):
+        """Detect the event loop being starved.
+
+        Log warnings when this happens.
+        """
+        self.log.debug("Slowdown detecton loop begins")
+        try:
+            last_tai = 0
+            while True:
+                current_tai = utils.current_tai()
+                if last_tai > 0:
+                    delay = current_tai - last_tai - SLOWDOWN_DETECTION_INTERVAL
+                    if delay > SLOWDOWN_WARNING_DELAY:
+                        self.log.warning(
+                            f"event loop delayed by > {delay:0.2f} seconds"
+                        )
+                last_tai = current_tai
+                await asyncio.sleep(SLOWDOWN_DETECTION_INTERVAL)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            self.log.exception(f"Slowdown detection loop failed: {e!r}")
+
     async def llv_heartbeat_loop(self):
         """Send a regular heartbeat "command" to the low-level controller.
 
@@ -1870,6 +1906,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
         await self.clear_target()
+        self.slowdown_detection_loop_task = asyncio.create_task(
+            self.slowdown_detection_loop()
+        )
 
     async def stop_camera_cable_wrap_following(self):
         """Stop the camera cable wrap from following the rotator.
