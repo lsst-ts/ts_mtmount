@@ -872,7 +872,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.CameraCableWrapPower(on=False),
             ]:
                 try:
-                    await self.send_command(command)
+                    await self.send_command(command, do_lock=False)
                 except Exception as e:
                     self.log.error(
                         f"Command {command} failed in disable_devices; skipping "
