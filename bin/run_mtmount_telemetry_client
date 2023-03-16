@@ -17,8 +17,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-import asyncio
-
 from lsst.ts.mtmount import run_mtmount_telemetry_client
 
 run_mtmount_telemetry_client()
