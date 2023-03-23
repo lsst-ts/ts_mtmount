@@ -107,6 +107,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         config_dir=TEST_CONFIG_DIR,
         simulation_mode=1,
         internal_mock_controller=False,
+        log_level=None,
     ):
         """Make CSC, and optionally a mock controller.
 
@@ -127,6 +128,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         internal_mock_controller : `bool`, optional
             Should the CSC run the mock controller?
             Ignored if ``simulation_mode == 0``.
+        log_level : `int` or `None`, optional
+            Logging level, such as `logging.INFO`.
+            If `None` then do not set the log level, leaving the default
+            behavior of `SalInfo`: increase the log level to INFO.
         """
         if simulation_mode != 0 and not internal_mock_controller:
             self.mock_controller = mtmount.mock.Controller(
@@ -142,6 +147,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             config_dir=config_dir,
             simulation_mode=simulation_mode,
             internal_mock_controller=internal_mock_controller,
+            log_level=log_level,
         ):
             yield
 
@@ -1295,7 +1301,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         async with salobj.Controller(
             name="MTRotator"
         ) as rotator, self.fake_rotation_loop(rotator=rotator), self.make_csc(
-            initial_state=salobj.State.ENABLED
+            initial_state=salobj.State.ENABLED, log_level=15
         ):
             await self.assert_next_sample(
                 self.remote.evt_cameraCableWrapFollowing, enabled=False
