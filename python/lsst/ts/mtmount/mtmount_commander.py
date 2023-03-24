@@ -59,6 +59,7 @@ class MTMountCommander(salobj.CscCommander):
                 "actualTorquePercentage",
                 "actualTorquePercentagePlatform1Drive",
                 "actualTorquePercentagePlatform2Drive",
+                "actualVelocity",
                 "current",
                 "powerSupplyCurrent",
                 "timestamp",
