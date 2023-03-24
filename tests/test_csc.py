@@ -812,6 +812,18 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     await asyncio.sleep(0.1)
                 assert self.mock_controller.command_queue.empty()
 
+                # Check that enableCameraCableWrapFollowing while disabling
+                # devices is rejected.
+                # The test of whether we are disabling devices is that
+                # disable_devices_task is not done.
+                self.csc.disable_devices_task = asyncio.Future()
+                assert not self.csc.disable_devices_task.done()
+                with salobj.assertRaisesAckError():
+                    await self.remote.cmd_enableCameraCableWrapFollowing.start(
+                        timeout=STD_TIMEOUT
+                    )
+                self.csc.disable_devices_task.cancel()
+
                 # Restart the camera cable wrap following the rotator.
                 await self.remote.cmd_enableCameraCableWrapFollowing.start(
                     timeout=STD_TIMEOUT
@@ -1082,6 +1094,18 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 == DeployableMotionState.DEPLOYED
             )
 
+            # Check that closeMirrorCovers and openMirrorCovers while
+            # disabling devices are both rejected.
+            # The test of whether we are disabling devices is that
+            # disable_devices_task is not done.
+            self.csc.disable_devices_task = asyncio.Future()
+            assert not self.csc.disable_devices_task.done()
+            with salobj.assertRaisesAckError():
+                await self.remote.cmd_closeMirrorCovers.start(timeout=STD_TIMEOUT)
+            with salobj.assertRaisesAckError():
+                await self.remote.cmd_openMirrorCovers.start(timeout=STD_TIMEOUT)
+            self.csc.disable_devices_task.cancel()
+
     async def test_move_to_target(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
             name="MTRotator"
@@ -1187,6 +1211,19 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # Check that the camera cable wrap is still following the rotator.
             data = self.remote.evt_cameraCableWrapFollowing.get()
             assert data.enabled
+
+            # Check that move to target while disabling devices is rejected.
+            # The test of whether we are disabling devices is that
+            # disable_devices_task is not done.
+            self.csc.disable_devices_task = asyncio.Future()
+            assert not self.csc.disable_devices_task.done()
+            with salobj.assertRaisesAckError():
+                await self.remote.cmd_moveToTarget.set_start(
+                    azimuth=target_azimuth,
+                    elevation=target_elevation,
+                    timeout=STD_TIMEOUT,
+                )
+            self.csc.disable_devices_task.cancel()
 
             # Check that out-of-bounds moves are rejected,
             # while leaving the mock devices enabled.
@@ -1338,6 +1375,15 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             with pytest.raises(salobj.AckError):
                 await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
 
+            # Check that homeBothAxes while disabling devices is rejected.
+            # The test of whether we are disabling devices is that
+            # disable_devices_task is not done.
+            self.csc.disable_devices_task = asyncio.Future()
+            assert not self.csc.disable_devices_task.done()
+            with salobj.assertRaisesAckError():
+                await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
+            self.csc.disable_devices_task.cancel()
+
             # Home the axes
             await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
             await self.assert_next_sample(self.remote.evt_azimuthHomed, homed=True)
@@ -1385,6 +1431,22 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 assert device.power_on
                 assert device.enabled
                 assert device.tracking_enabled
+
+            # Test that tracking while disabling devices is rejected.
+            # The test of whether we are disabling devices is that
+            # disable_devices_task is not done.
+            self.csc.disable_devices_task = asyncio.Future()
+            good_kwargs = self.make_track_target_kwargs(
+                azimuth=initial_azimuth + 3,
+                elevation=initial_elevation + 1,
+                azimuthVelocity=0,
+                elevationVelocity=0,
+            )
+            with salobj.assertRaisesAckError():
+                await self.remote.cmd_trackTarget.set_start(
+                    **good_kwargs, timeout=STD_TIMEOUT
+                )
+            self.csc.disable_devices_task.cancel()
 
             # Test that out-of-range tracking commands are rejected,
             # while leaving the mock devices enabled and tracking.
