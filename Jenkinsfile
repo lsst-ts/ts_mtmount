@@ -1,2 +1,2 @@
 @Library('JenkinsShared')_
-DevelopPipeline("ts-mtmount", "MTMount", "lsst.ts.mtmount", "--no-mypy", required_idl=["MTRotator"], build_all_idl=false, extra_packages=[])
+DevelopPipeline(name: "ts-mtmount", module_name: "lsst.ts.mtmount", idl_names: ["MTRotator", "MTRotator"], pre_commit_flags: "--no-mypy")
