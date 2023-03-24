@@ -6,6 +6,19 @@
 Version History
 ###############
 
+v0.25.3
+-------
+
+* `MTMountCsc`: fix the disable_devices method to properly send the disable commands.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 15
+
 v0.25.2
 -------
 

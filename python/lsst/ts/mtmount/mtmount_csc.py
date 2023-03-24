@@ -324,6 +324,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             simulation_mode=simulation_mode,
         )
 
+        # Allow multiple trackTarget commands to run at the same time;
+        # this is meant to be temporary to help diagnose an intermittent
+        # issue with tracking where a command is sent but seems to vanish.
+        self.cmd_trackTarget.allow_multiple_callbacks = True
+
         # Dict of system ID: SystemStateInfo;
         # this provides useful information for handling replies and also
         # initializes the relevant fields of the events. Initialization is
@@ -872,7 +877,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 commands.CameraCableWrapPower(on=False),
             ]:
                 try:
-                    await self.send_command(command)
+                    await self.send_command(command, do_lock=False)
                 except Exception as e:
                     self.log.error(
                         f"Command {command} failed in disable_devices; skipping "
@@ -1316,7 +1321,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.assert_enabled()
         start_tai = utils.current_tai()
 
+        async def print_slow_command_lock(tai_time):
+            await asyncio.sleep(MIN_TRACKING_ADVANCE_TIME)
+            self.log.warning(
+                f"Still waiting for the command lock after {MIN_TRACKING_ADVANCE_TIME} seconds "
+                f"to process a trackTarget command with taiTime={tai_time}",
+            )
+
+        slow_lock_task = asyncio.create_task(print_slow_command_lock(data.taiTime))
+
         async with self.command_lock:
+            slow_lock_task.cancel()
             # Note: the time now (the time at which the lock was obtained)
             # is essentially the same as the time at which the command will be
             # sent, because the intervening code is quick and has no awaits.
@@ -1324,12 +1339,19 @@ class MTMountCsc(salobj.ConfigurableCsc):
             advance_time = data.taiTime - send_tai
             if advance_time < MIN_TRACKING_ADVANCE_TIME:
                 self.log.warning(
-                    f"Ignoring late tracking command with taiTime={data.taiTime}: "
+                    f"Ignoring a trackTarget command with taiTime={data.taiTime}: "
                     f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=} "
                     f"after a message delay of {start_tai - data.private_sndStamp:0.3f} seconds "
                     f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the command lock"
                 )
                 return
+            self.log.log(
+                LOG_LEVEL_COMMANDS,
+                f"Processing a trackTarget command with taiTime={data.taiTime}: "
+                f"{advance_time=:0.3f} "
+                f"after a message delay of {start_tai - data.private_sndStamp:0.3f} seconds "
+                f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the command lock",
+            )
 
             track_command = commands.BothAxesTrackTarget(
                 azimuth=data.azimuth,
