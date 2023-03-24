@@ -6,11 +6,25 @@
 Version History
 ###############
 
+v0.25.3
+-------
+
+* `MTMountCsc`: fix the disable_devices method to properly send the disable commands.
+* ``Jenkinsfile``: update for a newer version of the shared library.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 15
+
 v0.25.2
 -------
 
 * `MTMountCsc`: Log warnings for excessive delays in the event loop.
-* Jenkinsfile: use new shared library.
+* ``Jenkinsfile``: use new shared library.
 
 Requires:
 
