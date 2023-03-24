@@ -1931,6 +1931,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.slowdown_detection_loop_task = asyncio.create_task(
             self.slowdown_detection_loop()
         )
+        print(
+            f"in MTMount.start: {len(self.log.handlers)} log handlers: "
+            + ", ".join(repr(handler) for handler in self.log.handlers)
+        )
 
     async def stop_camera_cable_wrap_following(self):
         """Stop the camera cable wrap from following the rotator.
