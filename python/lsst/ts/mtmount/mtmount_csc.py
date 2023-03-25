@@ -284,9 +284,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Reply IDs that this code does not handle.
         self.unknown_reply_ids = set()
 
+        # Lock for most commands.
         self.command_lock = asyncio.Lock()
-        self.both_axes_lock = asyncio.Lock()
-        self.ccw_lock = asyncio.Lock()
+        # Lock for BothAxesTracking commands.
+        self.main_axes_lock = asyncio.Lock()
 
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = utils.make_done_future()
@@ -1335,16 +1336,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.assert_enabled_and_not_disabling()
         start_tai = utils.current_tai()
 
-        async def print_slow_command_lock(tai_time):
+        async def print_slow_lock(tai_time):
             await asyncio.sleep(MIN_TRACKING_ADVANCE_TIME)
             self.log.warning(
-                f"Still waiting for the command lock after {MIN_TRACKING_ADVANCE_TIME} seconds "
+                f"Still waiting for the main axes lock after {MIN_TRACKING_ADVANCE_TIME} seconds "
                 f"to process a trackTarget command with taiTime={tai_time}",
             )
 
-        slow_lock_task = asyncio.create_task(print_slow_command_lock(data.taiTime))
+        slow_lock_task = asyncio.create_task(print_slow_lock(data.taiTime))
 
-        async with self.command_lock:
+        async with self.main_axes_lock:
             slow_lock_task.cancel()
             # Note: the time now (the time at which the lock was obtained)
             # is essentially the same as the time at which the command will be
@@ -1356,7 +1357,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     f"Ignoring a trackTarget command with taiTime={data.taiTime}: "
                     f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=} "
                     f"after a message delay of {start_tai - data.private_sndStamp:0.3f} seconds "
-                    f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the command lock"
+                    f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the main axes lock"
                 )
                 return
             self.log.log(
@@ -1402,7 +1403,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_startTracking.ack_in_progress(
             data, timeout=START_TRACKING_TIMEOUT
         )
-        await self.send_command(commands.BothAxesEnableTracking(), do_lock=True)
+        async with self.main_axes_lock:
+            await self.send_command(commands.BothAxesEnableTracking(), do_lock=False)
 
     async def do_stop(self, data):
         """Handle the stop command."""
