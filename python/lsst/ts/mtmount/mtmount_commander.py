@@ -89,8 +89,6 @@ class MTMountCommander(salobj.CscCommander):
         # if their values change significantly) to reduce clutter.
         for event_topic_name in ("clockOffset", "cameraCableWrapTarget"):
             topic = getattr(self.remote, f"evt_{event_topic_name}")
-            # TODO DM-37947: omit this line once we have ts_salobj > 3.7.
-            setattr(self, f"previous_tel_{event_topic_name}", None)
             topic.callback = functools.partial(
                 self.telemetry_callback, name=event_topic_name
             )
@@ -138,20 +136,6 @@ class MTMountCommander(salobj.CscCommander):
     async def do_stopTracking(self, args):
         self.tracking_task.cancel()
         await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
-
-    # TODO DM-37947: remove this method once we use salobj > 3.7.
-    async def evt_logMessage_callback(self, data):
-        """Abbreviate the log output by omitting less-interesting fields.
-
-        Omit traceback unless it is non-blank.
-        Always omit filePath, functionName, lineNumber, process, and timestamp.
-        """
-        public_data = {key: getattr(data, key) for key in ("name", "level", "message")}
-        if data.traceback:
-            public_data["traceback"] = data.traceback
-        self.output(
-            f"{data.private_sndStamp:0.3f}: logMessage: {self.format_dict(public_data)}"
-        )
 
     async def _ramp(self, ramp_args):
         """Track a "ramp" (a path of constant velocity)
