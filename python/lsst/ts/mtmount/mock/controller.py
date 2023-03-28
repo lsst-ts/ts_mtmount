@@ -750,7 +750,7 @@ class Controller:
         self.telemetry_server.writer.write(constants.LINE_TERMINATOR)
         await self.telemetry_server.writer.drain()
 
-    def telemetry_connect_callback(self, server):
+    async def telemetry_connect_callback(self, server):
         """Called when a client connects to or disconnects from
         the telemetry server.
 
@@ -1052,7 +1052,7 @@ class Controller:
                 timeout, task = timeout_task
                 await asyncio.wait_for(task, timeout=timeout + 5)
 
-    def command_connect_callback(self, server):
+    async def command_connect_callback(self, server):
         """Called when a client connects to or disconnects from
         the command server.
 
