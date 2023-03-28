@@ -6,6 +6,24 @@
 Version History
 ###############
 
+v0.23.4
+-------
+
+* `MTMountCsc`:
+
+    * Reject most commands while devices are being disabled (e.g. while going to fault).
+    * Lock tracking-related commands separately from other commands, so that commands such as disableCameraCableWrapFollowing will not interfere with tracking.
+
+* `MTMountCommander`: remove a bit of residual code needed for salobj &lt; 7.3.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 0.3.7
+* ts_idl 3.2
+* IDL files for MTMount and MTRotator from ts_xml 15
+
 v0.25.3
 -------
 

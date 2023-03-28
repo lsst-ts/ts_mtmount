@@ -284,7 +284,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Reply IDs that this code does not handle.
         self.unknown_reply_ids = set()
 
+        # Lock for most commands.
         self.command_lock = asyncio.Lock()
+        # Lock for BothAxesTracking commands.
+        self.main_axes_lock = asyncio.Lock()
 
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = utils.make_done_future()
@@ -428,6 +431,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
     def has_command(self):
         """Does the CSC have command of the low-level controller?"""
         return self.evt_commander.data.commander == enums.Source.CSC
+
+    def assert_enabled_and_not_disabling(self):
+        self.assert_enabled()
+        if not self.disable_devices_task.done():
+            raise salobj.ExpectedError(
+                "Cannot run this command while disabling devices."
+            )
 
     async def begin_disable(self, data):
         await super().begin_disable(data)
@@ -1249,12 +1259,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_clearError(self, data):
         """Handle the clearError command."""
-        self.assert_enabled()
+        self.assert_enabled_and_not_disabling()
         raise salobj.ExpectedError("Not yet implemented")
 
     async def do_closeMirrorCovers(self, data):
         """Handle the closeMirrorCovers command."""
-        self.assert_enabled()
+        self.assert_enabled_and_not_disabling()
         await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
@@ -1270,11 +1280,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_disableCameraCableWrapFollowing(self, data):
         """Handle the disableCameraCableWrapFollowing command."""
         self.assert_enabled()
+        if not self.disable_devices_task.done():
+            self.log.info(
+                "Ignoring a disableCameraCableWrapFollowing command: already disabling devices"
+            )
+            return
         await self.stop_camera_cable_wrap_following()
 
     async def do_enableCameraCableWrapFollowing(self, data):
         """Handle the enableCameraCableWrapFollowing command."""
-        self.assert_enabled()
+        self.assert_enabled_and_not_disabling()
         if self.camera_cable_wrap_follow_loop_task.done():
             self.camera_cable_wrap_follow_start_task = asyncio.create_task(
                 self.start_camera_cable_wrap_following()
@@ -1282,7 +1297,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.camera_cable_wrap_follow_start_task
 
     async def do_homeBothAxes(self, data):
-        self.assert_enabled()
+        self.assert_enabled_and_not_disabling()
         await self.send_command(
             commands.BothAxesHome(),
             do_lock=True,
@@ -1290,7 +1305,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_openMirrorCovers(self, data):
         """Handle the openMirrorCovers command."""
-        self.assert_enabled()
+        self.assert_enabled_and_not_disabling()
         await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
@@ -1305,7 +1320,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command."""
-        self.assert_enabled()
+        self.assert_enabled_and_not_disabling()
         cmd_futures = await self.send_command(
             commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
             do_lock=True,
@@ -1318,19 +1333,19 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_trackTarget(self, data):
         """Handle the trackTarget command."""
-        self.assert_enabled()
+        self.assert_enabled_and_not_disabling()
         start_tai = utils.current_tai()
 
-        async def print_slow_command_lock(tai_time):
+        async def print_slow_lock(tai_time):
             await asyncio.sleep(MIN_TRACKING_ADVANCE_TIME)
             self.log.warning(
-                f"Still waiting for the command lock after {MIN_TRACKING_ADVANCE_TIME} seconds "
+                f"Still waiting for the main axes lock after {MIN_TRACKING_ADVANCE_TIME} seconds "
                 f"to process a trackTarget command with taiTime={tai_time}",
             )
 
-        slow_lock_task = asyncio.create_task(print_slow_command_lock(data.taiTime))
+        slow_lock_task = asyncio.create_task(print_slow_lock(data.taiTime))
 
-        async with self.command_lock:
+        async with self.main_axes_lock:
             slow_lock_task.cancel()
             # Note: the time now (the time at which the lock was obtained)
             # is essentially the same as the time at which the command will be
@@ -1342,7 +1357,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     f"Ignoring a trackTarget command with taiTime={data.taiTime}: "
                     f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=} "
                     f"after a message delay of {start_tai - data.private_sndStamp:0.3f} seconds "
-                    f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the command lock"
+                    f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the main axes lock"
                 )
                 return
             self.log.log(
@@ -1384,16 +1399,20 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
-        self.assert_enabled()
+        self.assert_enabled_and_not_disabling()
         await self.cmd_startTracking.ack_in_progress(
             data, timeout=START_TRACKING_TIMEOUT
         )
-        await self.send_command(commands.BothAxesEnableTracking(), do_lock=True)
+        async with self.main_axes_lock:
+            await self.send_command(commands.BothAxesEnableTracking(), do_lock=False)
 
     async def do_stop(self, data):
         """Handle the stop command."""
         self.assert_enabled()
-        await self.cmd_startTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
+        if not self.disable_devices_task.done():
+            self.log.info("Ignoring a stop command: already disabling devices")
+            return
+        await self.cmd_stop.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_commands(
             commands.BothAxesStop(),
             commands.CameraCableWrapStop(),
@@ -1405,7 +1424,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_stopTracking(self, data):
         """Handle the stopTracking command."""
         self.assert_enabled()
-        await self.cmd_startTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
+        if not self.disable_devices_task.done():
+            self.log.info("Ignoring a stopTracking command: already disabling devices")
+            return
+        await self.cmd_stopTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
     async def fault(self, code, report, traceback=""):
@@ -1932,7 +1954,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.slowdown_detection_loop()
         )
         print(
-            f"in MTMount.start: {len(self.log.handlers)} log handlers: "
+            f"MTMount.start: {len(self.log.handlers)} log handlers: "
             + ", ".join(repr(handler) for handler in self.log.handlers)
         )
 
