@@ -94,7 +94,7 @@ ROTATOR_TELEMETRY_TIMEOUT = 1
 
 # Maximum time to wait for turning on a thermal system (sec).
 # TODO DM-38323: make this shorter once Tekniker makes the thermal
-# system commands return when cooling starts, instead of which it finishes.
+# system commands return when cooling starts, instead of when it finishes.
 # At present (2023-03-10) the TMA can take up to 1/2 hour per system
 # (after which the TMA times out the command).
 SET_THERMAL_ON_TIMEOUT = 30 * 60
@@ -1049,7 +1049,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # subsystems should be fast, but not fast enough to hog the port
         # while executing all commands in the lis.
         for command in command_list:
-            await self.send_command(*command, do_lock=True)
+            await self.send_command(command, do_lock=True)
 
     async def send_command(self, command, *, do_lock, timeout=None):
         """Send a command to the operation manager and wait for it to finish.
