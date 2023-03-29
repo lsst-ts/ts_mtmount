@@ -41,6 +41,7 @@ from lsst.ts.idl.enums.MTMount import (
 from .. import commands, constants, enums
 from ..exceptions import CommandSupersededException
 from ..telemetry_map import TelemetryTopicId
+from .auxiliary_cabinets_thermal import AuxiliaryCabinetsThermalDevice
 
 # from . import device
 from .axis_device import AxisDevice
@@ -49,7 +50,6 @@ from .main_axes_power_supply_device import MainAxesPowerSupplyDevice
 from .main_cabinet_thermal import MainCabinetThermalDevice
 from .mirror_cover_locks_device import MirrorCoverLocksDevice
 from .mirror_covers_device import MirrorCoversDevice
-from .modbus_cabinets_thermal import ModbusCabinetsThermalDevice
 from .oil_supply_system_device import OilSupplySystemDevice
 from .thermal_device import ThermalDevice
 from .top_end_chiller_device import TopEndChillerDevice
@@ -177,7 +177,7 @@ class Controller:
         System.AZIMUTH_DRIVES_THERMAL: 4,
         System.ELEVATION_DRIVES_THERMAL: 2,
         System.CABINET_0101_THERMAL: 1,
-        System.MODBUS_TEMPERATURE_CONTROLLERS: 5,
+        System.AUXILIARY_CABINETS_THERMAL: 5,
         System.TOP_END_CHILLER: 1,
         System.MAIN_CABINET_THERMAL: 1,
     }
@@ -225,7 +225,7 @@ class Controller:
         System.AZIMUTH_DRIVES_THERMAL: 4,
         System.ELEVATION_DRIVES_THERMAL: 2,
         System.CABINET_0101_THERMAL: 1,
-        System.MODBUS_TEMPERATURE_CONTROLLERS: 5,
+        System.AUXILIARY_CABINETS_THERMAL: 5,
         System.MAIN_CABINET_THERMAL: 1,
     }
 
@@ -447,7 +447,7 @@ class Controller:
             System.MAIN_CABINET_THERMAL: None,
             System.MIRROR_COVER_LOCKS: None,
             System.MIRROR_COVERS: None,
-            System.MODBUS_TEMPERATURE_CONTROLLERS: None,
+            System.AUXILIARY_CABINETS_THERMAL: None,
             System.OIL_SUPPLY_SYSTEM: None,
             System.TOP_END_CHILLER: None,
         }
@@ -882,7 +882,7 @@ class Controller:
             MainCabinetThermalDevice,
             MirrorCoverLocksDevice,
             MirrorCoversDevice,
-            ModbusCabinetsThermalDevice,
+            AuxiliaryCabinetsThermalDevice,
             OilSupplySystemDevice,
             TopEndChillerDevice,
         ):

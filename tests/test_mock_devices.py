@@ -56,7 +56,7 @@ class TrivialMockController:
                 mtmount.mock.MainCabinetThermalDevice(controller=self),
                 mtmount.mock.MirrorCoverLocksDevice(controller=self),
                 mtmount.mock.MirrorCoversDevice(controller=self),
-                mtmount.mock.ModbusCabinetsThermalDevice(controller=self),
+                mtmount.mock.AuxiliaryCabinetsThermalDevice(controller=self),
                 mtmount.mock.OilSupplySystemDevice(controller=self),
                 mtmount.mock.TopEndChillerDevice(controller=self),
             ]
@@ -76,7 +76,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.controller = TrivialMockController()
 
         self.system_ids_no_power_command = frozenset(
-            (System.MAIN_CABINET_THERMAL, System.MODBUS_CABINETS_THERMAL)
+            (System.MAIN_CABINET_THERMAL, System.AUXILIARY_CABINETS_THERMAL)
         )
 
     def get_command_class(self, command_code_name):
@@ -532,23 +532,23 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.power_on
         assert not device.alarm_on
 
-    async def test_modbus_cabinets_thermal(self):
-        system_id = System.MODBUS_CABINETS_THERMAL
+    async def test_auxiliary_cabinets_thermal(self):
+        system_id = System.AUXILIARY_CABINETS_THERMAL
         device = self.controller.device_dict[system_id]
         assert device.power_on
         assert not device.alarm_on
 
         for on in (True, False):
             await self.run_command(
-                mtmount.commands.ModbusCabinetsThermalFanPower(on=on)
+                mtmount.commands.AuxiliaryCabinetsThermalFanPower(on=on)
             )
             assert device.fans_on == on
 
         def make_track_setpoint_command(setpoint):
-            return mtmount.commands.ModbusCabinetsThermalSetpoint(setpoint=setpoint)
+            return mtmount.commands.AuxiliaryCabinetsThermalSetpoint(setpoint=setpoint)
 
         await self.check_thermal_device(
-            system_id=System.MODBUS_CABINETS_THERMAL,
+            system_id=System.AUXILIARY_CABINETS_THERMAL,
             make_power_command=None,
             make_track_setpoint_command=make_track_setpoint_command,
             make_track_ambient_command=None,

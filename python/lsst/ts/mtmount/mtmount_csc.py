@@ -132,7 +132,7 @@ SET_THERMAL_FIELD_SYSTEM_ID_DICT = dict(
     elevationDrives=System.ELEVATION_DRIVES_THERMAL,
     cabinet0101=System.CABINET_0101_THERMAL,
     mainCabinet=System.MAIN_CABINET_THERMAL,
-    modbusCabinets=System.MODBUS_CABINETS_THERMAL,
+    auxiliaryCabinets=System.AUXILIARY_CABINETS_THERMAL,
     oilSupplySystemCabinet=System.OIL_SUPPLY_SYSTEM,
     topEndChiller=System.TOP_END_CHILLER,
 )
@@ -382,10 +382,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 System.ELEVATION_DRIVES_THERMAL,
                 self.evt_elevationDrivesThermalSystemState,
             ),
-            (System.CABINET_0101_THERMAL, self.evt_az0101CabinetThermalSystemState),
+            (System.CABINET_0101_THERMAL, self.evt_cabinet0101ThermalSystemState),
             (
-                System.MODBUS_TEMPERATURE_CONTROLLERS,
-                self.evt_modbusTemperatureControllersSystemState,
+                System.AUXILIARY_CABINETS_THERMAL,
+                self.evt_auxiliaryCabinetsThermalSystemState,
             ),
             (
                 System.MAIN_CABINET_THERMAL,
@@ -985,10 +985,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         track_ambient=False, setpoint=setpoint
                     ),
                 )
-            case System.MODBUS_CABINETS_THERMAL:
+            case System.AUXILIARY_CABINETS_THERMAL:
                 command_list = (
-                    commands.ModbusCabinetsThermalResetAlarm(),
-                    commands.ModbusCabinetsThermalSetpoint(setpoint=setpoint),
+                    commands.AuxiliaryCabinetsThermalResetAlarm(),
+                    commands.AuxiliaryCabinetsThermalSetpoint(setpoint=setpoint),
                 )
             case System.OIL_SUPPLY_SYSTEM:
                 # Don't reset alarms; if the OSS is in fault then the axes
@@ -1031,7 +1031,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
           If system_id is not supported.
         """
         match system_id:
-            case System.MAIN_CABINET_THERMAL | System.MODBUS_CABINETS_THERMAL | System.OIL_SUPPLY_SYSTEM:
+            case System.MAIN_CABINET_THERMAL | System.AUXILIARY_CABINETS_THERMAL | System.OIL_SUPPLY_SYSTEM:
                 # Cannot turn off these thermal systems.
                 command_list = ()
             case System.TOP_END_CHILLER:

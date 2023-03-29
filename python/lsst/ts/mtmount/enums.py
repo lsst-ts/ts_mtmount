@@ -199,10 +199,10 @@ class CommandCode(enum.IntEnum):
     GET_ACTUAL_SETTINGS = 2402
     APPLY_SETTINGS_SET = 2403
     STATE_INFO = 2502
-    # Modbus temperature controller.
-    MODBUS_CABINETS_THERMAL_RESET_ALARM = 2601
-    MODBUS_CABINETS_THERMAL_SETPOINT = 2602
-    MODBUS_CABINETS_THERMAL_FAN_POWER = 2603
+    # Auxiliary cabinets temperature controller.
+    AUXILIARY_CABINETS_THERMAL_RESET_ALARM = 2601
+    AUXILIARY_CABINETS_THERMAL_SETPOINT = 2602
+    AUXILIARY_CABINETS_THERMAL_FAN_POWER = 2603
     # Send HEARTBEAT once a second or so. It will get no ack of any kind.
     # This command is called CLOCK in Tekniker's documentation.
     HEARTBEAT = 3000

@@ -28,7 +28,8 @@ from .base_thermal_device import BaseThermalDevice
 
 
 class ThermalDevice(BaseThermalDevice):
-    """Mock any of several thermal controllers.
+    """Mock several thermal controllers: azimuth/elevation drives,
+    and cabinet 0101.
 
     Limitations:
 

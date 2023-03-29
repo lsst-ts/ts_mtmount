@@ -84,9 +84,9 @@ __all__ = [
     "MirrorCoversStop",
     "MirrorCoverSystemDeploy",
     "MirrorCoverSystemRetract",
-    "ModbusCabinetsThermalFanPower",
-    "ModbusCabinetsThermalResetAlarm",
-    "ModbusCabinetsThermalSetpoint",
+    "AuxiliaryCabinetsThermalFanPower",
+    "AuxiliaryCabinetsThermalResetAlarm",
+    "AuxiliaryCabinetsThermalSetpoint",
     "OilSupplySystemCabinetsThermalSetpoint",
     "OilSupplySystemPower",
     "OilSupplySystemPowerCirculationPump",
@@ -769,16 +769,16 @@ class MirrorCoversStop(BaseCommand):
     )
 
 
-class ModbusCabinetsThermalFanPower(BaseCommand):
+class AuxiliaryCabinetsThermalFanPower(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MODBUS_CABINETS_THERMAL_FAN_POWER,
+        enums.CommandCode.AUXILIARY_CABINETS_THERMAL_FAN_POWER,
         _ItemParameter + _OnOffParameter,
     )
 
 
-class ModbusCabinetsThermalResetAlarm(BaseCommand):
+class AuxiliaryCabinetsThermalResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MODBUS_CABINETS_THERMAL_RESET_ALARM,
+        enums.CommandCode.AUXILIARY_CABINETS_THERMAL_RESET_ALARM,
         (
             field_info.IntFieldInfo(
                 name="cabinet", doc="Cabinet index: one of -1 (all), ?", default=-1
@@ -787,9 +787,9 @@ class ModbusCabinetsThermalResetAlarm(BaseCommand):
     )
 
 
-class ModbusCabinetsThermalSetpoint(BaseCommand):
+class AuxiliaryCabinetsThermalSetpoint(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.MODBUS_CABINETS_THERMAL_SETPOINT,
+        enums.CommandCode.AUXILIARY_CABINETS_THERMAL_SETPOINT,
         (
             field_info.IntFieldInfo(
                 name="cabinet", doc="Cabinet index: one of -1 (all), ?", default=-1
@@ -958,9 +958,9 @@ Commands = (
     MirrorCoversPower,
     MirrorCoversResetAlarm,
     MirrorCoversStop,
-    ModbusCabinetsThermalFanPower,
-    ModbusCabinetsThermalResetAlarm,
-    ModbusCabinetsThermalSetpoint,
+    AuxiliaryCabinetsThermalFanPower,
+    AuxiliaryCabinetsThermalResetAlarm,
+    AuxiliaryCabinetsThermalSetpoint,
     OilSupplySystemCabinetsThermalSetpoint,
     OilSupplySystemPower,
     OilSupplySystemPowerCirculationPump,

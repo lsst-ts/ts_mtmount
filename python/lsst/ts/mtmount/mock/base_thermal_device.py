@@ -31,11 +31,12 @@ TEMPERATURE_SLOP_FACTOR = 0.9
 
 
 class BaseThermalDevice(BaseDevice):
-    """Mock the modbus cabinets thermal controller (which is always on).
+    """Base class for mock thermal controllers.
 
     Limitations:
 
-    * Ignores the "item" command parameter; it always controls all items.
+    * Ignores the "item" command parameter, if relevant; it always controls
+      all items.
     * Instantly adjusts the actual temperature to almost match the setpoint.
 
     Parameters

@@ -437,7 +437,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             expected_on_topic_attr_name = {
                 f"evt_{prefix}SystemState"
                 for prefix in (
-                    "modbusTemperatureControllers",
+                    "auxiliaryCabinetsThermal",
                     "mainCabinetThermal",
                 )
             }
@@ -614,6 +614,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     "moveToTarget",
                     "startTracking",
                     "trackTarget",
+                    "setThermal",
                     "stopTracking",
                     "stop",
                 )

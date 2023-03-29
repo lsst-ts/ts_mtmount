@@ -19,15 +19,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["ModbusCabinetsThermalDevice"]
+__all__ = ["AuxiliaryCabinetsThermalDevice"]
 
 from lsst.ts.idl.enums.MTMount import System
 
 from .base_thermal_device import BaseThermalDevice
 
 
-class ModbusCabinetsThermalDevice(BaseThermalDevice):
-    """Mock the modbus cabinets thermal controller (which is always on).
+class AuxiliaryCabinetsThermalDevice(BaseThermalDevice):
+    """Mock the auxiliary cabinets thermal controller (which is always on).
 
     Limitations:
 
@@ -43,7 +43,8 @@ class ModbusCabinetsThermalDevice(BaseThermalDevice):
     def __init__(self, controller):
         self.fans_on = False
         super().__init__(
-            controller=controller, system_id=System.MODBUS_TEMPERATURE_CONTROLLERS
+            controller=controller,
+            system_id=System.AUXILIARY_CABINETS_THERMAL,
         )
 
     @property

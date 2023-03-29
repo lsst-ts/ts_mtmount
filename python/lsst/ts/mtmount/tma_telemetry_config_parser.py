@@ -43,6 +43,9 @@ NAME_INT_RE = re.compile(r"^(.*?)(\d*)$")
 # Dict of TMA section name: SAL topic name,
 # for names that the automatic translation isn't good enough.
 TOPIC_NAME_TRANSLATION_DICT = {
+    "AuxiliaryBoxes": "auxiliaryCabinetsThermal",
+    "Cabinet0101": "cabinet0101Thermal",
+    "MountControlMainCabinet": "mainCabinetThermal",
     "OSS": "oilSupplySystem",
 }
 

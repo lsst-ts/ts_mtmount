@@ -55,7 +55,7 @@ UNSUPPORTED_COMMAND_CODE = (
 
 SYSTEMS_INITIALLY_ON = frozenset(
     (
-        System.MODBUS_CABINETS_THERMAL,
+        System.AUXILIARY_CABINETS_THERMAL,
         System.MAIN_CABINET_THERMAL,
     )
 )
@@ -1357,7 +1357,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     power_state_systems.append(reply.system)
                     nelts = self.controller.power_state_nelts[reply.system]
                     if reply.system in {
-                        System.MODBUS_TEMPERATURE_CONTROLLERS,
+                        System.AUXILIARY_CABINETS_THERMAL,
                         System.MAIN_CABINET_THERMAL,
                     }:
                         expected_state = PowerState.ON
