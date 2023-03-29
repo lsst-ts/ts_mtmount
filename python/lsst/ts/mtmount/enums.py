@@ -185,7 +185,6 @@ class CommandCode(enum.IntEnum):
     STATE_OF_OPERATION_MANAGER = 2001  # NOT ACKED!
     # Ask the Operation Manager to exit
     APPLICATION_EXIT = 2002
-    # "Internal command for Operation Manager"
     ASK_FOR_COMMAND = 2103
     # The top end chiller commands may change,
     # once control is implemented.
@@ -199,7 +198,6 @@ class CommandCode(enum.IntEnum):
     GET_ACTUAL_SETTINGS = 2402
     APPLY_SETTINGS_SET = 2403
     STATE_INFO = 2502
-    # Auxiliary cabinets temperature controller.
     AUXILIARY_CABINETS_THERMAL_RESET_ALARM = 2601
     AUXILIARY_CABINETS_THERMAL_SETPOINT = 2602
     AUXILIARY_CABINETS_THERMAL_FAN_POWER = 2603
