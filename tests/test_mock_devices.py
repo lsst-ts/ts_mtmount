@@ -76,7 +76,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         self.controller = TrivialMockController()
 
         self.system_ids_no_power_command = frozenset(
-            (System.MAIN_CABINET_THERMAL, System.AUXILIARY_CABINETS_THERMAL)
+            (System.AUXILIARY_CABINETS_THERMAL, System.MAIN_CABINET_THERMAL)
         )
 
     def get_command_class(self, command_code_name):
