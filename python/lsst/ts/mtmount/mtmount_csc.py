@@ -622,7 +622,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.rotator_position_error_excessive = False
             rotator_position = rot_data.demandPosition
             rotator_velocity = rot_data.demandVelocity
-        # Note: the rotator does not report actualAcceleration
         rotator_acceleration = rot_data.demandAcceleration
 
         # Compute desired camera cable wrap position and velocity

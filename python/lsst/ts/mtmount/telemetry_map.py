@@ -107,8 +107,7 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 
 8:
 - cameraCableWrap
-- actualAcceleration: 1
-  actualPosition: 1
+- actualPosition: 1
   actualTorquePercentage: 2
   actualVelocity: 1
   demandPosition: 1

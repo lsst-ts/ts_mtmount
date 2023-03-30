@@ -487,7 +487,6 @@ class Controller:
                 topicID=topic_id,
                 actualPosition=actual.position,
                 actualVelocity=actual.velocity,
-                actualAcceleration=actual.acceleration,
                 demandPosition=target.position,
                 demandVelocity=target.velocity,
                 actualTorquePercentage1=torque_percent,

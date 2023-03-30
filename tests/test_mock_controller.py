@@ -1523,7 +1523,6 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             for name in (
                 "actualPosition",
                 "actualVelocity",
-                "actualAcceleration",
                 "demandPosition",
                 "demandVelocity",
                 "actualTorquePercentage1",
