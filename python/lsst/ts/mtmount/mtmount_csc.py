@@ -33,7 +33,12 @@ import subprocess
 import types
 
 from lsst.ts import salobj, utils
-from lsst.ts.idl.enums.MTMount import AxisMotionState, PowerState, System
+from lsst.ts.idl.enums.MTMount import (
+    AxisMotionState,
+    PowerState,
+    System,
+    ThermalCommandState,
+)
 
 from . import __version__, commands, constants, enums
 from .command_futures import CommandFutures
@@ -87,6 +92,14 @@ MOCK_CTRL_START_TIMEOUT = 30
 # on the velocity and acceleration).
 ROTATOR_TELEMETRY_TIMEOUT = 1
 
+# Maximum time to wait for turning on a thermal system (sec).
+# TODO DM-38323: make this shorter once Tekniker makes the thermal
+# system commands return when cooling starts, instead of when it finishes.
+# At present (2023-03-10) the TMA can take up to 1/2 hour per system
+# (after which the TMA times out the command).
+SET_THERMAL_ON_TIMEOUT = 30 * 60
+SET_THERMAL_OFF_TIMEOUT = 10  # A guess.
+
 # Max timeout (sec) for commands that are expected to reply quickly.
 # This must be longer than 0.5 seconds in order to catch
 # "no ack seen in 500ms" errors from the TMA.
@@ -112,6 +125,17 @@ TRACK_COMMAND_TIMEOUT = 1
 
 # Minimum tracking advance time (sec) allowed in trackTarget commands
 MIN_TRACKING_ADVANCE_TIME = 0.05
+
+# Dict of setThermal command field prefix: system_id
+SET_THERMAL_FIELD_SYSTEM_ID_DICT = dict(
+    azimuthDrives=System.AZIMUTH_DRIVES_THERMAL,
+    elevationDrives=System.ELEVATION_DRIVES_THERMAL,
+    cabinet0101=System.CABINET_0101_THERMAL,
+    mainCabinet=System.MAIN_CABINET_THERMAL,
+    auxiliaryCabinets=System.AUXILIARY_CABINETS_THERMAL,
+    oilSupplySystemCabinet=System.OIL_SUPPLY_SYSTEM,
+    topEndChiller=System.TOP_END_CHILLER,
+)
 
 
 class SystemStateInfo:
@@ -307,6 +331,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.llv_heartbeat_loop_task = utils.make_done_future()
         self.slowdown_detection_loop_task = utils.make_done_future()
 
+        # Task to monitor the setThermal command.
+        self.set_thermal_task = utils.make_done_future()
+
         # Is camera rotator actual position - demand position
         # greater than config.max_rotator_position_error?
         # Log a warning every time this transitions to True.
@@ -355,16 +382,26 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 System.ELEVATION_DRIVES_THERMAL,
                 self.evt_elevationDrivesThermalSystemState,
             ),
-            (System.AZ0101_CABINET_THERMAL, self.evt_az0101CabinetThermalSystemState),
+            (System.CABINET_0101_THERMAL, self.evt_cabinet0101ThermalSystemState),
             (
-                System.MODBUS_TEMPERATURE_CONTROLLERS,
-                self.evt_modbusTemperatureControllersSystemState,
+                System.AUXILIARY_CABINETS_THERMAL,
+                self.evt_auxiliaryCabinetsThermalSystemState,
             ),
-            (System.MAIN_CABINET_THERMAL, self.evt_mainCabinetThermalSystemState),
+            (
+                System.MAIN_CABINET_THERMAL,
+                self.evt_mainCabinetThermalSystemState,
+            ),
             (System.MAIN_AXES_POWER_SUPPLY, self.evt_mainAxesPowerSupplySystemState),
             (System.TOP_END_CHILLER, self.evt_topEndChillerSystemState),
         ):
             self.system_state_dict[system_id] = SystemStateInfo(topic)
+
+        # Dict of system_id: command prefix, for the few systems we need.
+        self.command_prefixes = {
+            System.AZIMUTH_DRIVES_THERMAL: "AzimuthDrivesThermal",
+            System.ELEVATION_DRIVES_THERMAL: "ElevationDrivesThermal",
+            System.CABINET_0101_THERMAL: "Cabinet0101Thermal",
+        }
 
         # Dict of ReplyId: function to call.
         # The function receives one argument: the reply.
@@ -534,6 +571,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
         self.read_loop_task.cancel()
+        self.set_thermal_task.cancel()
         self.llv_heartbeat_loop_task.cancel()
 
         await self.disconnect()
@@ -584,7 +622,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.rotator_position_error_excessive = False
             rotator_position = rot_data.demandPosition
             rotator_velocity = rot_data.demandVelocity
-        # Note: the rotator does not report actualAcceleration
         rotator_acceleration = rot_data.demandAcceleration
 
         # Compute desired camera cable wrap position and velocity
@@ -664,6 +701,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             self.should_be_connected = True
             self.read_loop_task.cancel()
+            self.set_thermal_task.cancel()
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
             await self.send_command(commands.StateInfo(), do_lock=True)
@@ -922,6 +960,95 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_summary_state(self):
         if self.summary_state == salobj.State.FAULT:
             await self.disable_devices()
+
+    async def set_thermal_on(self, system_id, setpoint):
+        """Turn on a thermal controller with a specified setpoint.
+
+        Parameters
+        ----------
+        system_id : `System`
+            ID of the thermal control system.
+        setpoint : `float`
+            Desired temperature (C).
+
+        Raises
+        ------
+        ValueError
+          If system_id is not supported.
+        """
+        match system_id:
+            case System.MAIN_CABINET_THERMAL:
+                command_list = (
+                    commands.MainCabinetThermalResetAlarm(),
+                    commands.MainCabinetThermalTrackAmbient(
+                        track_ambient=False, setpoint=setpoint
+                    ),
+                )
+            case System.AUXILIARY_CABINETS_THERMAL:
+                command_list = (
+                    commands.AuxiliaryCabinetsThermalResetAlarm(),
+                    commands.AuxiliaryCabinetsThermalSetpoint(setpoint=setpoint),
+                )
+            case System.OIL_SUPPLY_SYSTEM:
+                # Don't reset alarms; if the OSS is in fault then the axes
+                # are in fault, and we should deal with it more directly.
+                command_list = (
+                    commands.OilSupplySystemCabinetsThermalSetpoint(setpoint=setpoint),
+                )
+            case System.TOP_END_CHILLER:
+                raise RuntimeError("The top end chiller is not yet supported")
+            case _:
+                command_prefix = self.command_prefixes.get(system_id)
+                if command_prefix is None:
+                    raise RuntimeError(f"{system_id=!r} not supported")
+                command_list = (
+                    getattr(commands, command_prefix + "ResetAlarm")(),
+                    getattr(commands, command_prefix + "Power")(on=True),
+                    getattr(commands, command_prefix + "ControlMode")(
+                        mode=enums.ThermalMode.TRACK_SETPOINT, setpoint=setpoint
+                    ),
+                )
+        # Use do_lock=False because commands to turn on thermal subsystems
+        # can be very slow -- far too slow to lock the communication port
+        # while they run.
+        # Since we are not locking the port, we can call send_commands
+        # instead of calling send_command separately for each command
+        # (as set_thermal_off does).
+        await self.send_commands(*command_list, do_lock=False)
+
+    async def set_thermal_off(self, system_id):
+        """Turn off a thermal controller.
+
+        Parameters
+        ----------
+        system_id : `System`
+            ID of the thermal control system.
+
+        Raises
+        ------
+        ValueError
+          If system_id is not supported.
+        """
+        match system_id:
+            case System.MAIN_CABINET_THERMAL | System.AUXILIARY_CABINETS_THERMAL | System.OIL_SUPPLY_SYSTEM:
+                # Cannot turn off these thermal systems.
+                command_list = ()
+            case System.TOP_END_CHILLER:
+                raise RuntimeError("The top end chiller is not yet supported")
+            case _:
+                command_prefix = self.command_prefixes.get(system_id)
+                if command_prefix is None:
+                    raise RuntimeError(f"{system_id=!r} not supported")
+                command_list = (
+                    getattr(commands, command_prefix + "ResetAlarm")(),
+                    getattr(commands, command_prefix + "Power")(on=False),
+                )
+        # Use do_lock=True and issue each command separately (instead of
+        # calling send_commands), because commands to turn off thermal
+        # subsystems should be fast, but not fast enough to hog the port
+        # while executing all commands in the lis.
+        for command in command_list:
+            await self.send_command(command, do_lock=True)
 
     async def send_command(self, command, *, do_lock, timeout=None):
         """Send a command to the operation manager and wait for it to finish.
@@ -1330,6 +1457,80 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await cmd_futures.done
         # Note: the target position is reported
         # by the TMA as ReplyId.AXIS_MOTION_STATE
+
+    async def do_setThermal(self, data):
+        """Handle the setThermal command."""
+        self.assert_enabled()
+        errors = []
+        task_dict = dict()
+        for field_prefix, system_id in SET_THERMAL_FIELD_SYSTEM_ID_DICT.items():
+            state_field_name = field_prefix + "State"
+            thermal_command_state = getattr(data, state_field_name)
+            num_to_turn_on = 0
+            # Dict of field_prefix: task to control that item
+            try:
+                match thermal_command_state:
+                    case ThermalCommandState.ON:
+                        num_to_turn_on += 1
+                        setpoint = getattr(data, field_prefix + "Setpoint")
+                        # await self.set_thermal_on(
+                        #     system_id=system_id, setpoint=setpoint
+                        # )
+                        task_dict[field_prefix] = asyncio.create_task(
+                            self.set_thermal_on(system_id=system_id, setpoint=setpoint)
+                        )
+                    case ThermalCommandState.OFF:
+                        task_dict[field_prefix] = asyncio.create_task(
+                            self.set_thermal_off(system_id=system_id)
+                        )
+                    case ThermalCommandState.NO_CHANGE:
+                        pass
+                    case _:
+                        errors.append(
+                            f"{state_field_name}={thermal_command_state} unrecognized command state"
+                        )
+            except Exception as e:
+                errors.append(
+                    f"{state_field_name}={thermal_command_state} failed: {e!r}"
+                )
+
+        if errors:
+            raise salobj.ExpectedError("; ".join(errors))
+
+        if not task_dict:
+            self.log.warning("setThermal called with no states set; nothing to do")
+            # Nothing to do.
+            return
+
+        self.set_thermal_task = asyncio.gather(
+            *list(task_dict.values()), return_exceptions=True
+        )
+        if num_to_turn_on > 0:
+            timeout = SET_THERMAL_ON_TIMEOUT
+        else:
+            timeout = SET_THERMAL_OFF_TIMEOUT
+        self.cmd_setThermal.ack_in_progress(
+            data=data, timeout=timeout, result="Thermal systems commands can be slow"
+        )
+        await self.set_thermal_task
+        task_errors = []
+        for field_prefix, task in task_dict.items():
+            if task.cancelled():
+                # Ignore cancelled subsystems
+                continue
+            if not task.done():
+                self.log.warning(
+                    f"bug: setThermal of {field_prefix} not done after asyncio.gather"
+                )
+                continue
+            exception = task.exception()
+            if exception is not None:
+                task_errors.append(f"{field_prefix} failed: {exception}")
+
+        if task_errors:
+            raise salobj.ExpectedError(
+                "Failed on one or more subsystems: " + ", ".join(task_errors)
+            )
 
     async def do_trackTarget(self, data):
         """Handle the trackTarget command."""

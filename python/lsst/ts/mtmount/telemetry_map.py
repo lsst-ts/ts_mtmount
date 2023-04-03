@@ -92,7 +92,7 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   timestamp: 1
 
 2:
-- cabinet0101
+- cabinet0101Thermal
 - actualTemperature: 1
   actualValvePosition: 1
   setpointTemperature: 1
@@ -107,8 +107,7 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 
 8:
 - cameraCableWrap
-- actualAcceleration: 1
-  actualPosition: 1
+- actualPosition: 1
   actualTorquePercentage: 2
   actualVelocity: 1
   demandPosition: 1
@@ -166,7 +165,7 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   timestamp: 1
 
 24:
-- mountControlMainCabinet
+- mainCabinetThermal
 - mainCabinetExternalTemperature: 1
   mainCabinetInternalTemperature: 2
   setpointTemperature: 1
@@ -213,7 +212,7 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   timestamp: 1
 
 1:
-- auxiliaryBoxes
+- auxiliaryCabinetsThermal
 - actualTemperatureAzimuthDriveCabinet0001: 1
   actualTemperatureAzimuthPowerDistributionCabinet0001: 1
   actualTemperatureAzimuthPowerDistributionTransformer0001: 1

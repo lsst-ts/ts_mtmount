@@ -10,3 +10,7 @@ pytest_session.txt
 __pycache__
 tests/.tests
 version.py
+.pre-commit-config.yaml
+.flake8
+.isort.cfg
+.mypy.ini

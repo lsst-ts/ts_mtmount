@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["TopEndChillerDevice"]
+__all__ = ["MainCabinetThermalDevice"]
 
 from lsst.ts.idl.enums.MTMount import System
 
@@ -27,10 +27,12 @@ from ..enums import ThermalMode
 from .base_thermal_device import BaseThermalDevice
 
 
-class TopEndChillerDevice(BaseThermalDevice):
-    """Top end chiller.
+class MainCabinetThermalDevice(BaseThermalDevice):
+    """Mock main cabinet thermal controller.
 
-    This is a guess, since the command set and initial state are unknown.
+    Limitations:
+
+    * Instantly adjusts the actual temperature to almost match the setpoint.
 
     Parameters
     ----------
@@ -39,7 +41,19 @@ class TopEndChillerDevice(BaseThermalDevice):
     """
 
     def __init__(self, controller):
-        super().__init__(controller=controller, system_id=System.TOP_END_CHILLER)
+        super().__init__(controller=controller, system_id=System.MAIN_CABINET_THERMAL)
+
+    @property
+    def power_on(self):
+        # Always on, unless in fault.
+        return not self.alarm_on
+
+    @power_on.setter
+    def power_on(self, on):
+        raise RuntimeError("This device is always on, unless in fault.")
+
+    def do_set_temperature(self, command):
+        raise NotImplementedError("Use TRACK_TEMPERATURE instead")
 
     def do_track_ambient(self, command):
         self.assert_on()
@@ -49,6 +63,6 @@ class TopEndChillerDevice(BaseThermalDevice):
             else ThermalMode.TRACK_SETPOINT
         )
         if command.track_ambient:
-            self.set_ambient(setpoint=self.controller.ambient_temperature)
+            self.set_ambient(command.setpoint)
         else:
-            self.set_setpoint(setpoint=command.setpoint)
+            self.set_setpoint(command.setpoint)

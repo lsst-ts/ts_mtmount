@@ -44,8 +44,8 @@ class BaseDevice:
     The "command" part of the do_command method name must match a
     `CommandCode` name, but lowercase and with the device prefix omitted.
     For example, for a mock device with system_id = `System.ELEVATION`,
-    the method ``do_reset_error`` implements the
-    `CommandCode.ELEVATION_RESET_ERROR` command.
+    the method ``do_reset_alarm`` implements the
+    `CommandCode.ELEVATION_RESET_ALARM` command.
 
     The do_command method must accept one argument: a `Command`.
     This may be assumed to be the correct command.
@@ -85,10 +85,14 @@ class BaseDevice:
         Override this implementation if the device has multiple
         subsystems that can individually be powered on.
         """
+        if self.alarm_on:
+            return False
         return self._power_on
 
     @power_on.setter
     def power_on(self, on):
+        if on and self.alarm_on:
+            raise RuntimeError("Cannot turn on while an alarm is active.")
         self._power_on = on
 
     def assert_on(self):
@@ -105,7 +109,9 @@ class BaseDevice:
         # Iterate over commands that this CSC supports,
         # which is probably not all commands in `CommandCode`.
         for command_code in commands.CommandDict:
-            if command_code.name.startswith(prefix):
+            if command_code.name.startswith(
+                prefix
+            ) and not command_code.name.startswith(prefix + "DRIVES_THERMAL_"):
                 command_name_lower = command_code.name[prefix_len:].lower()
                 do_method = getattr(self, f"do_{command_name_lower}")
                 if command_code in self.controller.command_dict:

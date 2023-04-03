@@ -31,6 +31,13 @@ from lsst.ts import mtmount
 DATA_DIR = pathlib.Path(__file__).parent / "data" / "tma_telemetry_config"
 
 
+def assert_same_xml_str(str1, str2):
+    """Compare two XML strings, ignoring "." before </Description>."""
+    trimmed_str1 = str1.replace(".</Description>", "</Description>")
+    trimmed_str2 = str2.replace(".</Description>", "</Description>")
+    assert trimmed_str1 == trimmed_str2
+
+
 class TMATelemetryConfigParserParserTestCase(unittest.TestCase):
     """Test TMATelemetryConfigParser."""
 
@@ -56,7 +63,7 @@ class TMATelemetryConfigParserParserTestCase(unittest.TestCase):
                 outdata = outfile.read()
         with open(DATA_DIR / "MTMount_Telemetry.xml", mode="r") as infile:
             expected_data = infile.read()
-        assert outdata == expected_data
+        assert_same_xml_str(outdata, expected_data)
 
     def test_bin_script(self):
         exe_name = "run_tma_telemetry_config_parser"
@@ -75,7 +82,7 @@ class TMATelemetryConfigParserParserTestCase(unittest.TestCase):
                 outdata = outfile.read()
         with open(DATA_DIR / "MTMount_Telemetry.xml", mode="r") as infile:
             expected_data = infile.read()
-        assert outdata == expected_data
+        assert_same_xml_str(outdata, expected_data)
 
     def test_invalid_configs(self):
         for bad_config_path in DATA_DIR.glob("bad_*.ini"):
