@@ -28,7 +28,6 @@ import pathlib
 import time
 import unittest
 
-import numpy.testing
 import pytest
 from lsst.ts import mtmount, salobj, utils
 from lsst.ts.idl.enums.MTMount import (
@@ -37,7 +36,10 @@ from lsst.ts.idl.enums.MTMount import (
     ElevationLockingPinMotionState,
     PowerState,
     System,
+    ThermalCommandState,
 )
+from lsst.ts.mtmount.mtmount_csc import SET_THERMAL_FIELD_SYSTEM_ID_DICT
+from numpy.testing import assert_array_equal
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
 
@@ -436,10 +438,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             expected_on_topic_attr_name = {
                 f"evt_{prefix}SystemState"
                 for prefix in (
-                    "azimuthDrivesThermal",
-                    "elevationDrivesThermal",
-                    "az0101CabinetThermal",
-                    "modbusTemperatureControllers",
+                    "auxiliaryCabinetsThermal",
                     "mainCabinetThermal",
                 )
             }
@@ -466,24 +465,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 if state_info.num_thermal > 0:
                     nskip += 1
                     if state_info.num_thermal == 1:
-                        system_state_kwargs["trackAmbient"] = True
+                        system_state_kwargs["trackAmbient"] = False
                     else:
                         system_state_kwargs["trackAmbient"] = [
-                            True
+                            False
                         ] * state_info.num_thermal
                 for i in range(nskip):
                     await topic.next(flush=False, timeout=STD_TIMEOUT)
-                data = await self.assert_next_sample(topic, **system_state_kwargs)
-                if state_info.num_thermal == 1:
-                    assert data.setTemperature == pytest.approx(
-                        self.mock_controller.ambient_temperature
-                    )
-                elif state_info.num_thermal > 1:
-                    numpy.testing.assert_allclose(
-                        data.setTemperature,
-                        [self.mock_controller.ambient_temperature]
-                        * state_info.num_thermal,
-                    )
 
             for topic in (
                 self.remote.evt_mirrorCoverLocksMotionState,
@@ -627,6 +615,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     "moveToTarget",
                     "startTracking",
                     "trackTarget",
+                    "setThermal",
                     "stopTracking",
                     "stop",
                 )
@@ -1260,6 +1249,129 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
             await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
             await self.assert_axes_in_position(elevation=False, azimuth=False)
+
+    async def test_set_thermal(self):
+        system_id_thermal_prefix_dict = {
+            value: key for key, value in SET_THERMAL_FIELD_SYSTEM_ID_DICT.items()
+        }
+        system_ids_no_power_command = frozenset(
+            (System.AUXILIARY_CABINETS_THERMAL, System.MAIN_CABINET_THERMAL)
+        )
+
+        def get_state_event_nelt(system_id):
+            """Get the remote event that reports the state of a particular
+            system and the number of thermal elements
+            """
+            state_info = self.csc.system_state_dict[system_id]
+            attr_name = state_info.topic.attr_name
+            return getattr(self.remote, attr_name), state_info.num_thermal
+
+        def expand_value(value, nelt):
+            if nelt == 1:
+                return value
+            else:
+                return [value] * nelt
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            thermal_devices = {
+                system_id: self.mock_controller.device_dict[system_id]
+                for system_id in self.mock_controller.chiller_state_nelts
+            }
+            for system_id, device in thermal_devices.items():
+                assert device.track_setpoint
+                assert device.setpoint == 0
+                assert device.ambient_setpoint == 0
+                assert device.temperature == pytest.approx(
+                    0, abs=device.temperature_slop
+                )
+                state_topic, nelt = get_state_event_nelt(system_id)
+                expected_power_state = (
+                    PowerState.ON
+                    if system_id in system_ids_no_power_command
+                    else PowerState.OFF
+                )
+                # This topic is output twice: once with setTemperature=nan,
+                # before the CSC gets that data,
+                # then with the setTemperature=0, the initial value
+                # used by mock thermal devices.
+                data = await self.assert_next_sample(
+                    topic=state_topic,
+                    powerState=expected_power_state,
+                    trackAmbient=expand_value(False, nelt),
+                )
+                assert_array_equal(data.setTemperature, expand_value(math.nan, nelt))
+                await self.assert_next_sample(
+                    topic=state_topic,
+                    powerState=expected_power_state,
+                    trackAmbient=expand_value(False, nelt),
+                    setTemperature=expand_value(0, nelt),
+                )
+
+            # MTMountCsc cannot command the TEC yet.
+            with salobj.assertRaisesAckError():
+                for state in (ThermalCommandState.OFF, ThermalCommandState.ON):
+                    await self.remote.cmd_setThermal.set_start(
+                        topEndChillerState=state, timeout=STD_TIMEOUT
+                    )
+
+            for system_id, device in thermal_devices.items():
+                if system_id == System.TOP_END_CHILLER:
+                    continue  # already handled
+
+                field_prefix = system_id_thermal_prefix_dict[system_id]
+                device = thermal_devices[system_id]
+
+                # Turn on the chiller and set the setpoint.
+                # Use an arbitrary setpoint that is different for each system.
+                setpoint = -5.3 + system_id.value
+                kwargs = {
+                    f"{field_prefix}State": ThermalCommandState.ON,
+                    f"{field_prefix}Setpoint": setpoint,
+                }
+                await self.remote.cmd_setThermal.set_start(
+                    **kwargs, timeout=STD_TIMEOUT
+                )
+                assert device.track_setpoint
+                assert not device.track_ambient
+                assert device.setpoint == setpoint
+                assert device.temperature == pytest.approx(
+                    setpoint, abs=device.temperature_slop
+                )
+                state_topic, nelt = get_state_event_nelt(system_id)
+                if system_id not in system_ids_no_power_command:
+                    # First turn on power, then set setPoint.
+                    await self.assert_next_sample(
+                        topic=state_topic,
+                        powerState=PowerState.ON,
+                        trackAmbient=expand_value(False, nelt),
+                        setTemperature=expand_value(0, nelt),
+                    )
+                await self.assert_next_sample(
+                    topic=state_topic,
+                    powerState=PowerState.ON,
+                    trackAmbient=expand_value(False, nelt),
+                    setTemperature=expand_value(setpoint, nelt),
+                )
+
+                # Turn off the chiller.
+                kwargs = {
+                    f"{field_prefix}State": ThermalCommandState.OFF,
+                }
+                await self.remote.cmd_setThermal.set_start(
+                    **kwargs, timeout=STD_TIMEOUT
+                )
+
+                if (
+                    system_id not in system_ids_no_power_command
+                    and system_id != System.OIL_SUPPLY_SYSTEM
+                ):
+                    # The setthermal command can turn this system off.
+                    await self.assert_next_sample(
+                        topic=state_topic,
+                        powerState=PowerState.OFF,
+                        trackAmbient=expand_value(False, nelt),
+                        setTemperature=expand_value(setpoint, nelt),
+                    )
 
     async def test_slowdown_detection(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):

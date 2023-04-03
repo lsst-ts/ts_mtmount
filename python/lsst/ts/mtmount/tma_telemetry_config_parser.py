@@ -43,6 +43,9 @@ NAME_INT_RE = re.compile(r"^(.*?)(\d*)$")
 # Dict of TMA section name: SAL topic name,
 # for names that the automatic translation isn't good enough.
 TOPIC_NAME_TRANSLATION_DICT = {
+    "AuxiliaryBoxes": "auxiliaryCabinetsThermal",
+    "Cabinet0101": "cabinet0101Thermal",
+    "MountControlMainCabinet": "mainCabinetThermal",
     "OSS": "oilSupplySystem",
 }
 
@@ -570,11 +573,19 @@ class TMATelemetryConfigParser:
     <EFDB_Topic>MTMount_{topic_info.sal_name}</EFDB_Topic>"""
                 )
                 for field_info in topic_info.fields.values():
+                    # Add terminating "." to field description, if needed.
+                    field_description = field_info.description
+                    if field_description and field_description[-1] not in {
+                        ".",
+                        "?",
+                        "!",
+                    }:
+                        field_description += "."
                     outfile.write(
                         f"""
     <item>
       <EFDB_Name>{field_info.name}</EFDB_Name>
-      <Description>{field_info.description}</Description>
+      <Description>{field_description}</Description>
       <IDL_Type>{field_info.sal_type}</IDL_Type>
       <Units>{field_info.units}</Units>
       <Count>{field_info.count}</Count>

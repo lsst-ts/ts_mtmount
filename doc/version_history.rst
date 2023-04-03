@@ -6,6 +6,25 @@
 Version History
 ###############
 
+v0.26.0
+-------
+
+* `MTMountCsc`: add setThermal command.
+  This requires ts_xml 16.
+* `mock.Controller`: make connect callbacks async.
+  This requires ts_tcpip 1.
+* Stop publishing ``actualAcceleration`` (for the ``cameraCableWrap`` telemetry topic).
+* `TMATelemetryConfigParser`: terminate telemetry field descriptions with a period.
+* Use ts_pre_commit_conf.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 1.0
+* ts_idl 4.5
+* IDL files for MTMount and MTRotator from ts_xml 16
+
 v0.25.4
 -------
 

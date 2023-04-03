@@ -25,6 +25,7 @@ __all__ = [
     "EnabledState",
     "ReplyId",
     "Source",
+    "ThermalMode",
 ]
 
 import enum
@@ -44,7 +45,7 @@ class CommandCode(enum.IntEnum):
     TRACK_TARGET = 2
     ENABLE_CAMERA_WRAP = 3
     DISABLE_CAMERA_WRAP = 4
-    # Control both the mirror cover and mirror cover lock
+    # Control both the mirror cover and mirror cover lock.
     OPEN_MIRROR_COVER = 5
     CLOSE_MIRROR_COVER = 6
     STOP_MOUNT = 7
@@ -119,7 +120,7 @@ class CommandCode(enum.IntEnum):
     OIL_SUPPLY_SYSTEM_RESET_ALARM = 805
     OIL_SUPPLY_SYSTEM_SET_MODE = 806
     OIL_SUPPLY_SYSTEM_ABORT_POWERING = 807
-    OIL_SUPPLY_SYSTEM_IO_CABINETS_TEMPERATURE_SETPOINT = 808
+    OIL_SUPPLY_SYSTEM_CABINETS_THERMAL_SETPOINT = 808
     MIRROR_COVERS_POWER = 901
     MIRROR_COVERS_STOP = 902
     MIRROR_COVERS_MOVE = 903
@@ -149,17 +150,17 @@ class CommandCode(enum.IntEnum):
     DEPLOYABLE_PLATFORMS_RESET_ALARM = 1205
     DEPLOYABLE_PLATFORMS_LOCK_EXTENSION = 1206
     DEPLOYABLE_PLATFORMS_EXTEND_RETRACT = 1207
-    # Main cabinet temperature controller
+    # Main cabinet temperature controller.
     MAIN_CABINET_THERMAL_TRACK_AMBIENT = 1301
     MAIN_CABINET_THERMAL_RESET_ALARM = 1302
-    MAINMAIN_CABINET_THERMAL_SET_AMBIENT = 1303
+    MAIN_CABINET_THERMAL_SET_AMBIENT = 1303
     LOCKING_PINS_POWER = 1401
     LOCKING_PINS_STOP = 1402
     LOCKING_PINS_MOVE = 1403
     LOCKING_PINS_MOVE_VELOCITY = 1404
     LOCKING_PINS_RESET_ALARM = 1405
     LOCKING_PINS_MOVE_ALL = 1406
-    # The "locks" actually act as guides and supports, not locks
+    # The "locks" actually act as guides and supports, not locks.
     MIRROR_COVER_LOCKS_POWER = 1501
     MIRROR_COVER_LOCKS_STOP = 1502
     MIRROR_COVER_LOCKS_MOVE = 1503
@@ -168,23 +169,22 @@ class CommandCode(enum.IntEnum):
     MIRROR_COVER_LOCKS_MOVE_ALL = 1506
     MIRROR_COVER_LOCKS_LOCK = 1507
     MIRROR_COVER_LOCKS_UNLOCK = 1508
-    AZIMUTH_THERMAL_POWER = 1601
-    AZIMUTH_THERMAL_CONTROL_MODE = 1602
-    AZIMUTH_THERMAL_RESET_ALARM = 1603
-    ELEVATION_THERMAL_POWER = 1701
-    ELEVATION_THERMAL_CONTROL_MODE = 1702
-    ELEVATION_THERMAL_RESET_ALARM = 1703
-    # Reset safety interlock
+    AZIMUTH_DRIVES_THERMAL_POWER = 1601
+    AZIMUTH_DRIVES_THERMAL_CONTROL_MODE = 1602
+    AZIMUTH_DRIVES_THERMAL_RESET_ALARM = 1603
+    ELEVATION_DRIVES_THERMAL_POWER = 1701
+    ELEVATION_DRIVES_THERMAL_CONTROL_MODE = 1702
+    ELEVATION_DRIVES_THERMAL_RESET_ALARM = 1703
+    # Reset safety interlock.
     SAFETY_RESET = 1801
-    # Override safety interlock
+    # Override safety interlock.
     OVERRIDE_CAUSES = 1802
-    CABINET0101_THERMAL_POWER = 1901
-    CABINET0101_THERMAL_CONTROL_MODE = 1902
-    CABINET0101_THERMAL_RESET_ALARM = 1903
+    CABINET_0101_THERMAL_POWER = 1901
+    CABINET_0101_THERMAL_CONTROL_MODE = 1902
+    CABINET_0101_THERMAL_RESET_ALARM = 1903
     STATE_OF_OPERATION_MANAGER = 2001  # NOT ACKED!
     # Ask the Operation Manager to exit
     APPLICATION_EXIT = 2002
-    # "Internal command for Operation Manager"
     ASK_FOR_COMMAND = 2103
     # The top end chiller commands may change,
     # once control is implemented.
@@ -198,11 +198,9 @@ class CommandCode(enum.IntEnum):
     GET_ACTUAL_SETTINGS = 2402
     APPLY_SETTINGS_SET = 2403
     STATE_INFO = 2502
-    # Note that the MODBUS temperature controller is always on,
-    # so it has no power command.
-    MODBUS_CABINETS_RESET_ALARM = 2601
-    MODBUS_CABINETS_SETPOINT = 2602
-    MODBUS_CABINETS_FANS = 2603
+    AUXILIARY_CABINETS_THERMAL_RESET_ALARM = 2601
+    AUXILIARY_CABINETS_THERMAL_SETPOINT = 2602
+    AUXILIARY_CABINETS_THERMAL_FAN_POWER = 2603
     # Send HEARTBEAT once a second or so. It will get no ack of any kind.
     # This command is called CLOCK in Tekniker's documentation.
     HEARTBEAT = 3000
@@ -293,54 +291,14 @@ class Source(enum.IntEnum):
     PXI = 100
 
 
-class TelemetryTopicId(enum.IntEnum):
-    """Telemetry topic ID values.
-
-    These must match the data in `TELEMETRY_MAP`
-
-    From Julen 2022-06-08 here is the full set:
-    Azimuth 6
-    Safety 26 (maybe not reported)
-    Elevation 15
-    LockingPins (for elevation) 19
-    Deployable Platforms 11
-    Auxiliary cabinet AZ 0101 2
-    Azimuth Cable Wrap 3
-    Camera Cable Wrap 8
-    Balancing 7
-    Azimuth Drives 5
-    Azimuth Drives Thermal controller 4
-    Elevation drives 14
-    Elevation Drives Thermal controller 13
-    Encoder 16
-    The main cabinet thermal controller 24
-    Mirror Cover Locks 22
-    Mirror Cover 23
-    Main Power Supply (for AZ and EL) 21
-    Top End Chiller 27
-    Modbus temperature controllers distributed over the TMA 1
-    OSS 25
-    Comprssed Air pressures and temperatures 9
-    Cooling systems pressures and temperatures 10
-    Dynalene cooling pressures and temperatures 12
-    General Purpose Glycol pressures and temperatures 17
-    """
-
-    AZIMUTH = 6
-    AZIMUTH_DRIVE = 5
-    ELEVATION = 15
-    ELEVATION_DRIVE = 14
-    CAMERA_CABLE_WRAP = 8
-
-
 class ThermalMode(enum.IntEnum):
     """Thermal control mode for azimuth, elevation, and cabinet0101.
 
     The modes used in the following commands:
 
-    * AZIMUTH_THERMAL_CONTROL_MODE,
-    * ELEVATION_THERMAL_CONTROL_MODE
-    * CABINET0101_THERMAL_CONTROL_MODE
+    * AZIMUTH_DRIVES_THERMAL_CONTROL_MODE,
+    * ELEVATION_DRIVES_THERMAL_CONTROL_MODE
+    * CABINET_0101_THERMAL_CONTROL_MODE
 
     The modes are as follows, along with the additional parameters
     needed for the command:

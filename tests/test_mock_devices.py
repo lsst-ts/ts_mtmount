@@ -44,14 +44,25 @@ class TrivialMockController:
             )
             for system_id in mtmount.mock.CmdLimitsDict
         ]
-        devices = axis_devices + [
-            mtmount.mock.MainAxesPowerSupplyDevice(controller=self),
-            mtmount.mock.MirrorCoverLocksDevice(controller=self),
-            mtmount.mock.MirrorCoversDevice(controller=self),
-            mtmount.mock.OilSupplySystemDevice(controller=self),
-            mtmount.mock.TopEndChillerDevice(controller=self),
+        thermal_devices = [
+            mtmount.mock.ThermalDevice(controller=self, system_id=system_id)
+            for system_id in mtmount.mock.ThermalDevice.supported_system_ids
         ]
+        devices = (
+            axis_devices
+            + thermal_devices
+            + [
+                mtmount.mock.MainAxesPowerSupplyDevice(controller=self),
+                mtmount.mock.MainCabinetThermalDevice(controller=self),
+                mtmount.mock.MirrorCoverLocksDevice(controller=self),
+                mtmount.mock.MirrorCoversDevice(controller=self),
+                mtmount.mock.AuxiliaryCabinetsThermalDevice(controller=self),
+                mtmount.mock.OilSupplySystemDevice(controller=self),
+                mtmount.mock.TopEndChillerDevice(controller=self),
+            ]
+        )
         self.device_dict = {device.system_id: device for device in devices}
+        self.ambient_temperature = -1.23
 
     @property
     def main_axes_power_supply(self):
@@ -63,6 +74,10 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         # Use asyncSetUp instead of setUp, so there is a running event loop.
         self.controller = TrivialMockController()
+
+        self.system_ids_no_power_command = frozenset(
+            (System.AUXILIARY_CABINETS_THERMAL, System.MAIN_CABINET_THERMAL)
+        )
 
     def get_command_class(self, command_code_name):
         command_code = getattr(mtmount.CommandCode, command_code_name.upper())
@@ -165,7 +180,9 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
     async def test_oil_supply_system_auto(self):
         """Test the OSS main power command, which requires auto mode."""
-        device = self.controller.device_dict[System.OIL_SUPPLY_SYSTEM]
+        system_id = System.OIL_SUPPLY_SYSTEM
+        device = self.controller.device_dict[system_id]
+        device_prefix = device.system_id.name
         self.check_device_repr(device)
 
         assert not device.power_on
@@ -207,6 +224,22 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.circulation_pump_on
         assert device.main_pump_on
         assert device.auto_mode
+
+        # Test cabinet thermal control while in auto mode and power is on
+        make_power_command = self.get_command_class(device_prefix + "_POWER")
+        set_setpoint_command_class = self.get_command_class(
+            device_prefix + "_CABINETS_THERMAL_SETPOINT"
+        )
+
+        def make_track_setpoint_command(setpoint):
+            return set_setpoint_command_class(setpoint=setpoint)
+
+        await self.check_thermal_device(
+            system_id=system_id,
+            make_power_command=make_power_command,
+            make_track_setpoint_command=make_track_setpoint_command,
+            make_track_ambient_command=None,
+        )
 
         await self.run_command(
             command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0
@@ -311,6 +344,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert device.cooling_on
         assert device.circulation_pump_on
         assert device.main_pump_on
+        assert device.power_on
         assert not device.auto_mode
 
         # Cannot turn off chiller or circulation pump with main pump on
@@ -353,57 +387,210 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.main_pump_on
         assert not device.auto_mode
 
+    async def test_thermal_devices(self):
+        """Test ThermalDevice, a specific kind of thermal controller."""
+        assert mtmount.mock.ThermalDevice.supported_system_ids == {
+            System.AZIMUTH_DRIVES_THERMAL,
+            System.CABINET_0101_THERMAL,
+            System.ELEVATION_DRIVES_THERMAL,
+        }
+        for system_id in mtmount.mock.ThermalDevice.supported_system_ids:
+            device = self.controller.device_dict[system_id]
+            device_prefix = device.system_id.name
+
+            make_power_command = self.get_command_class(device_prefix + "_POWER")
+
+            set_mode_command_class = self.get_command_class(
+                device_prefix + "_CONTROL_MODE"
+            )
+
+            def make_track_setpoint_command(setpoint):
+                return set_mode_command_class(
+                    mode=mtmount.ThermalMode.TRACK_SETPOINT, setpoint=setpoint
+                )
+
+            def make_track_ambient_command(setpoint):
+                return set_mode_command_class(
+                    mode=mtmount.ThermalMode.TRACK_AMBIENT, setpoint=setpoint
+                )
+
+            await self.check_thermal_device(
+                system_id=system_id,
+                make_power_command=make_power_command,
+                make_track_ambient_command=make_track_ambient_command,
+                make_track_setpoint_command=make_track_setpoint_command,
+            )
+
+    async def check_thermal_device(
+        self,
+        system_id,
+        make_power_command,
+        make_track_ambient_command,
+        make_track_setpoint_command,
+    ):
+        """Check any kind of mock thermal device.
+
+        Parameters
+        ----------
+        system_id : `System`
+            The system ID of the thermal controller; a System enum.
+        make_power_command : function | None
+            A function that takes on argument "on", a boolean,
+            and returns a command to turn the device on or off.
+            Specify None if the system doesn't support being turned on and off.
+        make_track_ambient_command : function | None
+            A function that takes one argument "setpoint", a float,
+            and returns a command to make the system track ambient,
+            ignoring the setpoint argument.
+            Specify None if the system cannot track ambient.
+        make_track_setpoint_command : function
+            A function that takes one argument "setpoint", a float,
+            and returns a command to make the system track that setpoint.
+            This cannot be None.
+        """
+        device = self.controller.device_dict[system_id]
+        power_min_timeout = None
+        if system_id in {System.OIL_SUPPLY_SYSTEM}:
+            power_min_timeout = 0
+
+        if make_power_command is not None:
+            await self.run_command(
+                make_power_command(on=True), min_timeout=power_min_timeout
+            )
+            assert device.power_on
+            assert not device.alarm_on
+            await self.run_command(
+                make_power_command(on=False), min_timeout=power_min_timeout
+            )
+            assert not device.power_on
+            assert not device.alarm_on
+            await self.run_command(
+                make_power_command(on=True), min_timeout=power_min_timeout
+            )
+            assert device.power_on
+            assert not device.alarm_on
+
+        # In setpoint mode temperature should track setpoint.
+        for setpoint in (-55.5, 0, 23.4):
+            await self.run_command(make_track_setpoint_command(setpoint=setpoint))
+            assert device.power_on
+            assert not device.alarm_on
+            assert device.track_setpoint
+            assert not device.track_ambient
+            assert device.setpoint == setpoint
+            assert device.temperature == pytest.approx(
+                setpoint, abs=device.temperature_slop
+            )
+
+        # In ambient mode temperature should match current controller ambient.
+        if make_track_ambient_command is not None:
+            for setpoint in (-55.5, 0, 23.4):
+                await self.run_command(make_track_ambient_command(setpoint=setpoint))
+                assert device.power_on
+                assert not device.alarm_on
+                assert not device.track_setpoint
+                assert device.track_ambient
+                assert device.temperature == pytest.approx(
+                    self.controller.ambient_temperature, abs=device.temperature_slop
+                )
+
+        # Commands should fail if off.
+        if make_power_command is not None:
+            await self.run_command(
+                make_power_command(on=False), min_timeout=power_min_timeout
+            )
+            assert not device.power_on
+            assert not device.alarm_on
+            with pytest.raises(RuntimeError):
+                await self.run_command(make_track_setpoint_command(setpoint=0))
+            if make_track_ambient_command is not None:
+                with pytest.raises(RuntimeError):
+                    await self.run_command(make_track_ambient_command(setpoint=0))
+
+            await self.run_command(
+                make_power_command(on=True), min_timeout=power_min_timeout
+            )
+            assert device.power_on
+            assert not device.alarm_on
+
+        # Commands should fail in fault.
+        device.alarm_on = True
+        assert device.alarm_on
+        assert not device.power_on
+        with pytest.raises(RuntimeError):
+            await self.run_command(make_track_setpoint_command(setpoint=0))
+        if make_track_ambient_command is not None:
+            with pytest.raises(RuntimeError):
+                await self.run_command(make_track_ambient_command(setpoint=0))
+
+        # Reset alarm state turn power back on.
+        device.alarm_on = False
+        if make_power_command is not None:
+            await self.run_command(
+                make_power_command(on=True), min_timeout=power_min_timeout
+            )
+        assert device.power_on
+        assert not device.alarm_on
+
+    async def test_auxiliary_cabinets_thermal(self):
+        system_id = System.AUXILIARY_CABINETS_THERMAL
+        device = self.controller.device_dict[system_id]
+        assert device.power_on
+        assert not device.alarm_on
+
+        for on in (True, False):
+            await self.run_command(
+                mtmount.commands.AuxiliaryCabinetsThermalFanPower(on=on)
+            )
+            assert device.fans_on == on
+
+        def make_track_setpoint_command(setpoint):
+            return mtmount.commands.AuxiliaryCabinetsThermalSetpoint(setpoint=setpoint)
+
+        await self.check_thermal_device(
+            system_id=System.AUXILIARY_CABINETS_THERMAL,
+            make_power_command=None,
+            make_track_setpoint_command=make_track_setpoint_command,
+            make_track_ambient_command=None,
+        )
+
+    async def test_main_cabinet_thermal(self):
+        system_id = System.MAIN_CABINET_THERMAL
+
+        track_ambient_command_class = mtmount.commands.MainCabinetThermalTrackAmbient
+
+        def make_track_setpoint_command(setpoint):
+            return track_ambient_command_class(track_ambient=False, setpoint=setpoint)
+
+        def make_track_ambient_command(setpoint):
+            return track_ambient_command_class(track_ambient=True, setpoint=setpoint)
+
+        await self.check_thermal_device(
+            system_id=system_id,
+            make_power_command=None,
+            make_track_ambient_command=make_track_ambient_command,
+            make_track_setpoint_command=make_track_setpoint_command,
+        )
+
     async def test_top_end_chiller(self):
-        device = self.controller.device_dict[System.TOP_END_CHILLER]
+        system_id = System.TOP_END_CHILLER
+        device = self.controller.device_dict[system_id]
         self.check_device_repr(device)
 
-        initial_track_ambient = device.track_ambient
-        initial_temperature = device.temperature
-        temperature1 = 5.1  # An arbitrary value
+        track_ambient_command_class = mtmount.commands.TopEndChillerTrackAmbient
 
-        # track_ambient should fail if power is off
-        # and the state should remain unchanged.
-        assert not device.power_on
-        assert device.temperature != temperature1
-        with pytest.raises(RuntimeError):
-            await self.run_command(
-                mtmount.commands.TopEndChillerTrackAmbient(
-                    on=True, temperature=temperature1
-                )
-            )
-        with pytest.raises(RuntimeError):
-            await self.run_command(
-                mtmount.commands.TopEndChillerTrackAmbient(
-                    on=False, temperature=temperature1
-                )
-            )
-        assert not device.power_on
-        assert device.track_ambient == initial_track_ambient
-        assert device.temperature == initial_temperature
+        def make_track_setpoint_command(setpoint):
+            return track_ambient_command_class(track_ambient=False, setpoint=setpoint)
 
-        await self.run_command(mtmount.commands.TopEndChillerPower(on=True))
-        assert device.power_on
-        assert device.track_ambient == initial_track_ambient
-        assert device.temperature == initial_temperature
+        def make_track_ambient_command(setpoint):
+            return track_ambient_command_class(track_ambient=True, setpoint=setpoint)
 
-        await self.run_command(
-            mtmount.commands.TopEndChillerTrackAmbient(
-                on=True, temperature=temperature1
-            )
+        await self.check_thermal_device(
+            system_id=system_id,
+            make_power_command=mtmount.commands.TopEndChillerPower,
+            make_track_ambient_command=make_track_ambient_command,
+            make_track_setpoint_command=make_track_setpoint_command,
         )
-        assert device.power_on
-        assert device.track_ambient
-        assert device.temperature == pytest.approx(temperature1)
-
-        temperature2 = 0.12  # A different arbitrary value
-        await self.run_command(
-            mtmount.commands.TopEndChillerTrackAmbient(
-                on=False, temperature=temperature2
-            )
-        )
-        assert device.power_on
-        assert not device.track_ambient
-        assert device.temperature == pytest.approx(temperature2)
 
     async def test_axis_devices(self):
         for system_id in (
@@ -917,21 +1104,34 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             Value for ``drive`` argument of power commands.
             If `None` then the ``drive`` argument is not provided.
         """
+        device_has_power_command = (
+            device.system_id not in self.system_ids_no_power_command
+        )
+
         self.controller.main_axes_power_supply.power_on = False
-        assert not device.power_on
+
         assert not device.alarm_on
+        if device_has_power_command:
+            assert not device.power_on
+        else:
+            assert device.power_on
 
         device_prefix = device.system_id.name
-        power_command_class = self.get_command_class(f"{device_prefix}_POWER")
-        reset_alarm_command_class = self.get_command_class(
-            f"{device_prefix}_RESET_ALARM"
-        )
-        if drive is not None:
-            power_kwargs = dict(drive=drive)
+        if device_has_power_command:
+            power_command_class = self.get_command_class(device_prefix + "_POWER")
+            if drive is not None:
+                power_kwargs = dict(drive=drive)
+            else:
+                power_kwargs = {}
+            power_command_on = power_command_class(on=True, **power_kwargs)
+            power_command_off = power_command_class(on=False, **power_kwargs)
         else:
-            power_kwargs = {}
-        power_command_on = power_command_class(on=True, **power_kwargs)
-        power_command_off = power_command_class(on=False, **power_kwargs)
+            power_command_on = None
+            power_command_off = None
+
+        reset_alarm_command_class = self.get_command_class(
+            device_prefix + "_RESET_ALARM"
+        )
         reset_alarm_command = reset_alarm_command_class()
 
         is_azel = device.system_id in {System.ELEVATION, System.AZIMUTH}
@@ -948,7 +1148,10 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.alarm_on
         device.alarm_on = True
         await self.run_command(reset_alarm_command)
-        assert not device.power_on
+        if device_has_power_command:
+            assert not device.power_on
+        else:
+            assert device.power_on
 
         if is_azel:
             # The reset alarm command for azimuth and elevation
@@ -974,18 +1177,20 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 command=mtmount.commands.OilSupplySystemSetMode(auto=True)
             )
             assert device.auto_mode
-        await self.run_command(power_command_on, min_timeout=min_on_timeout)
-        assert device.power_on
-        assert not device.alarm_on
+        if device_has_power_command:
+            await self.run_command(power_command_on, min_timeout=min_on_timeout)
+            assert device.power_on
+            assert not device.alarm_on
 
         # Check that we can reset alarms when the device is on.
         await self.run_command(reset_alarm_command)
         assert device.power_on
         assert not device.alarm_on
 
-        await self.run_command(power_command_off, min_timeout=min_off_timeout)
-        assert not device.power_on
-        assert not device.alarm_on
+        if device_has_power_command:
+            await self.run_command(power_command_off, min_timeout=min_off_timeout)
+            assert not device.power_on
+            assert not device.alarm_on
 
     async def check_deployable_device(
         self,
