@@ -1509,7 +1509,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             timeout = SET_THERMAL_ON_TIMEOUT
         else:
             timeout = SET_THERMAL_OFF_TIMEOUT
-        self.cmd_setThermal.ack_in_progress(
+        await self.cmd_setThermal.ack_in_progress(
             data=data, timeout=timeout, result="Thermal systems commands can be slow"
         )
         await self.set_thermal_task
@@ -1844,11 +1844,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
         ccw_settings = reply.CW["CCW"]
         await self.evt_cameraCableWrapControllerSettings.set_write(
-            # TODO DM-37910: uncomment once ts_xml 16 is deployed:
-            # minL1LimitEnabled=ccw_settings["NegativeSoftwareLimitEnable"],
-            # maxL1LimitEnabled=ccw_settings["PositiveSoftwareLimitEnable"],
-            # minL2LimitEnabled=ccw_settings["NegativeLimitSwitchEnable"],
-            # maxL2LimitEnabled=ccw_settings["PositiveLimitSwitchEnable"],
+            minL1LimitEnabled=ccw_settings["NegativeSoftwareLimitEnable"],
+            maxL1LimitEnabled=ccw_settings["PositiveSoftwareLimitEnable"],
+            minL2LimitEnabled=ccw_settings["NegativeLimitSwitchEnable"],
+            maxL2LimitEnabled=ccw_settings["PositiveLimitSwitchEnable"],
             minCmdPosition=ccw_settings["MinPosition"],
             maxCmdPosition=ccw_settings["MaxPosition"],
             minL1Limit=ccw_settings["MinSoftwareLimit"],

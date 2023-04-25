@@ -361,11 +361,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             ccw_settings = self.mock_controller.detailed_settings["CW"]["CCW"]
             await self.assert_next_sample(
                 topic=self.remote.evt_cameraCableWrapControllerSettings,
-                # TODO DM-37910: uncomment once ts_xml 16 is deployed:
-                # minL1LimitEnabled=True,
-                # maxL1LimitEnabled=True,
-                # minL2LimitEnabled=True,
-                # maxL2LimitEnabled=True,
+                minL1LimitEnabled=True,
+                maxL1LimitEnabled=True,
+                minL2LimitEnabled=True,
+                maxL2LimitEnabled=True,
                 minCmdPosition=ccw_cmd_limits.min_position,
                 maxCmdPosition=ccw_cmd_limits.max_position,
                 minL1Limit=ccw_settings["MinSoftwareLimit"],
