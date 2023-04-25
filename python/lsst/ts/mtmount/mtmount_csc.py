@@ -1509,7 +1509,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             timeout = SET_THERMAL_ON_TIMEOUT
         else:
             timeout = SET_THERMAL_OFF_TIMEOUT
-        self.cmd_setThermal.ack_in_progress(
+        await self.cmd_setThermal.ack_in_progress(
             data=data, timeout=timeout, result="Thermal systems commands can be slow"
         )
         await self.set_thermal_task
