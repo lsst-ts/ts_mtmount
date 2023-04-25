@@ -6,6 +6,22 @@
 Version History
 ###############
 
+v0.26.1
+-------
+
+* `MTMountCSC`:
+
+    * Add missing ``await`` to an ack_in_progress for the setThermal command.
+    * Remove some ts_xml 15 compatibility code.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 1.0
+* ts_idl 4.5
+* IDL files for MTMount and MTRotator from ts_xml 16
+
 v0.26.0
 -------
 
