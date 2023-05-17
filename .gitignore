@@ -4,7 +4,6 @@
 .pytest_cache
 .coverage*
 pytest_session.txt
-.scon*
 *.log
 .vscode
 __pycache__
