@@ -70,16 +70,16 @@ class MTMountCommander(salobj.CscCommander):
         # Disable telemetry from topics we don't care about
         # (and are too much work to filter out noise)
         for telemetry_topic_name in (
-            "auxiliaryBoxes",
+            "auxiliaryCabinetsThermal",
             "azimuthDrivesThermal",
-            "cabinet0101",
+            "cabinet0101Thermal",
             "compressedAir",
             "cooling",
             "dynaleneCooling",
             "elevationDrivesThermal",
             "encoder",
             "generalPurposeGlycolWater",
-            "mountControlMainCabinet",
+            "mainCabinetThermal",
             "oilSupplySystem",
         ):
             topic = getattr(self.remote, f"tel_{telemetry_topic_name}")
