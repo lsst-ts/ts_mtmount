@@ -47,6 +47,14 @@ CLOCK_OFFSET_EVENT_INTERVAL = 1
 # in this time, the telemetry client logs an error and quits.
 TELEMETRY_TIMEOUT = 2
 
+# Interval to check for event loop slowdown (sec).
+SLOWDOWN_DETECTION_INTERVAL = 0.1
+
+# How much delay in the event loop before warning (sec).
+# Should be significantly shorter than 1 second,
+# the max CCW telemetry delay before the MT rotator goes to fault.
+SLOWDOWN_WARNING_DELAY = 0.2
+
 
 class TelemetryTopicHandler:
     """Coroutine functor that takes a telemetry message from the low-level
@@ -127,6 +135,8 @@ class TelemetryClient:
         # read_loop should output the clockOffset event
         # for the next telemetry received when this timer expires
         self.next_clock_offset_task = utils.make_done_future()
+
+        self.slowdown_detection_loop_task = utils.make_done_future()
 
         self.connection_timeout = connection_timeout
         # dict of low-level controller topic ID: TelemetryTopicHandler
@@ -218,6 +228,9 @@ class TelemetryClient:
             return
 
         self.read_task = asyncio.create_task(self.read_loop())
+        self.slowdown_detection_loop_task = asyncio.create_task(
+            self.slowdown_detection_loop()
+        )
         self.log.info("running")
 
     def signal_handler(self):
@@ -225,6 +238,8 @@ class TelemetryClient:
         self.log.info("signal_handler")
         self.start_task.cancel()
         self.read_task.cancel()
+        self.next_clock_offset_task.cancel()
+        self.slowdown_detection_loop_task.cancel()
         self.controller.salinfo.basic_close()
         self.controller.salinfo.domain.basic_close()
         writer = self.writer
@@ -241,6 +256,7 @@ class TelemetryClient:
         self.start_task.cancel()
         self.read_task.cancel()
         self.next_clock_offset_task.cancel()
+        self.slowdown_detection_loop_task.cancel()
         writer = self.writer
         self.reader = None
         self.writer = None
@@ -320,6 +336,29 @@ class TelemetryClient:
         except Exception:
             self.log.exception("read_loop failed; giving up.")
             asyncio.ensure_future(self.close())
+
+    async def slowdown_detection_loop(self):
+        """Detect the event loop being starved.
+
+        Log warnings when this happens.
+        """
+        self.log.debug("Slowdown detecton loop begins")
+        try:
+            last_tai = 0
+            while True:
+                current_tai = utils.current_tai()
+                if last_tai > 0:
+                    delay = current_tai - last_tai - SLOWDOWN_DETECTION_INTERVAL
+                    if delay > SLOWDOWN_WARNING_DELAY:
+                        self.log.warning(
+                            f"event loop delayed by > {delay:0.2f} seconds"
+                        )
+                last_tai = current_tai
+                await asyncio.sleep(SLOWDOWN_DETECTION_INTERVAL)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            self.log.exception(f"Slowdown detection loop failed: {e!r}")
 
 
 def run_mtmount_telemetry_client():
