@@ -7,38 +7,35 @@ source:
   path: ../
 
 build:
-  string: fall22
-  noarch: generic
-  script: python -m pip install --no-deps --ignore-installed .
+  noarch: python
+  script: {{ PYTHON }} -m pip install --no-deps --ignore-installed .
 
 test:
   requires:
     - ts-conda-build =0.3
-    - ts-tcpip
-    - ts-simactuators
     - ts-dds
     - ts-idl {{ idl_version }}
     - ts-salobj {{ salobj_version }}
+    - ts-simactuators
+    - ts-tcpip
   source_files:
-    - python
     - bin
+    - python
     - tests
-    - setup.cfg
   commands:
-    - pytest -vsx
+    - pytest
 
 requirements:
   host:
-    - python
     - pip
-    - setuptools_scm
+    - python {{ python }}
     - setuptools
-    - pytest-runner
+    - setuptools_scm
   run:
-    - python
+    - python {{ python }}
     - setuptools
     - setuptools_scm
-    - ts-salobj
+    - ts-idl {{ idl_version }}
+    - ts-salobj {{ salobj_version }}
     - ts-simactuators
     - ts-tcpip
-    - ts-idl
