@@ -1,4 +1,3 @@
-setupRequired(sconsUtils)
 setupRequired(ts_utils)
 setupRequired(ts_salobj)
 setupRequired(ts_tcpip)

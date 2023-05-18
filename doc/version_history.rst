@@ -6,6 +6,19 @@
 Version History
 ###############
 
+v0.26.2
+-------
+
+* `TelemetryClient`: add slowdown detection.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 1.0
+* ts_idl 4.5
+* IDL files for MTMount and MTRotator from ts_xml 16
+
 v0.26.1
 -------
 
