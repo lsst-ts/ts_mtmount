@@ -11,6 +11,7 @@ v0.26.2
 
 * `TelemetryClient`: add slowdown detection.
 * `MTMount_Telemetry`: update for ts_xml 16.
+* Modernize the conda recipe.
 
 Requires:
 
