@@ -6,6 +6,20 @@
 Version History
 ###############
 
+v0.26.3
+-------
+
+* Prepare to activate the new oilSupplySystem cabinet telemetry by adding commented-out fields to RAW_TELEMETRY_MAP.
+  Once tx_xml 17 is released, we uncomment those lines, output the data in the mock controller and add a unit test.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 1.0
+* ts_idl 4.5
+* IDL files for MTMount and MTRotator from ts_xml 16
+
 v0.26.2
 -------
 
