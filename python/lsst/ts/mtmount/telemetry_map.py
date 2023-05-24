@@ -52,7 +52,6 @@ import yaml
 # to write new MTMount_Telemetry.xml and new data for RAW_TELEMETRY_MAP.
 RAW_TELEMETRY_MAP = yaml.safe_load(
     """
-
 6:
 - azimuth
 - actualPosition: 1
@@ -227,6 +226,13 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 
 25:
 - oilSupplySystem
+# TODO DM-39379: once ts_xml 17 is deployed:
+# * Uncomment these actualTemperature lines.
+# * Remove the ``-`` from in front of ``ambientTemperature: 1``.
+#
+# - actualTemperatureAzimuthCabinet5001: 1
+#   actualTemperatureElevationCabinet5001: 1
+#   actualTemperatureElevationCabinet5002: 1
 - ambientTemperature: 1
   computedOilFilmThicknessAzimuthBearing5004: 1
   computedOilFilmThicknessAzimuthBearing5014: 1
