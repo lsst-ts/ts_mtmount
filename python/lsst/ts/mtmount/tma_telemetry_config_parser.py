@@ -563,7 +563,12 @@ class TMATelemetryConfigParser:
             outfile.write(
                 """<?xml version="1.0" encoding="UTF-8"?>
 <?xml-stylesheet type="text/xsl" href="http://lsst-sal.tuc.noao.edu/schema/SALTelemetrySet.xsl"?>
-<SALTelemetrySet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://lsst-sal.tuc.noao.edu/schema/SALTelemetrySet.xsd">"""  # noqa
+<SALTelemetrySet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://lsst-sal.tuc.noao.edu/schema/SALTelemetrySet.xsd">
+  <SALTelemetry>
+    <Subsystem>MTMount</Subsystem>
+    <EFDB_Topic>MTMount_telemetryClientHeartbeat</EFDB_Topic>
+    <Description>Heartbeat output by the MTMount CSC's telemetry client (not the TMA).</Description>
+  </SALTelemetry>"""  # noqa
             )
             for topic_info in topics.values():
                 outfile.write(
