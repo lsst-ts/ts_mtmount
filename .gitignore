@@ -1,14 +1,15 @@
 __pycache__
+*.egg
+*.egg-info
 *.log
-.swp
 version.py
 
 # pytest
-tests/.tests
+.coverage
 .hypothesis
 .pytest_cache
-.coverage*
 pytest_session.txt
+tests/.tests
 
 # editors
 .vscode
