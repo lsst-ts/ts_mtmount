@@ -24,7 +24,7 @@ import logging
 import unittest
 
 import pytest
-from lsst.ts import mtmount, utils
+from lsst.ts import mtmount, simactuators, utils
 from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState, System
 
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
@@ -775,7 +775,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.has_target
 
         # Enabling tracking should fail for elevation and azimuth until
-        # these axes are homed.
+        # these axes are homed. Check homing at the limits, as well.
         if device.is_azel:
             with pytest.raises(RuntimeError):
                 await self.run_command(enable_tracking_on_command, min_timeout=0)
@@ -791,6 +791,25 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             assert not device.tracking_enabled
             assert device.has_target
             assert device.homed
+
+            # Test homing at the limits and in between.
+            assert device.motion_state() == AxisMotionState.STOPPED
+            middle_position = (
+                device.cmd_limits.min_position + device.cmd_limits.max_position
+            ) / 2
+            for position in (
+                device.cmd_limits.min_position,
+                device.cmd_limits.max_position,
+                middle_position,
+            ):
+                # Rather than wait for these long moves, just set the position.
+                segment = simactuators.path.PathSegment(
+                    tai=utils.current_tai(), position=position
+                )
+                device.actuator.path = simactuators.path.Path(
+                    segment, kind=simactuators.path.Kind.Stopped
+                )
+                await self.run_command(home_command, min_timeout=0)
 
         # Do a point to point move
         assert device.motion_state() == AxisMotionState.STOPPED
