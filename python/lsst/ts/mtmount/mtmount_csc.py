@@ -32,7 +32,7 @@ import signal
 import subprocess
 import types
 
-from lsst.ts import salobj, utils
+from lsst.ts import salobj, tcpip, utils
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     PowerState,
@@ -293,8 +293,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.should_be_commander = False
 
         # Connection to the low-level controller, or None if not connected.
-        self.reader = None  # asyncio.StreamReader if connected
-        self.writer = None  # asyncio.StreamWriter if connected
+        self.client = None  # lsst.ts.tcpip.Client if connected
 
         # Subprocess running the telemetry client
         self.telemetry_client_process = None
@@ -545,12 +544,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     @property
     def connected(self):
         """Return True if connected to the low-level controller."""
-        return not (
-            self.reader is None
-            or self.writer is None
-            or self.writer.is_closing()
-            or self.reader.at_eof()
-        )
+        return self.client is not None and self.client.connected
 
     @staticmethod
     def get_config_pkg():
@@ -667,8 +661,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Connect to the low-level controller and start the telemetry
         client.
         """
-        await self.evt_connected.set_write(connected=self.connected)
-
         if self.config is None:
             raise RuntimeError("Not yet configured")
         if self.connected:
@@ -693,11 +685,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 "Connecting to the low-level controller: "
                 f"host={command_host}, port={self.command_port}"
             )
-            connect_coro = asyncio.open_connection(
-                host=command_host, port=self.command_port
+            self.client = tcpip.Client(
+                name="CommandClient",
+                host=command_host,
+                port=self.command_port,
+                log=self.log,
+                connect_callback=self.connect_callback,
+                terminator=constants.LINE_TERMINATOR,
+                monitor_connection_interval=0,
             )
-            self.reader, self.writer = await asyncio.wait_for(
-                connect_coro, timeout=self.config.connection_timeout
+            await asyncio.wait_for(
+                self.client.start_task, timeout=self.config.connection_timeout
             )
             self.should_be_connected = True
             self.read_loop_task.cancel()
@@ -715,8 +713,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.exception(err_msg)
             await self.fault(code=enums.CscErrorCode.COULD_NOT_CONNECT, report=err_msg)
             return
-
-        await self.evt_connected.set_write(connected=self.connected)
 
         # Run the telemetry client as a background process.
         args = [
@@ -775,6 +771,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             if match is not None:
                 return int(match[1]), int(match[2])
 
+    async def connect_callback(self, client):
+        await self.evt_connected.set_write(connected=self.connected)
+
     async def disconnect(self):
         """Disconnect from the low-level controller.
 
@@ -793,20 +792,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.monitor_telemetry_client_task.cancel()
 
-        if self.writer is not None:
+        if self.client is not None:
             self.log.info("Disconnect from the low-level controller")
-            writer = self.writer
-            self.writer = None
-            writer.close()
-            # In Python 3.8.6 writer.wait_closed may hang indefinitely
-            try:
-                await asyncio.wait_for(writer.wait_closed(), timeout=1)
-            except asyncio.TimeoutError:
-                self.log.warning(
-                    "Timed out waiting for the writer to close; continuing"
-                )
-
-        await self.evt_connected.set_write(connected=self.connected)
+            await self.client.close()
 
         await self.clear_target()
 
@@ -1163,8 +1151,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_futures_dict[command.sequence_id] = command_futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
-        self.writer.write(command_bytes)
-        await self.writer.drain()
+        await self.client.write(command_bytes)
         initial_timeout = self.config.ack_timeout if timeout is None else timeout
         new_timeout = await asyncio.wait_for(command_futures.ack, initial_timeout)
         if not command_futures.done.done():
@@ -2008,16 +1995,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
         known_reply_ids = {int(item) for item in enums.ReplyId}
         while self.should_be_connected and self.connected:
             try:
-                read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
+                reply_dict = await self.client.read_json()
                 try:
-                    reply_dict = json.loads(read_bytes)
                     self.log.debug("Read %s", reply_dict)
                     reply_id = reply_dict["id"]
                     if reply_id not in known_reply_ids:
                         if reply_id not in self.unknown_reply_ids:
                             self.unknown_reply_ids.add(reply_id)
                             self.log.warning(
-                                f"Ignoring reply with unknown id={reply_id}: {read_bytes}:"
+                                f"Ignoring reply with unknown id={reply_id}: {reply_dict}:"
                             )
                         continue
                     reply = types.SimpleNamespace(
@@ -2027,7 +2013,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     )
                 except Exception as e:
                     self.log.exception(
-                        f"Ignoring unparsable reply: {read_bytes}: {e!r}"
+                        f"Ignoring unparsable reply: {reply_dict}: {e!r}"
                     )
                     continue
 
@@ -2037,7 +2023,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         await handler(reply)
                     except Exception as e:
                         self.log.exception(
-                            f"Failed to handle reply: {reply}={read_bytes}: {e!r}"
+                            f"Failed to handle reply: {reply}={reply_dict}: {e!r}"
                         )
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
@@ -2097,8 +2083,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 heartbeat_command.timestamp = utils.current_tai()
                 command_bytes = heartbeat_command.encode()
                 self.log.debug("Send heartbeat command %s", command_bytes)
-                self.writer.write(command_bytes)
-                await self.writer.drain()
+                await self.client.write(command_bytes)
                 await asyncio.sleep(LLV_HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass
