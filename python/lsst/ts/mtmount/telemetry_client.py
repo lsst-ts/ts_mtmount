@@ -29,12 +29,11 @@ __all__ = [
 
 import argparse
 import asyncio
-import json
 import logging
 import signal
 import time
 
-from lsst.ts import salobj, utils
+from lsst.ts import salobj, tcpip, utils
 
 from . import constants
 from .telemetry_map import TELEMETRY_MAP
@@ -69,19 +68,19 @@ class TelemetryTopicHandler:
         self.field_dict = field_dict
         self.preprocessor = preprocessor
 
-    async def __call__(self, llv_data):
+    async def __call__(self, data_dict):
         """Process one low-level message.
 
         Parameters
         ----------
-        llv_data : `dict`
+        data_dict : `dict`
             Dict of field name: value.
             Note: if there is preprocessor, this will be modified in place.
         """
         if self.preprocessor is not None:
-            self.preprocessor(llv_data)
+            self.preprocessor(data_dict)
         sal_data = {
-            sal_name: func.sal_value_from_llv_dict(llv_data)
+            sal_name: func.sal_value_from_llv_dict(data_dict)
             for sal_name, func in self.field_dict.items()
         }
         await self.topic.set_write(**sal_data)
@@ -94,7 +93,7 @@ class TelemetryTopicHandler:
         )
 
 
-class TelemetryClient:
+class TelemetryClient(tcpip.Client):
     """Read telemetry data from the TMA and publish as SAL messages.
 
     Paramaters
@@ -121,10 +120,7 @@ class TelemetryClient:
         port=constants.TELEMETRY_PORT,
         connection_timeout=10,
     ):
-        self.host = host
-        self.port = port
         self.controller = salobj.Controller(name="MTMount", write_only=True)
-        self.log = self.controller.log.getChild("TelemetryClient")
 
         # read_loop should output the clockOffset event
         # for the next telemetry received when this timer expires
@@ -144,10 +140,7 @@ class TelemetryClient:
         # in order to report new ones.
         self.unsupported_topic_ids = set()
 
-        self.reader = None
-        self.writer = None
         self.heartbeat_interval = 1
-        self.done_task = asyncio.Future()
         self.heartbeat_task = utils.make_done_future()
         self.read_task = asyncio.Future()
 
@@ -155,13 +148,15 @@ class TelemetryClient:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, self.signal_handler)
 
-        self.start_task = asyncio.create_task(self.start())
-
-    @property
-    def connected(self):
-        if None in (self.reader, self.writer):
-            return False
-        return True
+        super().__init__(
+            name="TelemetryClient",
+            host=host,
+            port=port,
+            log=self.controller.log.getChild("TelemetryClient"),
+            connect_callback=self.connect_callback,
+            monitor_connection_interval=0,
+            terminator=constants.LINE_TERMINATOR,
+        )
 
     @classmethod
     async def amain(cls):
@@ -210,59 +205,29 @@ class TelemetryClient:
         if self.connected:
             raise RuntimeError("Already connected")
         try:
-            connect_coro = asyncio.open_connection(host=self.host, port=self.port)
-            self.reader, self.writer = await asyncio.wait_for(
-                connect_coro, timeout=self.connection_timeout
-            )
+            await asyncio.wait_for(super().start(), timeout=self.connection_timeout)
             await self.controller.evt_telemetryConnected.set_write(
                 connected=self.connected
             )
         except Exception as e:
-            err_msg = f"Could not open connection to host={self.host}, port={self.port}"
-            self.log.exception(err_msg)
-            self.done_task.set_exception(e)
+            self.log.exception(
+                f"Could not open connection to host={self.host}, port={self.port}: {e!r}"
+            )
+            if not self.done_task.done():
+                self.done_task.set_exception(e)
             return
-
-        if hasattr(self.controller, "telemetryClientHeartbeat"):
-            self.heartbeat_task = asyncio.create_task(self.heartbeat_loop())
-        self.read_task = asyncio.create_task(self.read_loop())
-        self.log.info("running")
 
     def signal_handler(self):
         """Handle signals such as SIGTERM."""
         self.log.info("signal_handler")
-        self.start_task.cancel()
         self.heartbeat_task.cancel()
         self.read_task.cancel()
         self.next_clock_offset_task.cancel()
         self.controller.salinfo.basic_close()
         self.controller.salinfo.domain.basic_close()
-        writer = self.writer
-        self.reader = None
-        self.writer = None
-        if writer:
-            writer.close()
-        if not self.done_task.done():
-            self.done_task.set_result(None)
+        asyncio.create_task(self.close())
 
-    async def close(self):
-        """Disconnect from the TCP/IP controller."""
-        self.log.info("disconnecting")
-        self.start_task.cancel()
-        self.heartbeat_task.cancel()
-        self.read_task.cancel()
-        self.next_clock_offset_task.cancel()
-        writer = self.writer
-        self.reader = None
-        self.writer = None
-        if writer:
-            writer.close()
-            try:
-                await asyncio.wait_for(writer.wait_closed(), timeout=1)
-            except asyncio.TimeoutError:
-                self.log.warning(
-                    "Timed out waiting for the writer to close; continuing"
-                )
+    async def connect_callback(self, client):
         await self.controller.evt_telemetryConnected.set_write(connected=self.connected)
         if self.connected:
             if hasattr(self.controller, "tel_telemetryClientHeartbeat"):
@@ -280,8 +245,6 @@ class TelemetryClient:
             self.read_task.cancel()
             self.next_clock_offset_task.cancel()
             await self.controller.close()
-            if not self.done_task.done():
-                self.done_task.set_result(None)
 
     def get_preprocessor(self, sal_topic_name):
         """Get the preprocessor for this topic, if it exists, else None.
@@ -312,8 +275,8 @@ class TelemetryClient:
         try:
             while self.connected:
                 t0 = time.monotonic()
-                data = await asyncio.wait_for(
-                    self.reader.readuntil(constants.LINE_TERMINATOR),
+                data_dict = await asyncio.wait_for(
+                    self.read_json(),
                     timeout=TELEMETRY_TIMEOUT,
                 )
                 dt = time.monotonic() - t0
@@ -323,17 +286,15 @@ class TelemetryClient:
                     raise asyncio.TimeoutError(
                         f"Timed out waiting for telemetry: {dt=:0.2f} > {TELEMETRY_TIMEOUT=}. "
                         "Detected by measuring the delay instead of asyncio.wait_for, "
-                        "so the the event loop probably got swamped."
+                        "so the the event loop is overloaded."
                     )
                 try:
-                    decoded_data = data.decode()
-                    llv_data = json.loads(decoded_data)
-                    topic_id = llv_data["topicID"]
+                    topic_id = data_dict["topicID"]
                     if (
                         self.next_clock_offset_task.done()
                         and topic_id in azel_topic_ids
                     ):
-                        clock_offset = llv_data["timestamp"] - utils.current_tai()
+                        clock_offset = data_dict["timestamp"] - utils.current_tai()
                         await self.controller.evt_clockOffset.set_write(
                             offset=clock_offset,
                         )
@@ -345,25 +306,27 @@ class TelemetryClient:
                         if topic_id not in self.unsupported_topic_ids:
                             self.unsupported_topic_ids.add(topic_id)
                             self.log.info(
-                                f"Ignoring unsupported topic ID {topic_id}; data={data}"
+                                f"Ignoring unsupported topic ID {topic_id}; {data_dict=}"
                             )
                         continue
-                    await topic_handler(llv_data)
+                    await topic_handler(data_dict)
                 except Exception:
                     self.log.exception(
-                        f"read_loop could not handle {data}; continuing."
+                        f"read_loop could not handle {data_dict}; continuing."
                     )
-            self.log.info("telemetry client read loop ends: not connected")
+            self.log.info("Telemetry client read loop ends: not connected")
         except asyncio.CancelledError:
-            self.log.info("telemetry client read loop cancelled")
+            self.log.info("Telemetry client read loop cancelled")
         except asyncio.TimeoutError:
-            self.log.error("Timed out waiting for telemetry; giving up.")
+            self.log.error(
+                "Telemetry client timed out waiting for telemetry; giving up."
+            )
             asyncio.ensure_future(self.close())
         except (ConnectionResetError, asyncio.IncompleteReadError):
-            self.log.info("Reader disconnected; giving up.")
+            self.log.info("Telemetry client lost its connection; giving up.")
             asyncio.ensure_future(self.close())
-        except Exception:
-            self.log.exception("read_loop failed; giving up.")
+        except Exception as e:
+            self.log.exception(f"Telemetry client read loop failed; giving up: {e!r}")
             asyncio.ensure_future(self.close())
 
 
