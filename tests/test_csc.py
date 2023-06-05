@@ -25,7 +25,6 @@ import itertools
 import logging
 import math
 import pathlib
-import time
 import unittest
 
 import pytest
@@ -262,7 +261,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     device.power_on = False
                     device.alarm_on = True
                     await self.assert_next_summary_state(salobj.State.FAULT)
-                    assert self.csc.connected
+                    assert self.csc.client.connected
                     assert not self.csc.should_be_commander
 
     async def test_bin_script(self):
@@ -286,7 +285,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.assert_next_summary_state(salobj.State.ENABLED)
             await self.mock_controller.close()
             await self.assert_next_summary_state(salobj.State.FAULT)
-            assert not self.csc.connected
+            assert not self.csc.client.connected
             assert not self.csc.should_be_commander
 
     async def test_initial_state(self):
@@ -872,7 +871,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 topic=self.remote.evt_commander, commander=mtmount.Source.EUI
             )
             await self.assert_next_summary_state(salobj.State.FAULT)
-            assert self.csc.connected
+            assert self.csc.client.connected
             assert not self.csc.should_be_commander
 
     async def test_unmocked_events(self):
@@ -1372,37 +1371,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         setTemperature=expand_value(setpoint, nelt),
                     )
 
-    async def test_slowdown_detection(self):
-        async with self.make_csc(initial_state=salobj.State.STANDBY):
-            # Delay the event loop for longer than the detection interval.
-            # Be generous to avoid a race condition for when the delay occurs.
-            time.sleep(mtmount.mtmount_csc.SLOWDOWN_WARNING_DELAY * 2)
-            while True:
-                data = await self.remote.evt_logMessage.next(
-                    flush=False, timeout=SHORT_TIMEOUT
-                )
-                if "event loop delayed" in data.message:
-                    # Found the desired log message!
-                    break
-
-            # Read log messages for up to NOTELEMETRY_TIMEOUT seconds
-            # to see if we get another (unwanted) delay message.
-            try:
-                start_tai = utils.current_tai()
-                remaining_wait_time = NOTELEMETRY_TIMEOUT
-                while remaining_wait_time > 0:
-                    data = await self.remote.evt_logMessage.next(
-                        flush=False, timeout=remaining_wait_time
-                    )
-                    if "event loop delayed" in data.message:
-                        self.fail("Unexpectedly saw a second delayed message")
-                    remaining_wait_time = (
-                        utils.current_tai() - start_tai - NOTELEMETRY_TIMEOUT
-                    )
-            except asyncio.TimeoutError:
-                # Perfect; no log messages
-                pass
-
     async def test_telemetry_reconnection(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):
             await self.assert_next_summary_state(salobj.State.STANDBY)
@@ -1442,7 +1410,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 self.remote.evt_telemetryConnected, connected=False
             )
             await self.assert_next_summary_state(salobj.State.FAULT)
-            assert self.csc.connected
+            assert self.csc.client.connected
             assert not self.csc.should_be_commander
 
     async def test_tracking(self):

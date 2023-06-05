@@ -32,7 +32,7 @@ import signal
 import subprocess
 import types
 
-from lsst.ts import salobj, utils
+from lsst.ts import salobj, tcpip, utils
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     PowerState,
@@ -292,10 +292,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Set True if the CSC should be the commander.
         self.should_be_commander = False
 
-        # Connection to the low-level controller, or None if not connected.
-        self.reader = None  # asyncio.StreamReader if connected
-        self.writer = None  # asyncio.StreamWriter if connected
-
         # Subprocess running the telemetry client
         self.telemetry_client_process = None
 
@@ -329,7 +325,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.read_loop_task = utils.make_done_future()
         self.llv_heartbeat_loop_task = utils.make_done_future()
-        self.slowdown_detection_loop_task = utils.make_done_future()
 
         # Task to monitor the setThermal command.
         self.set_thermal_task = utils.make_done_future()
@@ -339,12 +334,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Log a warning every time this transitions to True.
         self.rotator_position_error_excessive = False
 
-        # Should the CSC be connected?
-        # Used to decide whether disconnecting sends the CSC to a Fault state.
-        # Set True when fully connected and False just before
-        # intentionally disconnecting.
-        self.should_be_connected = False
-
         super().__init__(
             name="MTMount",
             index=0,
@@ -353,6 +342,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             initial_state=initial_state,
             simulation_mode=simulation_mode,
         )
+
+        # Connection to the low-level controller; initialize to a Client
+        # that is already closed.
+        self.client = tcpip.Client(host=None, port=0, log=self.log)
 
         # Allow multiple trackTarget commands to run at the same time;
         # this is meant to be temporary to help diagnose an intermittent
@@ -542,23 +535,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await super().begin_standby(data)
         await self.disconnect()
 
-    @property
-    def connected(self):
-        """Return True if connected to the low-level controller."""
-        return not (
-            self.reader is None
-            or self.writer is None
-            or self.writer.is_closing()
-            or self.reader.at_eof()
-        )
-
     @staticmethod
     def get_config_pkg():
         return "ts_config_mttcs"
 
     async def close_tasks(self):
         """Shut down pending tasks. Called by `close`."""
-        self.slowdown_detection_loop_task.cancel()
         while self.command_futures_dict:
             command = self.command_futures_dict.popitem()[1]
             command.setnoack("Connection closed before command finished")
@@ -667,11 +649,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Connect to the low-level controller and start the telemetry
         client.
         """
-        await self.evt_connected.set_write(connected=self.connected)
-
         if self.config is None:
             raise RuntimeError("Not yet configured")
-        if self.connected:
+        if self.client.connected:
             raise RuntimeError("Already connected")
 
         if self.command_port is None or self.telemetry_port is None:
@@ -693,13 +673,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 "Connecting to the low-level controller: "
                 f"host={command_host}, port={self.command_port}"
             )
-            connect_coro = asyncio.open_connection(
-                host=command_host, port=self.command_port
+            self.client = tcpip.Client(
+                name="CommandClient",
+                host=command_host,
+                port=self.command_port,
+                log=self.log,
+                connect_callback=self.connect_callback,
+                terminator=constants.LINE_TERMINATOR,
+                monitor_connection_interval=0,
             )
-            self.reader, self.writer = await asyncio.wait_for(
-                connect_coro, timeout=self.config.connection_timeout
+            await asyncio.wait_for(
+                self.client.start_task, timeout=self.config.connection_timeout
             )
-            self.should_be_connected = True
             self.read_loop_task.cancel()
             self.set_thermal_task.cancel()
             self.read_loop_task = asyncio.create_task(self.read_loop())
@@ -715,8 +700,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.exception(err_msg)
             await self.fault(code=enums.CscErrorCode.COULD_NOT_CONNECT, report=err_msg)
             return
-
-        await self.evt_connected.set_write(connected=self.connected)
 
         # Run the telemetry client as a background process.
         args = [
@@ -775,6 +758,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             if match is not None:
                 return int(match[1]), int(match[2])
 
+    async def connect_callback(self, client):
+        await self.evt_connected.set_write(connected=self.client.connected)
+
     async def disconnect(self):
         """Disconnect from the low-level controller.
 
@@ -784,8 +770,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         Do not stop the mock controller (even if the CSC started it),
         because that should remain running until the CSC quits.
         """
-        self.should_be_connected = False
-
         # Cancel pending commands
         while self.command_futures_dict:
             command = self.command_futures_dict.popitem()[1]
@@ -793,20 +777,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.monitor_telemetry_client_task.cancel()
 
-        if self.writer is not None:
-            self.log.info("Disconnect from the low-level controller")
-            writer = self.writer
-            self.writer = None
-            writer.close()
-            # In Python 3.8.6 writer.wait_closed may hang indefinitely
-            try:
-                await asyncio.wait_for(writer.wait_closed(), timeout=1)
-            except asyncio.TimeoutError:
-                self.log.warning(
-                    "Timed out waiting for the writer to close; continuing"
-                )
-
-        await self.evt_connected.set_write(connected=self.connected)
+        self.log.info("Disconnect from the low-level controller")
+        await self.client.close()
 
         await self.clear_target()
 
@@ -915,7 +887,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     "stop_camera_cable_wrap_following failed in disable_devices; "
                     f"continuing: {e!r}"
                 )
-            if not self.connected or not self.has_command:
+            if not self.client.connected or not self.has_command:
                 return
             for command in [
                 commands.BothAxesStop(),
@@ -1145,7 +1117,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             If the sequence_id is already in use.
             This indicates an internal error.
         """
-        if not self.connected:
+        if not self.client.connected:
             if self.should_be_connected:
                 await self.fault(
                     enums.CscErrorCode.CONNECTION_LOST,
@@ -1163,8 +1135,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_futures_dict[command.sequence_id] = command_futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
-        self.writer.write(command_bytes)
-        await self.writer.drain()
+        await self.client.write(command_bytes)
         initial_timeout = self.config.ack_timeout if timeout is None else timeout
         new_timeout = await asyncio.wait_for(command_futures.ack, initial_timeout)
         if not command_futures.done.done():
@@ -2006,18 +1977,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Read and process replies from the low-level controller."""
         self.log.debug("Read loop begins")
         known_reply_ids = {int(item) for item in enums.ReplyId}
-        while self.should_be_connected and self.connected:
+        while self.client.connected:
             try:
-                read_bytes = await self.reader.readuntil(constants.LINE_TERMINATOR)
+                reply_dict = await self.client.read_json()
                 try:
-                    reply_dict = json.loads(read_bytes)
                     self.log.debug("Read %s", reply_dict)
                     reply_id = reply_dict["id"]
                     if reply_id not in known_reply_ids:
                         if reply_id not in self.unknown_reply_ids:
                             self.unknown_reply_ids.add(reply_id)
                             self.log.warning(
-                                f"Ignoring reply with unknown id={reply_id}: {read_bytes}:"
+                                f"Ignoring reply with unknown id={reply_id}: {reply_dict}:"
                             )
                         continue
                     reply = types.SimpleNamespace(
@@ -2027,7 +1997,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     )
                 except Exception as e:
                     self.log.exception(
-                        f"Ignoring unparsable reply: {read_bytes}: {e!r}"
+                        f"Ignoring unparsable reply: {reply_dict}: {e!r}"
                     )
                     continue
 
@@ -2037,15 +2007,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         await handler(reply)
                     except Exception as e:
                         self.log.exception(
-                            f"Failed to handle reply: {reply}={read_bytes}: {e!r}"
+                            f"Failed to handle reply: {reply}={reply_dict}: {e!r}"
                         )
                 else:
                     self.log.warning(f"Ignoring unrecognized reply: {reply}")
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                if self.should_be_connected:
-                    if self.connected:
+                if self.client.should_be_connected:
+                    if self.client.connected:
                         err_msg = f"Read loop failed; possibly a bug: {e!r}"
                         self.log.exception(err_msg)
                         await self.fault(
@@ -2057,29 +2027,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
                             report="Connection lost to low-level controller (noticed in read_loop)",
                         )
         self.log.debug("Read loop ends")
-
-    async def slowdown_detection_loop(self):
-        """Detect the event loop being starved.
-
-        Log warnings when this happens.
-        """
-        self.log.debug("Slowdown detecton loop begins")
-        try:
-            last_tai = 0
-            while True:
-                current_tai = utils.current_tai()
-                if last_tai > 0:
-                    delay = current_tai - last_tai - SLOWDOWN_DETECTION_INTERVAL
-                    if delay > SLOWDOWN_WARNING_DELAY:
-                        self.log.warning(
-                            f"event loop delayed by > {delay:0.2f} seconds"
-                        )
-                last_tai = current_tai
-                await asyncio.sleep(SLOWDOWN_DETECTION_INTERVAL)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            self.log.exception(f"Slowdown detection loop failed: {e!r}")
 
     async def llv_heartbeat_loop(self):
         """Send a regular heartbeat "command" to the low-level controller.
@@ -2093,12 +2040,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # so we can tell the commands apart.
         heartbeat_command = commands.Heartbeat()
         try:
-            while self.connected and self.should_be_commander:
+            while self.client.connected and self.should_be_commander:
                 heartbeat_command.timestamp = utils.current_tai()
                 command_bytes = heartbeat_command.encode()
                 self.log.debug("Send heartbeat command %s", command_bytes)
-                self.writer.write(command_bytes)
-                await self.writer.drain()
+                await self.client.write(command_bytes)
                 await asyncio.sleep(LLV_HEARTBEAT_INTERVAL)
         except asyncio.CancelledError:
             pass
@@ -2112,7 +2058,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def start(self):
         await super().start()
-        await self.evt_connected.set_write(connected=self.connected)
+        await self.evt_connected.set_write(connected=self.client.connected)
         if self.simulation_mode == 1 and self.run_mock_controller:
             # Run the mock controller using random ports;
             # read the ports to set command_port and telemetry_port.
@@ -2150,13 +2096,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
         await self.clear_target()
-        self.slowdown_detection_loop_task = asyncio.create_task(
-            self.slowdown_detection_loop()
-        )
-        print(
-            f"MTMount.start: {len(self.log.handlers)} log handlers: "
-            + ", ".join(repr(handler) for handler in self.log.handlers)
-        )
 
     async def stop_camera_cable_wrap_following(self):
         """Stop the camera cable wrap from following the rotator.
@@ -2166,12 +2105,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
-        if self.connected and self.has_command:
+        if self.client.connected and self.has_command:
             await self.retry_command(commands.CameraCableWrapStop())
         else:
             self.log.info(
                 "stop_camera_cable_wrap_following not sending CameraCableWrapStop: "
-                f"{self.connected=} and {self.has_command=} not both true"
+                f"{self.client.connected=} and {self.has_command=} not both true"
             )
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
 

@@ -21,7 +21,6 @@
 
 import asyncio
 import contextlib
-import json
 import logging
 import time
 import unittest
@@ -66,6 +65,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             port=0,
             log=logging.getLogger(),
             connect_callback=None,
+            terminator=mtmount.LINE_TERMINATOR,
         )
         # Wait for the server to start so the port is set
         await asyncio.wait_for(self.server.start_task, timeout=STD_TIMEOUT)
@@ -182,6 +182,17 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                 await self.publish_data(tma_data)
                 await self.assert_next_telemetry(topic, desired_sal_data)
 
+    async def test_heartbeat(self):
+        async with self.make_all():
+            if not hasattr(self.remote, "tel_telemetryClientHeartbeat"):
+                raise unittest.SkipTest(
+                    "No telemetryClientHeartbeat topic; ts_xml too old."
+                )
+            await self.assert_next_telemetry(
+                topic=self.remote.tel_telemetryClientHeartbeat,
+                desired_data=dict(),
+            )
+
     async def test_timeout(self):
         """Test client timeout.
 
@@ -292,6 +303,4 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         llv_data : `dict`
             Low-level controller telemetry data.
         """
-        data_json = json.dumps(llv_data)
-        self.server.writer.write(data_json.encode() + mtmount.LINE_TERMINATOR)
-        await self.server.writer.drain()
+        await self.server.write_json(llv_data)
