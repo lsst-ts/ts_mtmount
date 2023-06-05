@@ -292,9 +292,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Set True if the CSC should be the commander.
         self.should_be_commander = False
 
-        # Connection to the low-level controller, or None if not connected.
-        self.client = None  # lsst.ts.tcpip.Client if connected
-
         # Subprocess running the telemetry client
         self.telemetry_client_process = None
 
@@ -338,12 +335,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Log a warning every time this transitions to True.
         self.rotator_position_error_excessive = False
 
-        # Should the CSC be connected?
-        # Used to decide whether disconnecting sends the CSC to a Fault state.
-        # Set True when fully connected and False just before
-        # intentionally disconnecting.
-        self.should_be_connected = False
-
         super().__init__(
             name="MTMount",
             index=0,
@@ -352,6 +343,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             initial_state=initial_state,
             simulation_mode=simulation_mode,
         )
+
+        # Connection to the low-level controller; initialize to a Client
+        # that is already closed.
+        self.client = tcpip.Client(host=None, port=0, log=self.log)
 
         # Allow multiple trackTarget commands to run at the same time;
         # this is meant to be temporary to help diagnose an intermittent
@@ -541,11 +536,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await super().begin_standby(data)
         await self.disconnect()
 
-    @property
-    def connected(self):
-        """Return True if connected to the low-level controller."""
-        return self.client is not None and self.client.connected
-
     @staticmethod
     def get_config_pkg():
         return "ts_config_mttcs"
@@ -663,7 +653,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         if self.config is None:
             raise RuntimeError("Not yet configured")
-        if self.connected:
+        if self.client.connected:
             raise RuntimeError("Already connected")
 
         if self.command_port is None or self.telemetry_port is None:
@@ -697,7 +687,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await asyncio.wait_for(
                 self.client.start_task, timeout=self.config.connection_timeout
             )
-            self.should_be_connected = True
             self.read_loop_task.cancel()
             self.set_thermal_task.cancel()
             self.read_loop_task = asyncio.create_task(self.read_loop())
@@ -772,7 +761,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 return int(match[1]), int(match[2])
 
     async def connect_callback(self, client):
-        await self.evt_connected.set_write(connected=self.connected)
+        await self.evt_connected.set_write(connected=self.client.connected)
 
     async def disconnect(self):
         """Disconnect from the low-level controller.
@@ -783,8 +772,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         Do not stop the mock controller (even if the CSC started it),
         because that should remain running until the CSC quits.
         """
-        self.should_be_connected = False
-
         # Cancel pending commands
         while self.command_futures_dict:
             command = self.command_futures_dict.popitem()[1]
@@ -792,9 +779,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.monitor_telemetry_client_task.cancel()
 
-        if self.client is not None:
-            self.log.info("Disconnect from the low-level controller")
-            await self.client.close()
+        self.log.info("Disconnect from the low-level controller")
+        await self.client.close()
 
         await self.clear_target()
 
@@ -903,7 +889,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     "stop_camera_cable_wrap_following failed in disable_devices; "
                     f"continuing: {e!r}"
                 )
-            if not self.connected or not self.has_command:
+            if not self.client.connected or not self.has_command:
                 return
             for command in [
                 commands.BothAxesStop(),
@@ -1133,7 +1119,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             If the sequence_id is already in use.
             This indicates an internal error.
         """
-        if not self.connected:
+        if not self.client.connected:
             if self.should_be_connected:
                 await self.fault(
                     enums.CscErrorCode.CONNECTION_LOST,
@@ -1993,7 +1979,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """Read and process replies from the low-level controller."""
         self.log.debug("Read loop begins")
         known_reply_ids = {int(item) for item in enums.ReplyId}
-        while self.should_be_connected and self.connected:
+        while self.client.connected:
             try:
                 reply_dict = await self.client.read_json()
                 try:
@@ -2030,8 +2016,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                if self.should_be_connected:
-                    if self.connected:
+                if self.client.should_be_connected:
+                    if self.client.connected:
                         err_msg = f"Read loop failed; possibly a bug: {e!r}"
                         self.log.exception(err_msg)
                         await self.fault(
@@ -2079,7 +2065,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # so we can tell the commands apart.
         heartbeat_command = commands.Heartbeat()
         try:
-            while self.connected and self.should_be_commander:
+            while self.client.connected and self.should_be_commander:
                 heartbeat_command.timestamp = utils.current_tai()
                 command_bytes = heartbeat_command.encode()
                 self.log.debug("Send heartbeat command %s", command_bytes)
@@ -2097,7 +2083,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def start(self):
         await super().start()
-        await self.evt_connected.set_write(connected=self.connected)
+        await self.evt_connected.set_write(connected=self.client.connected)
         if self.simulation_mode == 1 and self.run_mock_controller:
             # Run the mock controller using random ports;
             # read the ports to set command_port and telemetry_port.
@@ -2151,12 +2137,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         """
         self.camera_cable_wrap_follow_start_task.cancel()
         self.camera_cable_wrap_follow_loop_task.cancel()
-        if self.connected and self.has_command:
+        if self.client.connected and self.has_command:
             await self.retry_command(commands.CameraCableWrapStop())
         else:
             self.log.info(
                 "stop_camera_cable_wrap_following not sending CameraCableWrapStop: "
-                f"{self.connected=} and {self.has_command=} not both true"
+                f"{self.client.connected=} and {self.has_command=} not both true"
             )
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
 
