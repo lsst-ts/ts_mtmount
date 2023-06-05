@@ -325,7 +325,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.read_loop_task = utils.make_done_future()
         self.llv_heartbeat_loop_task = utils.make_done_future()
-        self.slowdown_detection_loop_task = utils.make_done_future()
 
         # Task to monitor the setThermal command.
         self.set_thermal_task = utils.make_done_future()
@@ -542,7 +541,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def close_tasks(self):
         """Shut down pending tasks. Called by `close`."""
-        self.slowdown_detection_loop_task.cancel()
         while self.command_futures_dict:
             command = self.command_futures_dict.popitem()[1]
             command.setnoack("Connection closed before command finished")
@@ -2030,29 +2028,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
                         )
         self.log.debug("Read loop ends")
 
-    async def slowdown_detection_loop(self):
-        """Detect the event loop being starved.
-
-        Log warnings when this happens.
-        """
-        self.log.debug("Slowdown detecton loop begins")
-        try:
-            last_tai = 0
-            while True:
-                current_tai = utils.current_tai()
-                if last_tai > 0:
-                    delay = current_tai - last_tai - SLOWDOWN_DETECTION_INTERVAL
-                    if delay > SLOWDOWN_WARNING_DELAY:
-                        self.log.warning(
-                            f"event loop delayed by > {delay:0.2f} seconds"
-                        )
-                last_tai = current_tai
-                await asyncio.sleep(SLOWDOWN_DETECTION_INTERVAL)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            self.log.exception(f"Slowdown detection loop failed: {e!r}")
-
     async def llv_heartbeat_loop(self):
         """Send a regular heartbeat "command" to the low-level controller.
 
@@ -2121,13 +2096,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await asyncio.gather(self.rotator.start_task, self.mtmount_remote.start_task)
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
         await self.clear_target()
-        self.slowdown_detection_loop_task = asyncio.create_task(
-            self.slowdown_detection_loop()
-        )
-        print(
-            f"MTMount.start: {len(self.log.handlers)} log handlers: "
-            + ", ".join(repr(handler) for handler in self.log.handlers)
-        )
 
     async def stop_camera_cable_wrap_following(self):
         """Stop the camera cable wrap from following the rotator.
