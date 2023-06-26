@@ -226,10 +226,11 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 
 25:
 - oilSupplySystem
-- actualTemperatureAzimuthCabinet5001: 1
-  actualTemperatureElevationCabinet5001: 1
-  actualTemperatureElevationCabinet5002: 1
-  ambientTemperature: 1
+- ambientTemperature: 1
+  # Disabled 2026-06-26 because these are not found.
+  # actualTemperatureAzimuthCabinet5001: 1
+  # actualTemperatureElevationCabinet5001: 1
+  # actualTemperatureElevationCabinet5002: 1
   computedOilFilmThicknessAzimuthBearing5004: 1
   computedOilFilmThicknessAzimuthBearing5014: 1
   computedOilFilmThicknessAzimuthBearing5024: 1
