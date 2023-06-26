@@ -809,7 +809,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # in checking the subsystem power state and using that
             # to decide whether to reset alarms.
             for command in (
-                commands.MainCabinetThermalResetAlarm(),
+                # Disabled 2023-06-26 because the system is broken.
+                # Re-enable when it is fixed.
+                # commands.MainCabinetThermalResetAlarm(),
                 # Disabled for 2022-10 commissioning
                 # commands.TopEndChillerResetAlarm(),
                 commands.OilSupplySystemResetAlarm(),
