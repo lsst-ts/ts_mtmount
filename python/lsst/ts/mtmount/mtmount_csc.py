@@ -1663,12 +1663,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         topic_info = self.system_state_dict[reply.system]
         if topic_info.num_thermal == 1:
             await topic_info.topic.set_write(
-                trackAmbient=reply.trackAmbient[0],
+                trackAmbient=getattr(reply, "trackAmbient", [False])[0],
                 setTemperature=reply.temperature[0],
             )
         else:
             await topic_info.topic.set_write(
-                trackAmbient=reply.trackAmbient,
+                trackAmbient=getattr(reply, "trackAmbient", [False]*topic_info.num_thermal),
                 setTemperature=reply.temperature,
             )
 
