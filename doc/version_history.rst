@@ -6,6 +6,19 @@
 Version History
 ###############
 
+v0.27.1
+-------
+
+* Add a CCW-only version of the MTMount CSC, including entry point.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 1.2
+* ts_idl 4.5
+* IDL files for MTMount and MTRotator from ts_xml 17
+
 v0.27.0
 -------
 
@@ -594,7 +607,7 @@ v0.14.0
 -------
 
 * Use a single socket for commands and replies.
-* `mock.Controller` related changes: 
+* `mock.Controller` related changes:
     * Replaced ``command_port`` and ``telemetry_port`` constructor argument with ``random_ports``
     * Removed the ``reconnect`` argument.
     * Updated the command-line arguments of ``run_mock_tma.py`` to match.
