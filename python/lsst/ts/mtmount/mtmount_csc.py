@@ -830,37 +830,44 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # such failures. It's a bit skanky, but avoids a race condition
             # in checking the subsystem power state and using that
             # to decide whether to reset alarms.
-            for command in (
+            for command, timeout, retry in (
                 # Disabled 2023-06-26 because the system is broken.
                 # Re-enable when it is fixed.
                 # commands.MainCabinetThermalResetAlarm(),
                 # Disabled for 2022-10 commissioning
                 # commands.TopEndChillerResetAlarm(),
-                commands.OilSupplySystemResetAlarm(),
-                commands.MainAxesPowerSupplyResetAlarm(),
-                commands.MirrorCoverLocksResetAlarm(),
-                commands.MirrorCoversResetAlarm(),
-                commands.CameraCableWrapResetAlarm(),
+                (commands.OilSupplySystemResetAlarm(), None, False),
+                (commands.MainAxesPowerSupplyResetAlarm(), None, False),
+                (commands.MirrorCoverLocksResetAlarm(), None, False),
+                (commands.MirrorCoversResetAlarm(), None, False),
+                (commands.CameraCableWrapResetAlarm(), None, False),
                 # Disabled for 2022-10 commissioning
                 # commands.TopEndChillerPower(on=True),
                 # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
-                commands.MainAxesPowerSupplyPower(on=True),
+                (commands.MainAxesPowerSupplyPower(on=True), None, False),
                 # Disabled for 2022-10 commissioning
-                commands.OilSupplySystemSetMode(auto=True),
-                commands.OilSupplySystemPower(on=True),
+                (commands.OilSupplySystemSetMode(auto=True), None, False),
+                (commands.OilSupplySystemPower(on=True), None, False),
                 # Cannot successfully reset the axes alarms
                 # until the main power supply is on.
                 # Sometimes a second reset is needed for the main axes
                 # (a known bug in the TMA as of 2022-11-03).
-                commands.BothAxesResetAlarm(),
-                commands.BothAxesResetAlarm(),
-                commands.BothAxesPower(on=True),
-                commands.CameraCableWrapPower(on=True),
+                (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, True),
+                (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, False),
+                (commands.BothAxesPower(on=True), None, False),
+                (commands.CameraCableWrapPower(on=True), None, False),
             ):
                 try:
-                    await self.send_command(command, do_lock=True)
+                    await self.send_command(command, do_lock=True, timeout=timeout)
                 except Exception as e:
-                    raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
+                    if not retry:
+                        raise salobj.ExpectedError(f"Command {command} failed: {e!r}")
+                    else:
+                        self.log.exception(
+                            f"Command {command} failed, waiting {timeout}s and retrying."
+                        )
+                        await asyncio.sleep(timeout)
+
         except Exception as e:
             self.log.error(f"Failed to enable on one or more devices: {e!r}")
             raise
