@@ -22,6 +22,7 @@
 __all__ = ["MTMountCsc", "run_mtmount"]
 
 import asyncio
+import contextlib
 import functools
 import inspect
 import json
@@ -125,6 +126,14 @@ TRACK_COMMAND_TIMEOUT = 1
 
 # Minimum tracking advance time (sec) allowed in trackTarget commands
 MIN_TRACKING_ADVANCE_TIME = 0.05
+
+# How many iterations to wait for the low level controller to become
+# commandable by the CSC.
+MAX_COMMANDABLE_LOOP_ITER = 50
+
+# How long to wait at each iteration when waiting for the low-level
+# controller to handle command to the CSC.
+COMMANDABLE_WAIT_LOOP_TIME = 0.1
 
 # Dict of setThermal command field prefix: system_id
 SET_THERMAL_FIELD_SYSTEM_ID_DICT = dict(
@@ -292,6 +301,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Set True if the CSC should be the commander.
         self.should_be_commander = False
 
+        # Set True if the CSC should be connected.
+        self.should_be_connected = False
+
         # Subprocess running the telemetry client
         self.telemetry_client_process = None
 
@@ -308,6 +320,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_lock = asyncio.Lock()
         # Lock for BothAxesTracking commands.
         self.main_axes_lock = asyncio.Lock()
+
+        # Lock for state transition
+        self.state_transition_lock = asyncio.Lock()
 
         # Task that waits while connecting to the TCP/IP controller.
         self.connect_task = utils.make_done_future()
@@ -471,7 +486,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def begin_disable(self, data):
         await super().begin_disable(data)
-        await self.disable_devices()
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_disable.ack_in_progress, data=data
+        ):
+            await self.disable_devices()
 
     async def begin_enable(self, data):
         """Take command of the low-level controller and initialize devices.
@@ -485,41 +503,45 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.disable_devices_task.cancel()
         self.enable_devices_task.cancel()
         await super().begin_enable(data)
-        try:
-            self.log.info("Ask for permission to command the mount.")
-            await self.send_command(
-                commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
-            )
-            self.should_be_commander = True
-            for i in range(50):
-                await asyncio.sleep(0.1)
-                if self.has_command:
-                    break
-            else:
-                self.should_be_commander = False
-                raise salobj.ExpectedError(
-                    "Timed out waiting for the low-level commander event"
-                )
-            self.log.info(f"Got low level commander event in {i * 0.1} seconds")
-            self.llv_heartbeat_loop_task.cancel()
-            self.llv_heartbeat_loop_task = asyncio.create_task(
-                self.llv_heartbeat_loop()
-            )
-        except Exception as e:
-            raise salobj.ExpectedError(
-                f"The CSC was not allowed to command the mount: {e!r}"
-            )
 
-        self.enable_devices_task = asyncio.create_task(self.enable_devices())
-        try:
-            await self.enable_devices_task
-        except Exception:
-            self.log.warning(
-                "Could not enable devices; disabling devices and giving up "
-                "command of the low-level controller."
-            )
-            await self.disable_devices()
-            raise
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_enable.ack_in_progress, data=data
+        ):
+            try:
+                self.log.info("Ask for permission to command the mount.")
+                await self.send_command(
+                    commands.AskForCommand(commander=enums.Source.CSC), do_lock=True
+                )
+                self.should_be_commander = True
+                for i in range(MAX_COMMANDABLE_LOOP_ITER):
+                    await asyncio.sleep(COMMANDABLE_WAIT_LOOP_TIME)
+                    if self.has_command:
+                        break
+                else:
+                    self.should_be_commander = False
+                    raise salobj.ExpectedError(
+                        "Timed out waiting for the low-level commander event"
+                    )
+                self.log.info(f"Got low level commander event in {i * 0.1} seconds")
+                self.llv_heartbeat_loop_task.cancel()
+                self.llv_heartbeat_loop_task = asyncio.create_task(
+                    self.llv_heartbeat_loop()
+                )
+            except Exception as e:
+                raise salobj.ExpectedError(
+                    f"The CSC was not allowed to command the mount: {e!r}"
+                )
+
+            self.enable_devices_task = asyncio.create_task(self.enable_devices())
+            try:
+                await self.enable_devices_task
+            except Exception:
+                self.log.warning(
+                    "Could not enable devices; disabling devices and giving up "
+                    "command of the low-level controller."
+                )
+                await self.disable_devices()
+                raise
 
     async def begin_start(self, data):
         await super().begin_start(data)
@@ -2117,6 +2139,33 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 f"{self.client.connected=} and {self.has_command=} not both true"
             )
         await self.evt_cameraCableWrapFollowing.set_write(enabled=False)
+
+    @contextlib.asynccontextmanager
+    async def in_progress_loop(self, ack_in_progress, data):
+        """A context manager to handle continuously acknowledging in progress
+        for the enabled command.
+        """
+
+        async with self.state_transition_lock:
+            ack_in_progress_task = asyncio.create_task(
+                self._in_progress_loop(ack_in_progress, data)
+            )
+            try:
+                yield
+            finally:
+                ack_in_progress_task.cancel()
+
+    async def _in_progress_loop(self, ack_in_progress, data):
+        """Coroutine to continuously send in progress acknowledgements."""
+
+        while True:
+            await ack_in_progress(
+                data,
+                timeout=self.heartbeat_interval * 2.0,
+                result="Command still in progress.",
+            )
+
+            await asyncio.sleep(self.heartbeat_interval)
 
 
 def run_mtmount() -> None:
