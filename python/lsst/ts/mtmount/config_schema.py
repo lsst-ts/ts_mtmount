@@ -28,7 +28,7 @@ CONFIG_SCHEMA = yaml.safe_load(
 $schema: http://json-schema.org/draft-07/schema#
 $id: https://github.com/lsst-ts/ts_mtmount/blob/master/python/lsst/ts/mtmount/config_schema.py
 # title must end with one or more spaces followed by the schema version, which must begin with "v"
-title: MTMount v2
+title: MTMount v3
 description: Schema for MTMount configuration files
 type: object
 properties:
@@ -46,6 +46,11 @@ properties:
     exclusiveMinimum: 0
   ack_timeout:
     description: Time limit for reading a command acknowledgement from the TCP/IP interface (sec).
+    type: number
+    exclusiveMinimum: 0
+  ack_timeout_long:
+    description: >-
+      Time limit for reading a command acknowledgement from the TCP/IP interface (sec).
     type: number
     exclusiveMinimum: 0
   camera_cable_wrap_advance_time:

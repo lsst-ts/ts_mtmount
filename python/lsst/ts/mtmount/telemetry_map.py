@@ -191,7 +191,6 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 27:
 - topEndChiller
 - actualTemperatureAmbient: 1
-  actualTemperatureArea: 5
   ambientRelativeHumiditySensor0501: 1
   ambientRelativeHumiditySensor0502: 1
   ambientRelativeHumiditySensor0504: 1
