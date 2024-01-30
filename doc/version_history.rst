@@ -6,11 +6,64 @@
 Version History
 ###############
 
+v0.27.2
+-------
+
+* `MTMountCsc`:
+
+    * Update ``handle_chiller_state`` to handle condition where the reply message is missing the ``trackAmbient`` attribute.
+    * Add background task that sends in progress acknowlegements while the enable command executes.
+    * Add new ``ack_timeout_long`` configuration parameter for commands that take longer to execute.
+    * Update ``enable_devices`` to allow specifying custom timestamps for commands and for commands to be retried if they are prone to failing the first time they execute.
+
+* In ``telemetry_map.py``, remove ``actualTemperatureArea1`` from topic 27.
+
+v0.27.1
+-------
+
+* Add a CCW-only version of the MTMount CSC, including entry point.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 1.2
+* ts_idl 4.5
+* IDL files for MTMount and MTRotator from ts_xml 17
+
+v0.27.0
+-------
+
+* `TelemetryClient`: publish the telemetryClientHearbeat telemetry topic, if available (ts_xml \> 17.0).
+* `MTMountCsc`:
+
+    * Initialize self.client to an already-closed client, instead of None.
+      This requires ts_tcpip 1.2.
+    * Eliminate the slowdown detection loop.
+      Monitor the heartbeat topic, instead.
+
+* `mock.AxisDevice`: fix a bug: homing could fail trying to go out of bounds.
+  Expand unit tests to test homing at the limits.
+* test_telemetry_client: fix a warning from ts_tcpip 1.1.
+  This change requires ts_tcpip 1.1.
+* Publish new oilSupplySystem cabinet temperature telemetry.
+  This change requires ts_xml 17.
+* Delete the ``TmaCommander``.
+  It was always intended as a short-term hack.
+
+Requires:
+
+* ts_salobj 7.3
+* ts_simactuators 2
+* ts_tcpip 1.2
+* ts_idl 4.5
+* IDL files for MTMount and MTRotator from ts_xml 17
+
 v0.26.2
 -------
 
 * `TelemetryClient`: add slowdown detection.
-* `MTMount_Telemetry`: update for ts_xml 16.
+* `MTMountCommander`: update for ts_xml 16.
 * Modernize the conda recipe.
 
 Requires:
@@ -24,7 +77,7 @@ Requires:
 v0.26.1
 -------
 
-* `MTMountCSC`:
+* `MTMountCsc`:
 
     * Add missing ``await`` to an ack_in_progress for the setThermal command.
     * Remove some ts_xml 15 compatibility code.
@@ -211,7 +264,7 @@ Requires:
 v0.23.2
 -------
 
-* `MTMountCSC`: improve error reporting when a low-level command fails.
+* `MTMountCsc`: improve error reporting when a low-level command fails.
 
 Requires:
 
@@ -224,7 +277,7 @@ Requires:
 v0.23.1
 -------
 
-* `MTMountCSC`:
+* `MTMountCsc`:
 
     * Fail pending low-level commands on disconnect.
     * Ignore trackTarget commands if the tracking advance time is too small, but log a warning.
@@ -242,7 +295,7 @@ v0.23.0
 
 * Publish the ``connected`` and ``telemetryConnected`` events.
   This requires ts_xml 13.
-* `MTMountCSC`:
+* `MTMountCsc`:
 
     * Enable the oil supply system as part of enabling subsystems, now that the TMA can control it.
     * Only issue the low-level heartbeat command when the CSC has control of the TMA.
@@ -566,7 +619,7 @@ v0.14.0
 -------
 
 * Use a single socket for commands and replies.
-* `mock.Controller` related changes: 
+* `mock.Controller` related changes:
     * Replaced ``command_port`` and ``telemetry_port`` constructor argument with ``random_ports``
     * Removed the ``reconnect`` argument.
     * Updated the command-line arguments of ``run_mock_tma.py`` to match.
@@ -837,9 +890,9 @@ Requires:
 v0.6.0
 ------
 
-* In simulation mode have the `MTMountCSC` run the mock controller in a subprocess,
+* In simulation mode have the `MTMountCsc` run the mock controller in a subprocess,
   in order to give the CSC a better chance of keeping up with tracking commands.
-  This eliminates the `MTMountCSC.mock_controller` attribute.
+  This eliminates the `MTMountCsc.mock_controller` attribute.
 * Add `MTMountCsc` constructor argument ``run_mock_controller``
   to control whether the CSC runs the mock controller in simulation mode
   (if false then you must run the mock controller yourself).

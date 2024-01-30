@@ -24,7 +24,6 @@ __all__ = ["INITIAL_POSITION", "Controller", "make_reply_dict", "run_mock_tma"]
 import argparse
 import asyncio
 import copy
-import json
 import logging
 import math
 import signal
@@ -307,9 +306,9 @@ class Controller:
             axis_settings["TcsMaxVelocity"] = axis_cmd_limits.max_velocity
             axis_settings["TcsMaxAcceleration"] = axis_cmd_limits.max_acceleration
             axis_settings["SoftmotionTrackingMaxSpeed"] = axis_actuator.max_velocity
-            axis_settings[
-                "SoftmotionTrackingMaxAcceleration"
-            ] = axis_actuator.max_acceleration
+            axis_settings["SoftmotionTrackingMaxAcceleration"] = (
+                axis_actuator.max_acceleration
+            )
 
         ccw_device = self.device_dict[System.CAMERA_CABLE_WRAP]
         ccw_actuator = ccw_device.actuator
@@ -506,7 +505,7 @@ class Controller:
                 timestamp=tai,
             )
         if self.telemetry_server.connected:
-            await self.write_telemetry(data_dict)
+            await self.telemetry_server.write_json(data_dict)
 
         # Write events, if CSC connected.
         axis = {
@@ -766,19 +765,7 @@ class Controller:
             It will be formatted as json before being written.
         """
         self.log.debug("write_reply(%s)", reply_dict)
-        if not self.command_server.connected:
-            raise RuntimeError("Command client not connected")
-        reply_str = json.dumps(reply_dict)
-        self.command_server.writer.write(reply_str.encode() + constants.LINE_TERMINATOR)
-        await self.command_server.writer.drain()
-
-    async def write_telemetry(self, data_dict):
-        data_str = json.dumps(data_dict)
-        if not self.telemetry_server.connected:
-            raise RuntimeError("Telemetry client not connected")
-        self.telemetry_server.writer.write(data_str.encode())
-        self.telemetry_server.writer.write(constants.LINE_TERMINATOR)
-        await self.telemetry_server.writer.drain()
+        await self.command_server.write_json(reply_dict)
 
     async def telemetry_connect_callback(self, server):
         """Called when a client connects to or disconnects from
@@ -1513,13 +1500,11 @@ class Controller:
         self.log.debug("Read loop begins")
         try:
             while self.command_server.connected:
-                read_bytes = await self.command_server.reader.readuntil(
-                    constants.LINE_TERMINATOR
-                )
+                read_str = await self.command_server.read_str()
                 try:
-                    command = commands.parse_command(read_bytes.decode())
+                    command = commands.parse_command(read_str)
                 except Exception as e:
-                    self.log.error(f"Ignoring unparsable command {read_bytes}: {e!r}")
+                    self.log.error(f"Ignoring unparsable command {read_str}: {e!r}")
                     continue
                 if self.command_queue and not self.command_queue.full():
                     if (

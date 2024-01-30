@@ -21,7 +21,6 @@
 
 import asyncio
 import contextlib
-import itertools
 import logging
 import math
 import pathlib
@@ -37,7 +36,6 @@ from lsst.ts.idl.enums.MTMount import (
     System,
     ThermalCommandState,
 )
-from lsst.ts.mtmount.mtmount_csc import SET_THERMAL_FIELD_SYSTEM_ID_DICT
 from numpy.testing import assert_array_equal
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
@@ -79,7 +77,7 @@ SAFETY_INTERLOCKS_FIELDS = (
 logging.basicConfig()
 
 
-class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
+class CcwOnlyCscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     def basic_make_csc(
         self, initial_state, config_dir, simulation_mode, internal_mock_controller
     ):
@@ -89,7 +87,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
         else:
             mock_command_port = None
             mock_telemetry_port = None
-        csc = mtmount.MTMountCsc(
+        csc = mtmount.MTMountCcwOnlyCsc(
             initial_state=initial_state,
             config_dir=config_dir,
             simulation_mode=simulation_mode,
@@ -263,13 +261,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     await self.assert_next_summary_state(salobj.State.FAULT)
                     assert self.csc.client.connected
                     assert not self.csc.should_be_commander
-
-    async def test_bin_script(self):
-        await self.check_bin_script(
-            name="MTMount",
-            index=None,
-            exe_name="run_mtmount",
-        )
 
     def test_class_attributes(self):
         assert tuple(mtmount.MTMountCsc.valid_simulation_modes) == (0, 1)
@@ -836,24 +827,6 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     timeout=MIRROR_COVER_TIMEOUT
                 )
 
-    async def test_command_superseded(self):
-        async with self.make_csc(initial_state=salobj.State.ENABLED):
-            # Slow the device way down so there's plenty of time
-            # to supersede the move.
-            mock_device = self.mock_controller.device_dict[System.MIRROR_COVERS]
-            mock_device.actuator.speed /= 10
-
-            # Start opening the mirror covers, then stop all motion.
-            task = asyncio.create_task(
-                self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
-            )
-            await asyncio.sleep(0.1)
-            await self.remote.cmd_stop.start(timeout=STD_TIMEOUT)
-            # Note that SAL has no "superseded" CMD_x code,
-            # so the CSC uses CMD_FAILED.
-            with salobj.assertRaisesAckError(ack=salobj.SalRetCode.CMD_FAILED):
-                await task
-
     async def test_lose_command(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED):
             await self.assert_next_summary_state(salobj.State.ENABLED)
@@ -1000,102 +973,15 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 == DeployableMotionState.DEPLOYED
             )
 
-            # Open (retract) the mirror covers.
-            t0 = utils.current_tai()
-            await self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
-            dt = utils.current_tai() - t0
-            print(f"opening the mirror covers took {dt:0.2f} sec")
-            await self.assert_next_sample(
-                topic=self.remote.evt_mirrorCoversMotionState,
-                state=DeployableMotionState.RETRACTING,
-                elementsState=[DeployableMotionState.RETRACTING] * 4,
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.RETRACTING,
-                elementsState=[DeployableMotionState.RETRACTING] * 4,
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_mirrorCoversMotionState,
-                state=DeployableMotionState.RETRACTED,
-                elementsState=[DeployableMotionState.RETRACTED] * 4,
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.RETRACTED,
-                elementsState=[DeployableMotionState.RETRACTED] * 4,
-            )
-            assert (
-                mirror_covers_device.motion_state() == DeployableMotionState.RETRACTED
-            )
-            assert (
-                mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.RETRACTED
-            )
+            with pytest.raises(salobj.AckError):
+                await self.remote.cmd_openMirrorCovers.start(
+                    timeout=MIRROR_COVER_TIMEOUT
+                )
 
-            # Open the mirror covers again; this should be quick.
-            t0 = utils.current_tai()
-            await self.remote.cmd_openMirrorCovers.start(timeout=STD_TIMEOUT)
-            dt = utils.current_tai() - t0
-            print(f"opening the mirror covers again took {dt:0.2f} sec")
-            assert (
-                mirror_covers_device.motion_state() == DeployableMotionState.RETRACTED
-            )
-            assert (
-                mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.RETRACTED
-            )
-
-            # Close (deploy) the mirror covers.
-            t0 = utils.current_tai()
-            await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
-            dt = utils.current_tai() - t0
-            print(f"closing the mirror covers took {dt:0.2f} sec")
-            await self.assert_next_sample(
-                topic=self.remote.evt_mirrorCoversMotionState,
-                state=DeployableMotionState.DEPLOYING,
-                elementsState=[DeployableMotionState.DEPLOYING] * 4,
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.DEPLOYING,
-                elementsState=[DeployableMotionState.DEPLOYING] * 4,
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_mirrorCoversMotionState,
-                state=DeployableMotionState.DEPLOYED,
-                elementsState=[DeployableMotionState.DEPLOYED] * 4,
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.DEPLOYED,
-                elementsState=[DeployableMotionState.DEPLOYED] * 4,
-            )
-            assert mirror_covers_device.motion_state() == DeployableMotionState.DEPLOYED
-            assert (
-                mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.DEPLOYED
-            )
-
-            # Close the mirror covers again;
-            # the locks are retracted and engaged so it takes some time.
-            t0 = utils.current_tai()
-            await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
-            dt = utils.current_tai() - t0
-            print(f"closing the mirror covers again took {dt:0.2f} sec")
-            assert mirror_covers_device.motion_state() == DeployableMotionState.DEPLOYED
-            assert (
-                mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.DEPLOYED
-            )
-
-            # Check that closeMirrorCovers and openMirrorCovers while
-            # disabling devices are both rejected.
-            with self.pretend_to_be_disabling_devices():
-                with salobj.assertRaisesAckError():
-                    await self.remote.cmd_closeMirrorCovers.start(timeout=STD_TIMEOUT)
-                with salobj.assertRaisesAckError():
-                    await self.remote.cmd_openMirrorCovers.start(timeout=STD_TIMEOUT)
+            with pytest.raises(salobj.AckError):
+                await self.remote.cmd_closeMirrorCovers.start(
+                    timeout=MIRROR_COVER_TIMEOUT
+                )
 
     async def test_move_to_target(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
@@ -1141,117 +1027,14 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 f"start test_moveToTarget(azimuth={target_azimuth:0.2f}, "
                 f"elevation={target_elevation:0.2f})"
             )
-            task = asyncio.create_task(
-                self.remote.cmd_moveToTarget.set_start(
+            with pytest.raises(salobj.AckError):
+                await self.remote.cmd_moveToTarget.set_start(
                     azimuth=target_azimuth,
                     elevation=target_elevation,
                     timeout=STD_TIMEOUT,
                 )
-            )
-            # For point to point moves the target event is set twice:
-            # once for elevation and once for azimuth.
-            # The first event will have exactly one of elevation or azimuth
-            # still set to NaN (note: ^ is bitwise xor, but it works as
-            # logical xor for bools)
-            data = await self.remote.evt_target.next(flush=False, timeout=STD_TIMEOUT)
-            assert math.isnan(data.elevation) ^ math.isnan(data.azimuth)
-            data = await self.remote.evt_target.next(flush=False, timeout=STD_TIMEOUT)
-            assert not math.isnan(data.elevation) or math.isnan(data.azimuth)
-            assert data.elevation == pytest.approx(target_elevation)
-            assert data.azimuth == pytest.approx(target_azimuth)
-            assert not task.done()
-
-            await self.assert_next_sample(
-                topic=self.remote.evt_elevationMotionState,
-                state=AxisMotionState.MOVING_POINT_TO_POINT,
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_azimuthMotionState,
-                state=AxisMotionState.MOVING_POINT_TO_POINT,
-            )
-
-            # Check that the target event is received well before
-            # the move finishes.
-            duration = mock_azimuth.end_tai - utils.current_tai()
-            print(f"axis move duration={duration:0.2f} sec")
-            assert duration > 1
-
-            await self.assert_next_sample(
-                topic=self.remote.evt_elevationMotionState,
-                state=AxisMotionState.STOPPED,
-            )
-            await self.assert_next_sample(
-                topic=self.remote.evt_azimuthMotionState,
-                state=AxisMotionState.STOPPED,
-            )
-            await self.assert_axes_in_position(elevation=True, azimuth=True)
-            await task
-            tai = utils.current_tai()
-            elevation_pvt = mock_elevation.actuator.path.at(tai)
-            azimuth_pvt = mock_azimuth.actuator.path.at(tai)
-            assert tai >= mock_elevation.actuator.path[-1].tai
-            assert azimuth_pvt.position == pytest.approx(target_azimuth)
-            assert elevation_pvt.position == pytest.approx(target_elevation)
-            assert azimuth_pvt.velocity == pytest.approx(0)
-            assert elevation_pvt.velocity == pytest.approx(0)
-
-            await self.assert_next_sample(
-                topic=self.remote.evt_azimuthToppleBlock, reverse=False, forward=True
-            )
-
-            # Check that the camera cable wrap is still following the rotator.
-            data = self.remote.evt_cameraCableWrapFollowing.get()
-            assert data.enabled
-
-            # Check that move to target while disabling devices is rejected.
-            with self.pretend_to_be_disabling_devices():
-                with salobj.assertRaisesAckError():
-                    await self.remote.cmd_moveToTarget.set_start(
-                        azimuth=target_azimuth,
-                        elevation=target_elevation,
-                        timeout=STD_TIMEOUT,
-                    )
-
-            # Check that out-of-bounds moves are rejected,
-            # while leaving the mock devices enabled.
-            for (azimuth, az_ok), (elevation, el_ok) in itertools.product(
-                (
-                    (mock_azimuth.cmd_limits.min_position - 0.001, False),
-                    (0, True),
-                    (mock_azimuth.cmd_limits.max_position + 0.001, False),
-                ),
-                (
-                    (mock_elevation.cmd_limits.min_position - 0.001, False),
-                    (45, True),
-                    (mock_elevation.cmd_limits.max_position + 0.001, False),
-                ),
-            ):
-                if az_ok and el_ok:
-                    continue
-                with salobj.assertRaisesAckError():
-                    await self.remote.cmd_moveToTarget.set_start(
-                        azimuth=azimuth,
-                        elevation=elevation,
-                        timeout=STD_TIMEOUT,
-                    )
-            for device in mock_azimuth, mock_elevation:
-                assert device.power_on
-                assert device.enabled
-
-            # Check that the camera cable wrap is still following the rotator.
-            data = self.remote.evt_cameraCableWrapFollowing.get()
-            assert data.enabled
-
-            # Check that putting the CSC into STANDBY state sends the axes
-            # out of position (possibly one axis at a time)
-            await self.remote.cmd_disable.start(timeout=STD_TIMEOUT)
-            await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
-            await self.assert_axes_in_position(elevation=False, azimuth=False)
 
     async def test_set_thermal(self):
-        system_id_thermal_prefix_dict = {
-            value: key for key, value in SET_THERMAL_FIELD_SYSTEM_ID_DICT.items()
-        }
         system_ids_no_power_command = frozenset(
             (System.AUXILIARY_CABINETS_THERMAL, System.MAIN_CABINET_THERMAL)
         )
@@ -1305,70 +1088,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     setTemperature=expand_value(0, nelt),
                 )
 
-            # MTMountCsc cannot command the TEC yet.
-            with salobj.assertRaisesAckError():
+            with pytest.raises(salobj.AckError):
                 for state in (ThermalCommandState.OFF, ThermalCommandState.ON):
                     await self.remote.cmd_setThermal.set_start(
                         topEndChillerState=state, timeout=STD_TIMEOUT
-                    )
-
-            for system_id, device in thermal_devices.items():
-                if system_id == System.TOP_END_CHILLER:
-                    continue  # already handled
-
-                field_prefix = system_id_thermal_prefix_dict[system_id]
-                device = thermal_devices[system_id]
-
-                # Turn on the chiller and set the setpoint.
-                # Use an arbitrary setpoint that is different for each system.
-                setpoint = -5.3 + system_id.value
-                kwargs = {
-                    f"{field_prefix}State": ThermalCommandState.ON,
-                    f"{field_prefix}Setpoint": setpoint,
-                }
-                await self.remote.cmd_setThermal.set_start(
-                    **kwargs, timeout=STD_TIMEOUT
-                )
-                assert device.track_setpoint
-                assert not device.track_ambient
-                assert device.setpoint == setpoint
-                assert device.temperature == pytest.approx(
-                    setpoint, abs=device.temperature_slop
-                )
-                state_topic, nelt = get_state_event_nelt(system_id)
-                if system_id not in system_ids_no_power_command:
-                    # First turn on power, then set setPoint.
-                    await self.assert_next_sample(
-                        topic=state_topic,
-                        powerState=PowerState.ON,
-                        trackAmbient=expand_value(False, nelt),
-                        setTemperature=expand_value(0, nelt),
-                    )
-                await self.assert_next_sample(
-                    topic=state_topic,
-                    powerState=PowerState.ON,
-                    trackAmbient=expand_value(False, nelt),
-                    setTemperature=expand_value(setpoint, nelt),
-                )
-
-                # Turn off the chiller.
-                kwargs = {
-                    f"{field_prefix}State": ThermalCommandState.OFF,
-                }
-                await self.remote.cmd_setThermal.set_start(
-                    **kwargs, timeout=STD_TIMEOUT
-                )
-
-                if (
-                    system_id not in system_ids_no_power_command
-                    and system_id != System.OIL_SUPPLY_SYSTEM
-                ):
-                    # The setthermal command can turn this system off.
-                    await self.assert_next_sample(
-                        topic=state_topic,
-                        powerState=PowerState.OFF,
-                        trackAmbient=expand_value(False, nelt),
-                        setTemperature=expand_value(setpoint, nelt),
                     )
 
     async def test_telemetry_reconnection(self):
@@ -1459,133 +1182,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 with salobj.assertRaisesAckError():
                     await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
 
-            # Home the axes
-            await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
-            await self.assert_next_sample(self.remote.evt_azimuthHomed, homed=True)
-            await self.assert_next_sample(self.remote.evt_elevationHomed, homed=True)
-            await self.assert_axes_in_position(elevation=True, azimuth=True)
-
-            # Enable tracking and check mock axis controllers
-            await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
-            assert mock_azimuth.tracking_enabled
-            assert mock_elevation.tracking_enabled
-            # Slew and track until both axes are in position.
-            # Make the elevation move significantly smaller,
-            # so it is sure to be in position first.
-            t0 = utils.current_tai()
-            estimated_slew_time = 2  # seconds
-            track_target_task = asyncio.create_task(
-                self.track_target_loop(
-                    azimuth=initial_azimuth + 3,
-                    elevation=initial_elevation + 1,
-                    azimuth_velocity=0.003,
-                    elevation_velocity=0.003,
-                )
-            )
-            await self.assert_axes_in_position(elevation=False, azimuth=False)
-            await self.assert_axes_in_position(
-                elevation=True,
-                azimuth=True,
-                timeout=estimated_slew_time + STD_TIMEOUT,
-            )
-            dt_slew = utils.current_tai() - t0
-            if track_target_task.done():
-                if track_target_task.exception() is not None:
-                    # Awaiting the task prints a better error message
-                    # than simply re-raising the exception
-                    await track_target_task
-                else:
-                    # This should never happen
-                    raise AssertionError("Bug: track_target_task unexpectedly finished")
-            track_target_task.cancel()
-            print(f"Time to finish slew={dt_slew:0.2f} seconds")
-            assert dt_slew > 1
-
-            # Tracking should still be enabled
-            for device in mock_azimuth, mock_elevation:
-                assert device.power_on
-                assert device.enabled
-                assert device.tracking_enabled
-
-            # Test that tracking while disabling devices is rejected.
-            with self.pretend_to_be_disabling_devices():
-                good_kwargs = self.make_track_target_kwargs(
-                    azimuth=initial_azimuth + 3,
-                    elevation=initial_elevation + 1,
-                    azimuthVelocity=0,
-                    elevationVelocity=0,
-                )
-                with salobj.assertRaisesAckError():
-                    await self.remote.cmd_trackTarget.set_start(
-                        **good_kwargs, timeout=STD_TIMEOUT
-                    )
-
-            # Test that out-of-range tracking commands are rejected,
-            # while leaving the mock devices enabled and tracking.
-            for (
-                (azimuth, az_ok),
-                (elevation, el_ok),
-                (azimuth_velocity, az_vel_ok),
-                (elevation_velocity, el_vel_ok),
-            ) in itertools.product(
-                (
-                    (mock_azimuth.cmd_limits.min_position - 0.001, False),
-                    (0, True),
-                    (mock_azimuth.cmd_limits.max_position + 0.001, False),
-                ),
-                (
-                    (mock_elevation.cmd_limits.min_position - 0.001, False),
-                    (45, True),
-                    (mock_elevation.cmd_limits.max_position + 0.001, False),
-                ),
-                (
-                    (-mock_azimuth.cmd_limits.max_velocity - 0.001, False),
-                    (0, True),
-                    (mock_azimuth.cmd_limits.max_velocity + 0.001, False),
-                ),
-                (
-                    (-mock_elevation.cmd_limits.max_velocity - 0.001, False),
-                    (0, True),
-                    (mock_elevation.cmd_limits.max_velocity + 0.001, False),
-                ),
-            ):
-                if az_ok and el_ok and az_vel_ok and el_vel_ok:
-                    continue
-                bad_kwargs = self.make_track_target_kwargs(
-                    azimuth=azimuth,
-                    elevation=elevation,
-                    azimuthVelocity=azimuth_velocity,
-                    elevationVelocity=elevation_velocity,
-                )
-                with salobj.assertRaisesAckError():
-                    await self.remote.cmd_trackTarget.set_start(
-                        **bad_kwargs, timeout=STD_TIMEOUT
-                    )
-            for device in mock_azimuth, mock_elevation:
-                assert device.power_on
-                assert device.enabled
-                assert device.tracking_enabled
-
-            # Check that the camera cable wrap is still following the rotator.
-            data = self.remote.evt_cameraCableWrapFollowing.get()
-            assert data.enabled
-
-            # Disable tracking and check axis controllers
-            await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
-            assert not mock_azimuth.tracking_enabled
-            assert not mock_elevation.tracking_enabled
-
-            # Check that both axes are no longer in position.
-            await self.assert_axes_in_position(elevation=False, azimuth=False)
-
-            # Check that the camera cable wrap is still following the rotator.
-            data = self.remote.evt_cameraCableWrapFollowing.get()
-            assert data.enabled
-
-            # Check that commands have not accumulated in the cache.
-            # Allow one command, because the camera cable wrap
-            # is still following the rotator.
-            assert len(self.csc.command_futures_dict) < 2
+            with pytest.raises(salobj.AckError):
+                await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
 
     async def track_target_loop(
         self, azimuth, elevation, azimuth_velocity, elevation_velocity

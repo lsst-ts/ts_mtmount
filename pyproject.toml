@@ -18,10 +18,10 @@ where = [ "python" ]
 
 [project.scripts]
 command_mtmount = "lsst.ts.mtmount:command_mtmount"
-command_tma = "lsst.ts.mtmount:command_tma"
 monitor_mtmount_telemetry = "lsst.ts.mtmount.monitor_mtmount_telemetry:monitor_mtmount_telemetry"
 run_mock_tma = "lsst.ts.mtmount.mock:run_mock_tma"
 run_mtmount = "lsst.ts.mtmount:run_mtmount"
+run_mtmount_ccw_only = "lsst.ts.mtmount:run_mtmount_ccw_only"
 run_mtmount_telemetry_client = "lsst.ts.mtmount:run_mtmount_telemetry_client"
 run_tma_telemetry_config_parser = "lsst.ts.mtmount:run_tma_telemetry_config_parser"
 

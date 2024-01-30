@@ -22,7 +22,6 @@
 import asyncio
 import contextlib
 import itertools
-import json
 import logging
 import time
 import types
@@ -32,7 +31,7 @@ import warnings
 
 import numpy.testing
 import pytest
-from lsst.ts import mtmount, salobj, utils
+from lsst.ts import mtmount, salobj, tcpip, utils
 from lsst.ts.idl.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
@@ -99,20 +98,22 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         self.telemetry_dict = {topic_id: None for topic_id in mtmount.TelemetryTopicId}
 
         # Connect to the command port
-        connect_coro = asyncio.open_connection(
-            host=salobj.LOCAL_HOST, port=self.controller.command_server.port
+        self.command_client = tcpip.Client(
+            host=salobj.LOCAL_HOST,
+            port=self.controller.command_server.port,
+            log=log,
+            terminator=mtmount.LINE_TERMINATOR,
         )
-        self.command_reader, self.command_writer = await asyncio.wait_for(
-            connect_coro, timeout=STD_TIMEOUT
-        )
+        await asyncio.wait_for(self.command_client.start_task, timeout=STD_TIMEOUT)
 
         # Connect to the telemetry port
-        telemetry_connect_coro = asyncio.open_connection(
-            host=salobj.LOCAL_HOST, port=self.controller.telemetry_server.port
+        self.telemetry_client = tcpip.Client(
+            host=salobj.LOCAL_HOST,
+            port=self.controller.telemetry_server.port,
+            log=log,
+            terminator=mtmount.LINE_TERMINATOR,
         )
-        self.telemetry_reader, self.telemetry_writer = await asyncio.wait_for(
-            telemetry_connect_coro, timeout=STD_TIMEOUT
-        )
+        await asyncio.wait_for(self.telemetry_client.start_task, timeout=STD_TIMEOUT)
         self.telemetry_task = asyncio.create_task(self.telemetry_read_loop())
         dt = time.monotonic() - t0
 
@@ -120,14 +121,12 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         try:
             yield
         finally:
-            self.telemetry_writer.close()
             try:
-                await asyncio.wait_for(self.telemetry_writer.wait_closed(), timeout=1)
+                await asyncio.wait_for(self.telemetry_client.close(), timeout=1)
             except asyncio.TimeoutError:
                 print("Timed out waiting for the telemetry writer to close; continuing")
-            self.command_writer.close()
             try:
-                await asyncio.wait_for(self.command_writer.wait_closed(), timeout=1)
+                await asyncio.wait_for(self.command_client.close(), timeout=1)
             except asyncio.TimeoutError:
                 print("Timed out waiting for the command writer to close; continuing")
             await self.controller.close()
@@ -281,7 +280,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         """Flush all replies."""
         try:
             for i in range(2):
-                await asyncio.wait_for(self.command_reader.read(), timeout=0.01)
+                await asyncio.wait_for(self.command_client.read(-1), timeout=0.01)
             self.fail("flush read did not time out")
         except asyncio.TimeoutError:
             return
@@ -307,13 +306,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         Return it as a types.SimpleNamespace with the parameters
         hoisted to the top level.
         """
-        read_bytes = await asyncio.wait_for(
-            self.command_reader.readuntil(mtmount.LINE_TERMINATOR), timeout=timeout
+        reply_dict = await asyncio.wait_for(
+            self.command_client.read_json(), timeout=timeout
         )
-        try:
-            reply_dict = json.loads(read_bytes)
-        except Exception as e:
-            raise RuntimeError(f"Could not parse {read_bytes}: {e!r}")
         return types.SimpleNamespace(
             id=mtmount.ReplyId(reply_dict["id"]),
             timestamp=reply_dict["timestamp"],
@@ -464,8 +459,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         command.sequence_id = next(self.sequence_id_generator)
         command.timestamp = utils.current_tai()
         if use_read_loop:
-            self.command_writer.write(command.encode())
-            await self.command_writer.drain()
+            await self.command_client.write(command.encode())
         else:
             await self.controller.handle_command(command)
         non_cmd_replies = list()
@@ -521,9 +515,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         """Read telemetry and add it to ``self.telemetry_dict``."""
         while True:
             try:
-                data = await self.telemetry_reader.readuntil(mtmount.LINE_TERMINATOR)
-                decoded_data = data.decode()
-                llv_data = json.loads(decoded_data)
+                llv_data = await self.telemetry_client.read_json()
                 topic_id = llv_data.get("topicID")
                 self.telemetry_dict[topic_id] = llv_data
             except asyncio.CancelledError:
@@ -1436,8 +1428,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Note that the heartbeat command receives no ack,
             # so simply write it.
             heartbeat_command = mtmount.commands.Heartbeat()
-            self.command_writer.write(heartbeat_command.encode())
-            await self.command_writer.drain()
+            await self.command_client.write(heartbeat_command.encode())
             queued_heartbeat_command = await asyncio.wait_for(
                 self.controller.command_queue.get(), timeout=STD_TIMEOUT
             )
@@ -1456,8 +1447,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # Note that the heartbeat command receives no ack,
             # so simply write it.
             heartbeat_command = mtmount.commands.Heartbeat()
-            self.command_writer.write(heartbeat_command.encode())
-            await self.command_writer.drain()
+            await self.command_client.write(heartbeat_command.encode())
 
             # Run two non-heartbeat commands and check that they are queued.
             device = self.controller.device_dict[System.MIRROR_COVER_LOCKS]

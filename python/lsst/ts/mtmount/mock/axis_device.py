@@ -251,8 +251,9 @@ class AxisDevice(BaseDevice):
 
         The drive must be enabled and tracking must be disabled.
 
-        For sake of doing something vaguely plausible,
-        move self.home_offset degrees, avoiding limits.
+        Move self.home_offset degrees towards the center of the range.
+        The real TMA moves in the same direction for homing, but it moves
+        to the next readable fiducial so the amount of travel varies.
         """
         self.assert_main_axes_power_supply_power_on()
         self.assert_enabled()
@@ -264,11 +265,22 @@ class AxisDevice(BaseDevice):
                 f"must be {AxisMotionState.STOPPED}"
             )
         current_position = self.actuator.path[-1].at(tai).position
-        home_position = current_position + self.home_offset
-        if home_position >= self.actuator.max_position:
+        center_position = (
+            self.cmd_limits.min_position + self.cmd_limits.max_position
+        ) / 2
+        if current_position > center_position:
             home_position = current_position - self.home_offset
-        if home_position < self.actuator.min_position:
-            raise RuntimeError("Bug: can't compute a suitable home position")
+        else:
+            home_position = current_position + self.home_offset
+        if (
+            home_position < self.cmd_limits.min_position
+            or home_position > self.cmd_limits.max_position
+        ):
+            raise RuntimeError(
+                f"Cannot compute a suitable home position; {current_position=}; "
+                f"{self.cmd_limits.min_position=}; {self.cmd_limits.max_position=}; "
+                f"{self.home_offset=}; {home_position=}"
+            )
         return self.move_point_to_point(
             position=home_position, command=command, homing=True
         )

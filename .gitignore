@@ -1,14 +1,15 @@
 __pycache__
+*.egg
+*.egg-info
 *.log
-.swp
 version.py
 
 # pytest
-tests/.tests
+.coverage
 .hypothesis
 .pytest_cache
-.coverage*
 pytest_session.txt
+tests/.tests
 
 # editors
 .vscode
@@ -18,3 +19,6 @@ pytest_session.txt
 .flake8
 .isort.cfg
 .mypy.ini
+.clang-format
+.ruff.toml
+towncrier.toml
