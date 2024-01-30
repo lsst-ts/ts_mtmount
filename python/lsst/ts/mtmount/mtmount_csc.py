@@ -1033,7 +1033,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
           If system_id is not supported.
         """
         match system_id:
-            case System.MAIN_CABINET_THERMAL | System.AUXILIARY_CABINETS_THERMAL | System.OIL_SUPPLY_SYSTEM:
+            case (
+                System.MAIN_CABINET_THERMAL
+                | System.AUXILIARY_CABINETS_THERMAL
+                | System.OIL_SUPPLY_SYSTEM
+            ):
                 # Cannot turn off these thermal systems.
                 command_list = ()
             case System.TOP_END_CHILLER:

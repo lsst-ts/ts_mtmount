@@ -306,9 +306,9 @@ class Controller:
             axis_settings["TcsMaxVelocity"] = axis_cmd_limits.max_velocity
             axis_settings["TcsMaxAcceleration"] = axis_cmd_limits.max_acceleration
             axis_settings["SoftmotionTrackingMaxSpeed"] = axis_actuator.max_velocity
-            axis_settings[
-                "SoftmotionTrackingMaxAcceleration"
-            ] = axis_actuator.max_acceleration
+            axis_settings["SoftmotionTrackingMaxAcceleration"] = (
+                axis_actuator.max_acceleration
+            )
 
         ccw_device = self.device_dict[System.CAMERA_CABLE_WRAP]
         ccw_actuator = ccw_device.actuator
