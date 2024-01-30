@@ -6,6 +6,18 @@
 Version History
 ###############
 
+v0.27.2
+-------
+
+* `MTMountCsc`:
+
+    * Update ``handle_chiller_state`` to handle condition where the reply message is missing the ``trackAmbient`` attribute.
+    * Add background task that sends in progress acknowlegements while the enable command executes.
+    * Add new ``ack_timeout_long`` configuration parameter for commands that take longer to execute.
+    * Update ``enable_devices`` to allow specifying custom timestamps for commands and for commands to be retried if they are prone to failing the first time they execute.
+
+* In ``telemetry_map.py``, remove ``actualTemperatureArea1`` from topic 27.
+
 v0.27.1
 -------
 
