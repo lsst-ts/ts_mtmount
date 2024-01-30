@@ -104,6 +104,12 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             data = await self.remote.evt_clockOffset.next(
                 flush=False, timeout=STD_TIMEOUT
             )
+            while data.private_sndStamp <= start_time:
+                self.log.debug(f"Discarding sample {data}.")
+                data = await self.remote.evt_clockOffset.next(
+                    flush=False, timeout=STD_TIMEOUT
+                )
+
             assert data.offset == pytest.approx(desired_offset, abs=0.1)
 
             # Further telemetry should not produce new evt_clockOffset
