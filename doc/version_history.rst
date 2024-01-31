@@ -6,6 +6,19 @@
 Version History
 ###############
 
+v0.27.3
+-------
+
+* ``MTMountCsc``:
+
+    * Extract the list of devices to initialize into a class method.
+      This allows us to better isolate what are the devices to initialize while also allowing us to easily change them for the CCW only version of the CSC.
+
+* ``MTMountCcwOnlyCsc``:
+
+    * Overwrite the ``_get_devices_to_initialize`` method to only initialize the needed functionality for the CCW.
+    * Change exception raised by the disabled method do be ``ExpectedError`` with a clarifying error message.
+
 v0.27.2
 -------
 
