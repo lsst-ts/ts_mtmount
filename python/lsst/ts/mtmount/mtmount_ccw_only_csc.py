@@ -23,6 +23,7 @@ __all__ = ["MTMountCcwOnlyCsc", "run_mtmount_ccw_only"]
 
 import asyncio
 
+from . import commands
 from .mtmount_csc import MTMountCsc
 
 
@@ -31,6 +32,13 @@ class MTMountCcwOnlyCsc(MTMountCsc):
 
     See `MTMountCsc`.
     """
+
+    def _get_devices_to_initialize(self):
+        """Get a list of devices initialization commands."""
+        return (
+            (commands.CameraCableWrapResetAlarm(), None, False),
+            (commands.CameraCableWrapPower(on=True), None, False),
+        )
 
     async def do_clearError(self, data):
         """Handle the clearError command.
