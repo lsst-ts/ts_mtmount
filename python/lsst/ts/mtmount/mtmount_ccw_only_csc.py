@@ -23,6 +23,8 @@ __all__ = ["MTMountCcwOnlyCsc", "run_mtmount_ccw_only"]
 
 import asyncio
 
+from lsst.ts.salobj import ExpectedError
+
 from . import commands
 from .mtmount_csc import MTMountCsc
 
@@ -49,7 +51,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_closeMirrorCovers(self, data):
         """Handle the closeMirrorCovers command.
@@ -60,7 +62,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_homeBothAxes(self, data):
         """Handle the homeBothAxes command.
@@ -71,7 +73,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_openMirrorCovers(self, data):
         """Handle the openMirrorCovers command.
@@ -82,7 +84,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command.
@@ -93,7 +95,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_setThermal(self, data):
         """Handle the setThermal command.
@@ -104,7 +106,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_trackTarget(self, data):
         """Handle the trackTarget command.
@@ -115,7 +117,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_startTracking(self, data):
         """Handle the startTracking command.
@@ -126,7 +128,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_stop(self, data):
         """Handle the stop command.
@@ -137,7 +139,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
     async def do_stopTracking(self, data):
         """Handle the stopTracking command.
@@ -148,7 +150,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
             This CSC is for testing the CCW with the Rotator only. All MTMount
             methods have been disabled.
         """
-        raise NotImplementedError()
+        raise ExpectedError("Command not available in CCW only version of CSC.")
 
 
 def run_mtmount_ccw_only() -> None:
