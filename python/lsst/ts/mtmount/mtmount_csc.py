@@ -874,9 +874,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # until the main power supply is on.
             # Sometimes a second reset is needed for the main axes
             # (a known bug in the TMA as of 2022-11-03).
-            (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, True),
-            (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, False),
-            (commands.BothAxesPower(on=True), None, False),
+            # (commands.BothAxesResetAlarm(), self.config.ack_timeout_long,
+            # True),
+            # (commands.BothAxesResetAlarm(), self.config.ack_timeout_long,
+            # False),
+            # (commands.BothAxesPower(on=True), None, False),
             (commands.CameraCableWrapPower(on=True), None, False),
         )
 
