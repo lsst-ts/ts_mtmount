@@ -363,14 +363,6 @@ class TMATelemetryConfigParser:
                             description=description,
                         )
                         fields[name] = field_info
-                        # Add timestampt field for the attribute.
-                        fields[f"{name}Timestamp"] = FieldInfo(
-                            name=f"{name}Timestamp",
-                            sal_type="double",
-                            count=1,
-                            units="second",
-                            description=f"Time at which {name} was measured (TAI, unix seconds).",
-                        )
                 finally:
                     name = None
                     units = None
@@ -464,6 +456,28 @@ class TMATelemetryConfigParser:
                 sequence_field_names=sequence_field_names,
             )
             sequence_base_name = None
+
+        # Add timestamps
+        timestamp_fields = dict()
+        for field_name in consolidated_fields:
+            if "timestamp" in field_name:
+                continue
+            else:
+                print(f"Adding timestamp field for {field_name}.")
+                field = consolidated_fields[field_name]
+                field_timestamp_name = f"{field_name}Timestamp"
+                field_timestap = FieldInfo(
+                    name=f"{field_name}Timestamp",
+                    sal_type="double",
+                    count=field.count,
+                    units="second",
+                    description=f"Time at which {field_name} was measured (TAI, unix seconds).",
+                )
+                timestamp_fields[field_timestamp_name] = field_timestap
+        consolidated_fields.update(timestamp_fields)
+        consolidated_fields = {
+            key: value for key, value in sorted(consolidated_fields.items())
+        }
 
         return consolidated_fields
 
