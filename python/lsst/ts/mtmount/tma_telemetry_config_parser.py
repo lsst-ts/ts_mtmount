@@ -278,6 +278,10 @@ class TMATelemetryConfigParser:
         -----
         Add the ``timestamp`` field, which is not in the TMA telemetry config
         (except for internal use in a few cases; ignore that one).
+
+        In addition to a common ``timestamp`` field, add one timestampt field
+        for each individual telemetry attribute. The field name is composed
+        of the attribute name appended by ``Timestamp``.
         """
         topic_sal_name = section.name[0].lower() + section.name[1:].replace(" ", "")
         topic_attr_name = f"tel_{topic_sal_name}"
@@ -359,6 +363,14 @@ class TMATelemetryConfigParser:
                             description=description,
                         )
                         fields[name] = field_info
+                        # Add timestampt field for the attribute.
+                        fields[f"{name}Timestamp"] = FieldInfo(
+                            name=f"{name}Timestamp",
+                            sal_type="double",
+                            count=1,
+                            units="second",
+                            description=f"Time at which {name} was measured (TAI, unix seconds).",
+                        )
                 finally:
                     name = None
                     units = None
