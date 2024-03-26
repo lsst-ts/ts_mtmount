@@ -370,6 +370,7 @@ class Controller:
             help="Log level (DEBUG=10, INFO=20, WARNING=30).",
         )
         namespace = parser.parse_args()
+        logging.basicConfig()
         log = logging.getLogger("TMASimulator")
         log.setLevel(namespace.loglevel)
         print("Mock TMA controller")

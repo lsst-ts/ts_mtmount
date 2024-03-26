@@ -6,6 +6,18 @@
 Version History
 ###############
 
+v0.27.4
+-------
+
+* ``TMATelemetryConfigParser``:
+
+  * Add timestamps for each topic attribute.
+
+* ``MTMountCsc``:
+
+  * Add backwards compatible changes with xml 20.3.
+    New commands are still not implemented, just stubbed out for now.
+
 v0.27.3
 -------
 

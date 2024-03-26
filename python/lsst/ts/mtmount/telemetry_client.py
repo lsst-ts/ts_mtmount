@@ -185,6 +185,7 @@ class TelemetryClient(tcpip.Client):
             f"host={namespace.host}; "
             f"port={namespace.port}"
         )
+        logging.basicConfig()
         telemetry_client = cls(host=namespace.host, port=namespace.port)
         telemetry_client.log.setLevel(namespace.loglevel)
         try:
