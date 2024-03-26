@@ -38,6 +38,7 @@ from lsst.ts.idl.enums.MTMount import (
     ThermalCommandState,
 )
 from lsst.ts.mtmount.mtmount_csc import SET_THERMAL_FIELD_SYSTEM_ID_DICT
+from lsst.ts.xml.component_info import ComponentInfo
 from numpy.testing import assert_array_equal
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
@@ -603,20 +604,35 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
     async def test_standard_state_transitions(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):
+            additional_commands = [
+                "applySettingsSet",
+                "park",
+                "restoreDefaultSettings",
+                "unpark",
+            ]
+
+            component_info = ComponentInfo("MTMount", topic_subname="sal")
+
+            enabled_commands = [
+                "closeMirrorCovers",
+                "openMirrorCovers",
+                "disableCameraCableWrapFollowing",
+                "enableCameraCableWrapFollowing",
+                "homeBothAxes",
+                "moveToTarget",
+                "startTracking",
+                "trackTarget",
+                "setThermal",
+                "stopTracking",
+                "stop",
+            ]
+
+            for additional_command in additional_commands:
+                if f"cmd_{additional_command}" in component_info.topics:
+                    enabled_commands.append(additional_command)
+
             await self.check_standard_state_transitions(
-                enabled_commands=(
-                    "closeMirrorCovers",
-                    "openMirrorCovers",
-                    "disableCameraCableWrapFollowing",
-                    "enableCameraCableWrapFollowing",
-                    "homeBothAxes",
-                    "moveToTarget",
-                    "startTracking",
-                    "trackTarget",
-                    "setThermal",
-                    "stopTracking",
-                    "stop",
-                )
+                enabled_commands=enabled_commands
             )
 
     def make_track_target_kwargs(

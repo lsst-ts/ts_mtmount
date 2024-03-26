@@ -48,14 +48,34 @@ class TMATelemetryConfigParserParserTestCase(unittest.TestCase):
         topics = processor.process_file()
         # Check topics; the Boolean Signals section is ignored
         # because it only has boolean data, none of which is published.
-        assert list(topics.keys()) == [
+        assert set(topics.keys()) == {
             "tel_azimuth",
+            "tel_safetySystem",
+            "tel_elevation",
+            "tel_lockingPins",
+            "tel_deployablePlatforms",
+            "tel_cabinet0101Thermal",
+            "tel_azimuthCableWrap",
+            "tel_cameraCableWrap",
+            "tel_balancing",
             "tel_azimuthDrives",
             "tel_azimuthDrivesThermal",
+            "tel_elevationDrives",
+            "tel_elevationDrivesThermal",
+            "tel_encoder",
+            "tel_mainCabinetThermal",
+            "tel_mirrorCoverLocks",
             "tel_mirrorCover",
+            "tel_mainPowerSupply",
             "tel_topEndChiller",
+            "tel_auxiliaryCabinetsThermal",
+            "tel_oilSupplySystem",
+            "tel_compressedAir",
             "tel_cooling",
-        ]
+            "tel_dynaleneCooling",
+            "tel_generalPurposeGlycolWater",
+        }
+
         with tempfile.NamedTemporaryFile() as temp_outfile:
             outpath = temp_outfile.name
             processor.write_xml(xml_telemetry_path=outpath, topics=topics)
