@@ -6,6 +6,11 @@
 Version History
 ###############
 
+v0.27.5
+-------
+
+* Update telemetry values.
+
 v0.27.4
 -------
 
