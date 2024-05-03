@@ -486,25 +486,53 @@ class Controller:
             data_dict = dict(
                 topicID=topic_id,
                 actualPosition=actual.position,
+                actualPositionTimestamp=tai,
                 actualVelocity=actual.velocity,
+                actualVelocityTimestamp=tai,
+                actualAcceleration=actual.acceleration,
+                actualAccelerationTimestamp=tai,
+                actualJerk=0.0,
+                actualJerkTimestamp=tai,
                 demandPosition=target.position,
+                demandPositionTimestamp=tai,
                 demandVelocity=target.velocity,
+                demandVelocityTimestamp=tai,
+                demandJerk=0.0,
+                demandJerkTimestamp=tai,
                 actualTorquePercentage1=torque_percent,
+                actualTorquePercentageTimestamp1=tai,
                 actualTorquePercentage2=torque_percent,
+                actualTorquePercentageTimestamp2=tai,
                 timestamp=tai,
             )
         else:
             data_dict = dict(
                 topicID=topic_id,
                 actualPosition=actual.position,
+                actualPositionTimestamp=tai,
                 demandPosition=target.position,
+                demandPositionTimestamp=tai,
                 actualVelocity=actual.velocity,
+                actualVelocityTimestamp=tai,
                 demandVelocity=target.velocity,
+                demandVelocityTimestamp=tai,
+                actualAcceleration=actual.acceleration,
+                actualAccelerationTimestamp=tai,
+                actualJerk=0.0,
+                actualJerkTimestamp=tai,
+                demandJerk=0.0,
+                demandJerkTimestamp=tai,
                 # Torque is in Nm but I have little idea what realistic
                 # values are, so output something vaguely plausible
                 actualTorque=actual.acceleration / 10,
+                actualTorqueTimestamp=tai,
                 timestamp=tai,
             )
+
+        if topic_id == 15:
+            data_dict["elevationInclinometer"] = actual.position
+            data_dict["elevationInclinometerTimestamp"] = tai
+
         if self.telemetry_server.connected:
             await self.telemetry_server.write_json(data_dict)
 
