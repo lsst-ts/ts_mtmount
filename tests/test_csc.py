@@ -34,6 +34,7 @@ from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
     ElevationLockingPinMotionState,
+    ParkPosition,
     PowerState,
     System,
     ThermalCommandState,
@@ -1837,6 +1838,47 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             await self.remote.cmd_restoreDefaultSettings.set_start(
                 timeout=STD_TIMEOUT,
+            )
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_park_zenith(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.cmd_park.set_start(position=ParkPosition.ZENITH)
+
+            elevation = await self.remote.tel_elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+
+            azimuth = await self.remote.tel_azimuth.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            assert elevation.actualPosition == pytest.approx(
+                self.csc.config.park_positions["zenith"]["elevation"],
+            )
+            assert azimuth.actualPosition == pytest.approx(
+                self.csc.config.park_positions["zenith"]["azimuth"],
+            )
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_park_horizon(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.cmd_park.set_start(position=ParkPosition.HORIZON)
+
+            elevation = await self.remote.tel_elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+
+            azimuth = await self.remote.tel_azimuth.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            assert elevation.actualPosition == pytest.approx(
+                self.csc.config.park_positions["horizon"]["elevation"],
+            )
+            assert azimuth.actualPosition == pytest.approx(
+                self.csc.config.park_positions["horizon"]["azimuth"],
             )
 
             await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
