@@ -40,7 +40,6 @@ from lsst.ts.idl.enums.MTMount import (
     System,
     ThermalCommandState,
 )
-from lsst.ts.xml.component_info import ComponentInfo
 
 from . import __version__, commands, constants, enums
 from .command_futures import CommandFutures
@@ -349,23 +348,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # greater than config.max_rotator_position_error?
         # Log a warning every time this transitions to True.
         self.rotator_position_error_excessive = False
-
-        additional_commands = [
-            "applySettingsSet",
-            "park",
-            "restoreDefaultSettings",
-            "unpark",
-        ]
-
-        component_info = ComponentInfo("MTMount", topic_subname="sal")
-
-        for additional_command in additional_commands:
-            if f"cmd_{additional_command}" in component_info.topics:
-                setattr(
-                    self,
-                    f"do_{additional_command}",
-                    getattr(self, f"_do_{additional_command}"),
-                )
 
         super().__init__(
             name="MTMount",
@@ -1659,22 +1641,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_stopTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
-    async def _do_applySettingsSet(self, data):
+    async def do_applySettingsSet(self, data):
         self.assert_enabled()
 
         raise salobj.ExpectedError("Command not implemented yet.")
 
-    async def _do_park(self, data):
+    async def do_park(self, data):
         self.assert_enabled()
 
         raise salobj.ExpectedError("Command not implemented yet.")
 
-    async def _do_restoreDefaultSettings(self, data):
+    async def do_restoreDefaultSettings(self, data):
         self.assert_enabled()
 
         raise salobj.ExpectedError("Command not implemented yet.")
 
-    async def _do_unpark(self, data):
+    async def do_unpark(self, data):
         self.assert_enabled()
 
         raise salobj.ExpectedError("Command not implemented yet.")
