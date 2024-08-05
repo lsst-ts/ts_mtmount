@@ -37,6 +37,7 @@ import types
 from lsst.ts import salobj, tcpip, utils
 from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
+    ParkPosition,
     PowerState,
     System,
     ThermalCommandState,
@@ -1663,9 +1664,44 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def do_park(self, data):
-        self.assert_enabled()
+        """Handle the park command."""
+        self.assert_enabled_and_not_disabling()
 
-        raise salobj.ExpectedError("Command not implemented yet.")
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_park.ack_in_progress, data=data
+        ):
+            # move telescope close to the position where we will park
+            try:
+                park_position = ParkPosition(data.position)
+            except ValueError:
+                valid_park_positions = ", ".join(
+                    [f"{position!r}" for position in ParkPosition]
+                )
+                raise ValueError(
+                    f"Invalid park position {data.position}. Must be one of {valid_park_positions}."
+                )
+
+            park_position_altaz = self.config.park_positions[park_position.name.lower()]
+
+            # load park settings
+            await self.handle_apply_settings_set(
+                restore_defaults=True,
+                settings_to_apply=self.config.park_settings,
+            )
+
+            # move telescope to the park position
+            self.log.info(f"Moving telescope to {park_position.name} park position.")
+
+            cmd_futures = await self.send_command(
+                commands.BothAxesMove(
+                    azimuth=park_position_altaz["azimuth"],
+                    elevation=park_position_altaz["elevation"],
+                ),
+                do_lock=True,
+            )
+            await cmd_futures.done
+            # leaving the telescope with the park settings loaded
+            # because this is needed to unpark it.
 
     async def do_restoreDefaultSettings(self, data):
         """Handle the RestoreDefaultSettings command."""
