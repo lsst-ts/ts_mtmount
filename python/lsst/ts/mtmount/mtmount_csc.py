@@ -1668,9 +1668,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         raise salobj.ExpectedError("Command not implemented yet.")
 
     async def do_restoreDefaultSettings(self, data):
+        """Handle the RestoreDefaultSettings command."""
         self.assert_enabled()
 
-        raise salobj.ExpectedError("Command not implemented yet.")
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_restoreDefaultSettings.ack_in_progress, data=data
+        ):
+            await self.handle_apply_settings_set(
+                restore_defaults=True,
+                settings_to_apply=[],
+            )
 
     async def do_unpark(self, data):
         self.assert_enabled()
