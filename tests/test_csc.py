@@ -1830,3 +1830,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     timeout=STD_TIMEOUT,
                 )
             await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_restore_default_settings(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.remote.cmd_restoreDefaultSettings.set_start(
+                timeout=STD_TIMEOUT,
+            )
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
