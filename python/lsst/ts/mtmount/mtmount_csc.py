@@ -35,7 +35,7 @@ import traceback
 import types
 
 from lsst.ts import salobj, tcpip, utils
-from lsst.ts.idl.enums.MTMount import (
+from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
     PowerState,
     System,
