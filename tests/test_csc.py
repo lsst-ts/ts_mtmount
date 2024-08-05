@@ -1882,3 +1882,47 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
 
             await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_unpark_telescope_unparked(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            with pytest.raises(salobj.AckError, match="outside unparking position"):
+                await self.remote.cmd_unpark.start()
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_unpark_parked_zenith(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.cmd_park.set_start(position=ParkPosition.ZENITH)
+            await self.remote.cmd_unpark.start()
+
+            elevation = await self.remote.tel_elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            elevation_controller_settings = (
+                await self.remote.evt_elevationControllerSettings.aget(
+                    timeout=STD_TIMEOUT
+                )
+            )
+            assert elevation.actualPosition < elevation_controller_settings.maxL1Limit
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_unpark_parked_horizon(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.cmd_park.set_start(position=ParkPosition.HORIZON)
+            await self.remote.cmd_unpark.start()
+
+            elevation = await self.remote.tel_elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            elevation_controller_settings = (
+                await self.remote.evt_elevationControllerSettings.aget(
+                    timeout=STD_TIMEOUT
+                )
+            )
+            assert elevation.actualPosition > elevation_controller_settings.minL1Limit
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
