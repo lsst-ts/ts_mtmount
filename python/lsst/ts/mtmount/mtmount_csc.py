@@ -461,7 +461,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
         self.mtmount_remote = salobj.Remote(
-            domain=self.domain, name="MTMount", include=["cameraCableWrap"]
+            domain=self.domain,
+            name="MTMount",
+            include=["cameraCableWrap"],
+            readonly=True,
         )
 
         loop = asyncio.get_running_loop()
