@@ -1651,9 +1651,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
     async def do_applySettingsSet(self, data):
-        self.assert_enabled()
+        """Handle the applySettingsSet command."""
+        self.assert_enabled_and_not_disabling()
 
-        raise salobj.ExpectedError("Command not implemented yet.")
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_applySettingsSet.ack_in_progress, data=data
+        ):
+            await self.handle_apply_settings_set(
+                restore_defaults=data.restoreDefaults,
+                settings_to_apply=data.settings.split(","),
+            )
 
     async def do_park(self, data):
         self.assert_enabled()
