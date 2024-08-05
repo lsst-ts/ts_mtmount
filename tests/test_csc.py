@@ -1804,3 +1804,29 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
                     await asyncio.sleep(0.1)
                     previous_tai = tai
+
+    async def test_apply_settings_set(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.remote.cmd_applySettingsSet.set_start(
+                settings="AT_CCWAux",
+                restoreDefaults=True,
+                timeout=STD_TIMEOUT,
+            )
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_apply_settings_set_bad_setting(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            with pytest.raises(
+                salobj.base.AckError, match="BAD_SETTING not a valid settings set."
+            ):
+                await self.remote.cmd_applySettingsSet.set_start(
+                    settings="BAD_SETTING",
+                    restoreDefaults=True,
+                    timeout=STD_TIMEOUT,
+                )
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
