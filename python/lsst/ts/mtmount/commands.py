@@ -35,6 +35,7 @@ __all__ = [
     "AzimuthResetAlarm",
     "AzimuthStop",
     "AzimuthTrackTarget",
+    "ApplySettingsSet",
     "BothAxesEnableTracking",
     "BothAxesHome",
     "BothAxesMove",
@@ -94,6 +95,7 @@ __all__ = [
     "OilSupplySystemPowerMainPump",
     "OilSupplySystemResetAlarm",
     "OilSupplySystemSetMode",
+    "RestoreDefaultSettings",
     "SafetyReset",
     "StateInfo",
     "TopEndChillerPower",
@@ -172,6 +174,12 @@ _TrackingParameters = (
     field_info.FloatFieldInfo(
         name="tai",
         doc="Target TAI time for position and velocity (unix seconds)",
+    ),
+)
+
+_ApplySettingsSetParameters = (
+    field_info.StrFieldInfo(
+        name="settings", doc="The name of the setting set to be applied."
     ),
 )
 
@@ -312,6 +320,12 @@ class AzimuthStop(BaseCommand):
 class AzimuthTrackTarget(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.AZIMUTH_TRACK_TARGET, _TrackingParameters
+    )
+
+
+class ApplySettingsSet(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.APPLY_SETTINGS_SET, _ApplySettingsSetParameters
     )
 
 
@@ -851,6 +865,12 @@ class OilSupplySystemSetMode(BaseCommand):
     )
 
 
+class RestoreDefaultSettings(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.RESTORE_DEFAULT_SETTINGS,
+    )
+
+
 class SafetyReset(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.SAFETY_RESET,
@@ -896,6 +916,7 @@ class TopEndChillerTrackAmbient(BaseCommand):
 
 
 Commands = (
+    ApplySettingsSet,
     AskForCommand,
     AzimuthDriveEnable,
     AzimuthDriveReset,
@@ -968,6 +989,7 @@ Commands = (
     OilSupplySystemPowerMainPump,
     OilSupplySystemResetAlarm,
     OilSupplySystemSetMode,
+    RestoreDefaultSettings,
     SafetyReset,
     StateInfo,
     TopEndChillerPower,
