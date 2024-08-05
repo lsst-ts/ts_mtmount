@@ -6,6 +6,61 @@
 Version History
 ###############
 
+v0.28.0
+-------
+
+
+* Update CSC unit tests import statement to import enumerations from ts-xml instead of ts-idl.
+
+  This is a salobj 8 future compatibility change.
+
+* Update CSC unit tests to remove backward compatibility verification with older versions of ts-xml.
+
+* Update test configuration to add the new park/unpark parameters.
+
+* Updates to the MTMount CSC:
+
+  * Implement ``unpark`` command.
+  
+  * Implement ``park`` command.
+  
+  * Implement ``restoreDefaultSettings`` command.
+  
+  * Implement ``applySettingsSet`` command.
+  
+  * Update importing the enumerations from the idl package to the xml package.
+  
+    This is a salobj 8 forward compatibility change, as idl will be deprecated.
+  
+  * Add new ``handle_apply_settings_set`` method.
+  
+    In addition to setting the new settings set, this method will handle disabling and enabling the devices in order to make sure the settings are properly loaded into the axis.
+    If the operation fails at a critical point, the CSC will go to FAULT.
+  
+  * Fix a small bug in the ``_basic_send_command`` method that would raise an exception when there is no timeout defined for a command.
+  
+  * Update the remote used by the CSC to read the position of the camera cable wrap to be read only.
+  
+  * Remove compatibility with older versions of ts-xml.
+
+* In ``enums.py``, add new CSC error codes for when the CSC fails to enable or disable devices.
+
+  These error codes are published when loading new settings.
+  During this procedure the CSC needs to disable and then enable the devices (elevation and azimuth) in order to load the new settings.
+  If during this operation the TMA fails to bring the devices down or up, the CSC will go to FAULT and publish one of these errors, depending which operation it is executing.
+
+* In ``config_schema.py``, update CSC configuration to include parameters for parking/unparking the telescope.
+
+* Update mock_controller unit tests to add tests for new ``ApplySettingsSet`` and ``RestoreDefaultSettings`` commands.
+
+* In ``mock/controller.py``, add mocking for recently included ``ApplySettingsSet`` and ``RestoreDefaultSettings`` commands.
+
+* In ``mock/controller.py``, replace a ``log.error`` call with ``log.exception`` to get the full exception traceback logged when there is an error parsing a command.
+
+* In ``enums.py``, add enumeration for missing command ``RESTORE_DEFAULT_SETTINGS``.
+
+* In ``commands.py``, add definition for new commands; ``ApplySettingsSet`` and ``RestoreDefaultSettings``.
+
 v0.27.5
 -------
 
