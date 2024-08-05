@@ -1716,9 +1716,91 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def do_unpark(self, data):
+        """Handle the unpark command."""
         self.assert_enabled()
 
-        raise salobj.ExpectedError("Command not implemented yet.")
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_park.ack_in_progress, data=data
+        ):
+            # move telescope to the unparked position
+
+            unpark_elevation = None
+            unpark_azimuth = None
+
+            async with salobj.Remote(
+                self.domain,
+                "MTMount",
+                include=["elevation", "azimuth"],
+                readonly=True,
+            ) as mtmount_remote:
+                current_elevation = await mtmount_remote.tel_elevation.next(
+                    flush=True, timeout=TELEMETRY_START_TIMEOUT
+                )
+                current_azimuth = await mtmount_remote.tel_azimuth.next(
+                    flush=True, timeout=TELEMETRY_START_TIMEOUT
+                )
+                # This value will be recalculated later. Here we get the
+                # current value and later we replace it to be either
+                # just below or above the elevation max/min limits.
+                unpark_elevation = current_elevation.actualPosition
+                unpark_azimuth = current_azimuth.actualPosition
+
+            # Check it the telescope is pointing at horizon or zenith
+            if unpark_elevation >= self.evt_elevationControllerSettings.data.maxL1Limit:
+                self.log.info(
+                    f"Current telescope elevation at {unpark_elevation:.2f}. "
+                    "Unparking from Zenith."
+                )
+                unpark_elevation = (
+                    self.evt_elevationControllerSettings.data.maxL1Limit
+                    - self.limits_margin
+                )
+
+            elif (
+                unpark_elevation <= self.evt_elevationControllerSettings.data.minL1Limit
+            ):
+                self.log.info(
+                    f"Current telescope elevation at {unpark_elevation:.2f}. "
+                    "Unparking from Horizon."
+                )
+                unpark_elevation = (
+                    self.evt_elevationControllerSettings.data.minL1Limit
+                    + self.limits_margin
+                )
+            else:
+                raise RuntimeError(
+                    f"Current telescope elevation {unpark_elevation:.2f} "
+                    "outside unparking position. Must be larger than "
+                    f"{self.evt_elevationControllerSettings.data.maxL1Limit} "
+                    "or smaller than "
+                    f"{self.evt_elevationControllerSettings.data.minL1Limit}."
+                )
+
+            # load park settings
+            await self.handle_apply_settings_set(
+                restore_defaults=True,
+                settings_to_apply=self.config.park_settings,
+            )
+
+            self.log.info(
+                "Moving telescope to unpark position; "
+                f"elevation={unpark_elevation}, azimuth={unpark_azimuth}."
+            )
+
+            cmd_futures = await self.send_command(
+                commands.BothAxesMove(
+                    azimuth=unpark_azimuth,
+                    elevation=unpark_elevation,
+                ),
+                do_lock=True,
+            )
+            await cmd_futures.done
+
+            # reset settings
+            await self.handle_apply_settings_set(
+                restore_defaults=True,
+                settings_to_apply=[],
+            )
 
     async def fault(self, code, report, traceback=""):
         self.should_be_commander = False
