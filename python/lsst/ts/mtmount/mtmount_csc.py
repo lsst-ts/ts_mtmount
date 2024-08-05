@@ -1183,7 +1183,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if not command_futures.done.done():
             try:
                 await asyncio.wait_for(
-                    command_futures.done, timeout=new_timeout + TIMEOUT_BUFFER
+                    command_futures.done,
+                    timeout=(
+                        (TIMEOUT_BUFFER + new_timeout)
+                        if new_timeout is not None
+                        else None
+                    ),
                 )
             except asyncio.TimeoutError:
                 self.command_futures_dict.pop(command.sequence_id, None)
