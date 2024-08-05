@@ -163,6 +163,12 @@ class Controller:
             modifiedDate=astropy.time.Time("2019-11-07 16:31:03"),
         ),
         dict(
+            name="Park",
+            description="Settings that allow the system to be parked and unparked.",
+            createdDate=astropy.time.Time("2019-11-07 16:31:03"),
+            modifiedDate=astropy.time.Time("2019-11-07 16:31:03"),
+        ),
+        dict(
             name="Default",
             description="Default settings",
             createdDate=astropy.time.Time("2020-05-26 10:31:51"),
@@ -276,6 +282,7 @@ class Controller:
         self.add_all_devices()
         extra_commands = {
             enums.CommandCode.ASK_FOR_COMMAND: self.do_ask_for_command,
+            enums.CommandCode.APPLY_SETTINGS_SET: self.do_apply_settings_set,
             enums.CommandCode.BOTH_AXES_HOME: self.do_both_axes_home,
             enums.CommandCode.BOTH_AXES_ENABLE_TRACKING: self.do_both_axes_enable_tracking,
             enums.CommandCode.BOTH_AXES_MOVE: self.do_both_axes_move,
@@ -289,11 +296,13 @@ class Controller:
             enums.CommandCode.MIRROR_COVER_SYSTEM_RETRACT: self.do_mirror_cover_system_retract,
             enums.CommandCode.SAFETY_RESET: self.do_safety_reset,
             enums.CommandCode.STATE_INFO: self.do_state_info,
+            enums.CommandCode.RESTORE_DEFAULT_SETTINGS: self.do_restore_default_settings,
         }
         self.command_dict.update(extra_commands)
 
         # Update detailed settings with the actual values used in the
         # azimuth, elevation, and camera cable wrap actuators.
+        self.settings_set = {"Default"}
         self.detailed_settings = detailed_settings
         for axis_name in ("Azimuth", "Elevation"):
             system_id = getattr(System, axis_name.upper())
@@ -1169,6 +1178,33 @@ class Controller:
             task = asyncio.create_task(self.write_commander())
             return timeout, task
 
+    def do_apply_settings_set(self, command):
+        """Handle the APPLY_SETTINGS_SET command.
+
+        Parameters
+        ----------
+        command : `Command`
+          The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
+        """
+        if command.settings not in self.get_available_settings():
+            raise RuntimeError(
+                f"{command.settings} not a valid settings set. Must be one of {self.available_settings}."
+            )
+
+        # Since this is a python set, it already handles the
+        # condition of when the set is already loaded.
+        self.settings_set.add(command.settings)
+
+        return None, utils.make_done_future()
+
     def do_both_axes_enable_tracking(self, command):
         """Handle the BOTH_AXES_ENABLE_TRACKING command.
 
@@ -1479,6 +1515,38 @@ class Controller:
         task = asyncio.create_task(self._impl_state_info())
         timeout = 1
         return timeout, task
+
+    def do_restore_default_settings(self, command):
+        """Handle RESTORE_DEFAULT_SETTINGS command.
+
+        Parameters
+        ----------
+        command : `Command`
+            The command.
+
+        Returns
+        -------
+        timeout_task : `tuple` [`float` | `None`, `asyncio.Task` | `None`]
+            A tuple of:
+
+            * Timeout in seconds, or None if already done.
+            * A task that monitors completion, or None if already done.
+        """
+
+        self.settings_set = {"Default"}
+
+        return None, utils.make_done_future()
+
+    def get_available_settings(self):
+        """Return a list of available settings set.
+
+        Returns
+        -------
+        `list` [`str`]
+            List with the names of the available settings set.
+        """
+
+        return [settings["name"] for settings in self.available_settings]
 
     async def _impl_state_info(self):
         """Implement the state_info command.
