@@ -1533,7 +1533,7 @@ class Controller:
                 try:
                     command = commands.parse_command(read_str)
                 except Exception as e:
-                    self.log.error(f"Ignoring unparsable command {read_str}: {e!r}")
+                    self.log.exception(f"Ignoring unparsable command {read_str}: {e!r}")
                     continue
                 if self.command_queue and not self.command_queue.full():
                     if (
