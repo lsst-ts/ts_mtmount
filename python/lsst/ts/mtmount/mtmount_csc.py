@@ -31,6 +31,7 @@ import math
 import re
 import signal
 import subprocess
+import traceback
 import types
 
 from lsst.ts import salobj, tcpip, utils
@@ -2021,6 +2022,70 @@ class MTMountCsc(salobj.ConfigurableCsc):
             text=reply.description,
             force_output=True,
         )
+
+    async def handle_apply_settings_set(
+        self, restore_defaults: bool, settings_to_apply: list[str]
+    ) -> None:
+        """Method to handle applying settings.
+
+        Parameters
+        ----------
+        restore_defaults : `bool`
+            Restore defaults before loading settings?
+        settings_to_apply : `list`[`str`]
+            Names of the settings to apply.
+        """
+        self.log.info("Starting background task to disable devices.")
+        self.should_be_commander = False
+        disable_devices_task = asyncio.create_task(self.disable_devices())
+
+        if restore_defaults:
+            self.log.info("Restoring default settings.")
+            await self.send_command(
+                commands.RestoreDefaultSettings(),
+                do_lock=True,
+                timeout=SHORT_COMMAND_TIMEOUT,
+            )
+
+        for setting in settings_to_apply:
+            self.log.info(f"Applying {setting=}.")
+            await self.send_command(
+                commands.ApplySettingsSet(settings=setting),
+                do_lock=True,
+                timeout=SHORT_COMMAND_TIMEOUT,
+            )
+
+        self.log.info("Waiting for devices to finish disabling.")
+        try:
+            await disable_devices_task
+        except Exception as e:
+            await self.fault(
+                code=enums.CscErrorCode.DISABLE_DEVICES_FAILED,
+                report="Failed to disable devices.",
+                traceback=traceback.format_exc(),
+            )
+            raise e
+
+        self.log.info("Re-enabling drives to apply settings.")
+
+        await self.send_command(
+            commands.AskForCommand(commander=enums.Source.CSC),
+            do_lock=True,
+            timeout=SHORT_COMMAND_TIMEOUT,
+        )
+        self.should_be_commander = True
+        try:
+            await self.enable_devices()
+        except Exception as e:
+            await self.fault(
+                code=enums.CscErrorCode.ENABLE_DEVICES_FAILED,
+                report="Failed to enable devices.",
+                traceback=traceback.format_exc(),
+            )
+            raise e
+        self.log.info("Get state info and actual settings.")
+        await self.send_command(commands.StateInfo(), do_lock=True)
+        await self.send_command(commands.GetActualSettings(), do_lock=True)
 
     def is_tracking(self):
         """Return True if tracking according to the elevation and azimuth
