@@ -215,6 +215,8 @@ class CscErrorCode(enum.IntEnum):
     TRACK_TARGET_TIMED_OUT = 5  # A main axes tracking command timed out
     DISABLE_FAILED = 6  # Could not disable the CSC
     COMMAND_LOST = 7  # Control taken away from the CSC by the EUI or HHD
+    DISABLE_DEVICES_FAILED = 8  # Failed to disable devices
+    ENABLE_DEVICES_FAILED = 9  # Failed to enable devices
     MOCK_CONTROLLER_ERROR = 98
     INTERNAL_ERROR = 99
 
