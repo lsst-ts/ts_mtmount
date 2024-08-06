@@ -2401,7 +2401,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         while True:
             await ack_in_progress(
                 data,
-                timeout=self.heartbeat_interval * 2.0,
+                timeout=self.heartbeat_interval * 5.0,
                 result="Command still in progress.",
             )
 
