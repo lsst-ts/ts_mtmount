@@ -580,6 +580,38 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 use_read_loop=True,
             )
 
+    async def test_apply_settings_set_ok(self):
+        async with self.make_controller(commander=mtmount.Source.CSC):
+            await self.run_command(
+                command=mtmount.commands.ApplySettingsSet(settings="AT_CCWAux"),
+                use_read_loop=False,
+            )
+            assert "AT_CCWAux" in self.controller.settings_set
+
+    async def test_apply_settings_set_invalid(self):
+        async with self.make_controller(commander=mtmount.Source.CSC):
+            await self.run_command(
+                command=mtmount.commands.ApplySettingsSet(settings="INVALID_SET"),
+                final_reply_code=mtmount.ReplyId.CMD_REJECTED,
+                use_read_loop=False,
+            )
+
+    async def test_restore_settings(self):
+        async with self.make_controller(commander=mtmount.Source.CSC):
+            await self.run_command(
+                command=mtmount.commands.ApplySettingsSet(settings="AT_CCWAux"),
+                use_read_loop=False,
+            )
+
+            assert "AT_CCWAux" in self.controller.settings_set
+
+            await self.run_command(
+                command=mtmount.commands.RestoreDefaultSettings(),
+                use_read_loop=False,
+            )
+
+            assert "AT_CCWAux" not in self.controller.settings_set
+
     async def test_both_axes_commands(self):
         """Test both_axes_x commands, but test motion elsewhere."""
         async with self.make_controller():

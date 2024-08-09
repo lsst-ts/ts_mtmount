@@ -31,16 +31,17 @@ import math
 import re
 import signal
 import subprocess
+import traceback
 import types
 
 from lsst.ts import salobj, tcpip, utils
-from lsst.ts.idl.enums.MTMount import (
+from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
+    ParkPosition,
     PowerState,
     System,
     ThermalCommandState,
 )
-from lsst.ts.xml.component_info import ComponentInfo
 
 from . import __version__, commands, constants, enums
 from .command_futures import CommandFutures
@@ -350,23 +351,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Log a warning every time this transitions to True.
         self.rotator_position_error_excessive = False
 
-        additional_commands = [
-            "applySettingsSet",
-            "park",
-            "restoreDefaultSettings",
-            "unpark",
-        ]
-
-        component_info = ComponentInfo("MTMount", topic_subname="sal")
-
-        for additional_command in additional_commands:
-            if f"cmd_{additional_command}" in component_info.topics:
-                setattr(
-                    self,
-                    f"do_{additional_command}",
-                    getattr(self, f"_do_{additional_command}"),
-                )
-
         super().__init__(
             name="MTMount",
             index=0,
@@ -479,7 +463,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
         self.mtmount_remote = salobj.Remote(
-            domain=self.domain, name="MTMount", include=["cameraCableWrap"]
+            domain=self.domain,
+            name="MTMount",
+            include=["cameraCableWrap"],
+            readonly=True,
         )
 
         loop = asyncio.get_running_loop()
@@ -1198,7 +1185,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if not command_futures.done.done():
             try:
                 await asyncio.wait_for(
-                    command_futures.done, timeout=new_timeout + TIMEOUT_BUFFER
+                    command_futures.done,
+                    timeout=(
+                        (TIMEOUT_BUFFER + new_timeout)
+                        if new_timeout is not None
+                        else None
+                    ),
                 )
             except asyncio.TimeoutError:
                 self.command_futures_dict.pop(command.sequence_id, None)
@@ -1659,25 +1651,156 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_stopTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_command(commands.BothAxesStop(), do_lock=False)
 
-    async def _do_applySettingsSet(self, data):
+    async def do_applySettingsSet(self, data):
+        """Handle the applySettingsSet command."""
+        self.assert_enabled_and_not_disabling()
+
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_applySettingsSet.ack_in_progress, data=data
+        ):
+            await self.handle_apply_settings_set(
+                restore_defaults=data.restoreDefaults,
+                settings_to_apply=data.settings.split(","),
+            )
+
+    async def do_park(self, data):
+        """Handle the park command."""
+        self.assert_enabled_and_not_disabling()
+
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_park.ack_in_progress, data=data
+        ):
+            # move telescope close to the position where we will park
+            try:
+                park_position = ParkPosition(data.position)
+            except ValueError:
+                valid_park_positions = ", ".join(
+                    [f"{position!r}" for position in ParkPosition]
+                )
+                raise ValueError(
+                    f"Invalid park position {data.position}. Must be one of {valid_park_positions}."
+                )
+
+            park_position_altaz = self.config.park_positions[park_position.name.lower()]
+
+            # load park settings
+            await self.handle_apply_settings_set(
+                restore_defaults=True,
+                settings_to_apply=self.config.park_settings,
+            )
+
+            # move telescope to the park position
+            self.log.info(f"Moving telescope to {park_position.name} park position.")
+
+            cmd_futures = await self.send_command(
+                commands.BothAxesMove(
+                    azimuth=park_position_altaz["azimuth"],
+                    elevation=park_position_altaz["elevation"],
+                ),
+                do_lock=True,
+            )
+            await cmd_futures.done
+            # leaving the telescope with the park settings loaded
+            # because this is needed to unpark it.
+
+    async def do_restoreDefaultSettings(self, data):
+        """Handle the RestoreDefaultSettings command."""
         self.assert_enabled()
 
-        raise salobj.ExpectedError("Command not implemented yet.")
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_restoreDefaultSettings.ack_in_progress, data=data
+        ):
+            await self.handle_apply_settings_set(
+                restore_defaults=True,
+                settings_to_apply=[],
+            )
 
-    async def _do_park(self, data):
+    async def do_unpark(self, data):
+        """Handle the unpark command."""
         self.assert_enabled()
 
-        raise salobj.ExpectedError("Command not implemented yet.")
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_park.ack_in_progress, data=data
+        ):
+            # move telescope to the unparked position
 
-    async def _do_restoreDefaultSettings(self, data):
-        self.assert_enabled()
+            unpark_elevation = None
+            unpark_azimuth = None
 
-        raise salobj.ExpectedError("Command not implemented yet.")
+            async with salobj.Remote(
+                self.domain,
+                "MTMount",
+                include=["elevation", "azimuth"],
+                readonly=True,
+            ) as mtmount_remote:
+                current_elevation = await mtmount_remote.tel_elevation.next(
+                    flush=True, timeout=TELEMETRY_START_TIMEOUT
+                )
+                current_azimuth = await mtmount_remote.tel_azimuth.next(
+                    flush=True, timeout=TELEMETRY_START_TIMEOUT
+                )
+                # This value will be recalculated later. Here we get the
+                # current value and later we replace it to be either
+                # just below or above the elevation max/min limits.
+                unpark_elevation = current_elevation.actualPosition
+                unpark_azimuth = current_azimuth.actualPosition
 
-    async def _do_unpark(self, data):
-        self.assert_enabled()
+            # Check it the telescope is pointing at horizon or zenith
+            if unpark_elevation >= self.evt_elevationControllerSettings.data.maxL1Limit:
+                self.log.info(
+                    f"Current telescope elevation at {unpark_elevation:.2f}. "
+                    "Unparking from Zenith."
+                )
+                unpark_elevation = (
+                    self.evt_elevationControllerSettings.data.maxL1Limit
+                    - self.limits_margin
+                )
 
-        raise salobj.ExpectedError("Command not implemented yet.")
+            elif (
+                unpark_elevation <= self.evt_elevationControllerSettings.data.minL1Limit
+            ):
+                self.log.info(
+                    f"Current telescope elevation at {unpark_elevation:.2f}. "
+                    "Unparking from Horizon."
+                )
+                unpark_elevation = (
+                    self.evt_elevationControllerSettings.data.minL1Limit
+                    + self.limits_margin
+                )
+            else:
+                raise RuntimeError(
+                    f"Current telescope elevation {unpark_elevation:.2f} "
+                    "outside unparking position. Must be larger than "
+                    f"{self.evt_elevationControllerSettings.data.maxL1Limit} "
+                    "or smaller than "
+                    f"{self.evt_elevationControllerSettings.data.minL1Limit}."
+                )
+
+            # load park settings
+            await self.handle_apply_settings_set(
+                restore_defaults=True,
+                settings_to_apply=self.config.park_settings,
+            )
+
+            self.log.info(
+                "Moving telescope to unpark position; "
+                f"elevation={unpark_elevation}, azimuth={unpark_azimuth}."
+            )
+
+            cmd_futures = await self.send_command(
+                commands.BothAxesMove(
+                    azimuth=unpark_azimuth,
+                    elevation=unpark_elevation,
+                ),
+                do_lock=True,
+            )
+            await cmd_futures.done
+
+            # reset settings
+            await self.handle_apply_settings_set(
+                restore_defaults=True,
+                settings_to_apply=[],
+            )
 
     async def fault(self, code, report, traceback=""):
         self.should_be_commander = False
@@ -2032,6 +2155,70 @@ class MTMountCsc(salobj.ConfigurableCsc):
             force_output=True,
         )
 
+    async def handle_apply_settings_set(
+        self, restore_defaults: bool, settings_to_apply: list[str]
+    ) -> None:
+        """Method to handle applying settings.
+
+        Parameters
+        ----------
+        restore_defaults : `bool`
+            Restore defaults before loading settings?
+        settings_to_apply : `list`[`str`]
+            Names of the settings to apply.
+        """
+        self.log.info("Starting background task to disable devices.")
+        self.should_be_commander = False
+        disable_devices_task = asyncio.create_task(self.disable_devices())
+
+        if restore_defaults:
+            self.log.info("Restoring default settings.")
+            await self.send_command(
+                commands.RestoreDefaultSettings(),
+                do_lock=True,
+                timeout=SHORT_COMMAND_TIMEOUT,
+            )
+
+        for setting in settings_to_apply:
+            self.log.info(f"Applying {setting=}.")
+            await self.send_command(
+                commands.ApplySettingsSet(settings=setting),
+                do_lock=True,
+                timeout=SHORT_COMMAND_TIMEOUT,
+            )
+
+        self.log.info("Waiting for devices to finish disabling.")
+        try:
+            await disable_devices_task
+        except Exception as e:
+            await self.fault(
+                code=enums.CscErrorCode.DISABLE_DEVICES_FAILED,
+                report="Failed to disable devices.",
+                traceback=traceback.format_exc(),
+            )
+            raise e
+
+        self.log.info("Re-enabling drives to apply settings.")
+
+        await self.send_command(
+            commands.AskForCommand(commander=enums.Source.CSC),
+            do_lock=True,
+            timeout=SHORT_COMMAND_TIMEOUT,
+        )
+        self.should_be_commander = True
+        try:
+            await self.enable_devices()
+        except Exception as e:
+            await self.fault(
+                code=enums.CscErrorCode.ENABLE_DEVICES_FAILED,
+                report="Failed to enable devices.",
+                traceback=traceback.format_exc(),
+            )
+            raise e
+        self.log.info("Get state info and actual settings.")
+        await self.send_command(commands.StateInfo(), do_lock=True)
+        await self.send_command(commands.GetActualSettings(), do_lock=True)
+
     def is_tracking(self):
         """Return True if tracking according to the elevation and azimuth
         motion state events.
@@ -2214,7 +2401,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         while True:
             await ack_in_progress(
                 data,
-                timeout=self.heartbeat_interval * 2.0,
+                timeout=self.heartbeat_interval * 5.0,
                 result="Command still in progress.",
             )
 

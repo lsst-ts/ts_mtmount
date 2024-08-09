@@ -4,3 +4,13 @@ ack_timeout_long: 60
 camera_cable_wrap_advance_time: 0.02
 camera_cable_wrap_interval: 0.1
 max_rotator_position_error: 0.1
+park_settings:
+  - Park
+park_positions:
+  zenith:
+    elevation: 90.0
+    azimuth: 0.0
+  horizon:
+    elevation: 0.0
+    azimuth: 0.0
+

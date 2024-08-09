@@ -197,6 +197,7 @@ class CommandCode(enum.IntEnum):
     GET_AVAILABLE_SETTING_SETS = 2401
     GET_ACTUAL_SETTINGS = 2402
     APPLY_SETTINGS_SET = 2403
+    RESTORE_DEFAULT_SETTINGS = 2501
     STATE_INFO = 2502
     AUXILIARY_CABINETS_THERMAL_RESET_ALARM = 2601
     AUXILIARY_CABINETS_THERMAL_SETPOINT = 2602
@@ -214,6 +215,8 @@ class CscErrorCode(enum.IntEnum):
     TRACK_TARGET_TIMED_OUT = 5  # A main axes tracking command timed out
     DISABLE_FAILED = 6  # Could not disable the CSC
     COMMAND_LOST = 7  # Control taken away from the CSC by the EUI or HHD
+    DISABLE_DEVICES_FAILED = 8  # Failed to disable devices
+    ENABLE_DEVICES_FAILED = 9  # Failed to enable devices
     MOCK_CONTROLLER_ERROR = 98
     INTERNAL_ERROR = 99
 

@@ -40,6 +40,19 @@ class ValidationTestCase(unittest.TestCase):
             camera_cable_wrap_advance_time=0.02,
             camera_cable_wrap_interval=0.1,
             max_rotator_position_error=0.1,
+            park_settings=[
+                "ParkSettings",
+            ],
+            park_positions=dict(
+                zenith=dict(
+                    elevation=90.01,
+                    azimuth=0.0,
+                ),
+                horizon=dict(
+                    elevation=0.0,
+                    azimuth=0.0,
+                ),
+            ),
         )
         self.nondefault = dict(
             host="1.2.3.4",
@@ -49,6 +62,19 @@ class ValidationTestCase(unittest.TestCase):
             camera_cable_wrap_advance_time=0.13,
             camera_cable_wrap_interval=0.4,
             max_rotator_position_error=1.5,
+            park_settings=[
+                "ParkSettings",
+            ],
+            park_positions=dict(
+                zenith=dict(
+                    elevation=90.01,
+                    azimuth=0.0,
+                ),
+                horizon=dict(
+                    elevation=0.0,
+                    azimuth=0.0,
+                ),
+            ),
         )
 
     def test_all_specified(self):
