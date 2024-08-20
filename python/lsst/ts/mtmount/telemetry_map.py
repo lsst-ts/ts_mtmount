@@ -72,7 +72,11 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 
 26:
 - safetySystem
-- timestamp: 1
+- brakePressureAz: 8
+  brakePressureAzTimestamp: 8
+  brakePressureEl: 2
+  brakePressureElTimestamp: 2
+  timestamp: 1
   versionNumber: 1
   versionNumberTimestamp: 1
 
@@ -230,13 +234,23 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 
 24:
 - mainCabinetThermal
-- mainCabinetExternalTemperature: 1
+- auxPxiTemperature: 1
+  auxPxiTemperatureTimestamp: 1
+  axesPxiTemperature: 1
+  axesPxiTemperatureTimestamp: 1
+  backupTemperature: 1
+  backupTemperatureTimestamp: 1
+  mainCabinetExternalTemperature: 1
   mainCabinetExternalTemperatureTimestamp: 1
   mainCabinetInternalTemperature: 2
   mainCabinetInternalTemperatureTimestamp: 2
   setpointTemperature: 1
   setpointTemperatureTimestamp: 1
   timestamp: 1
+  tmaPxiTemperature: 1
+  tmaPxiTemperatureTimestamp: 1
+  valveFeedback: 1
+  valveFeedbackTimestamp: 1
 
 22:
 - mirrorCoverLocks
@@ -686,6 +700,8 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   oilTemperatureFacilities5011Timestamp: 1
   oilTemperatureFacilities5121: 1
   oilTemperatureFacilities5121Timestamp: 1
+  setpointTemperatureCabinets: 1
+  setpointTemperatureCabinetsTimestamp: 1
   timestamp: 1
   valvePositionFacilities5201: 1
   valvePositionFacilities5201Timestamp: 1
