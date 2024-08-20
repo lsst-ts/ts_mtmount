@@ -596,17 +596,21 @@ class CcwOnlyCscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCas
         async with self.make_csc(initial_state=salobj.State.STANDBY):
             await self.check_standard_state_transitions(
                 enabled_commands=(
+                    "applySettingsSet",
                     "closeMirrorCovers",
-                    "openMirrorCovers",
                     "disableCameraCableWrapFollowing",
                     "enableCameraCableWrapFollowing",
                     "homeBothAxes",
                     "moveToTarget",
-                    "startTracking",
-                    "trackTarget",
+                    "openMirrorCovers",
+                    "park",
+                    "restoreDefaultSettings",
                     "setThermal",
-                    "stopTracking",
+                    "startTracking",
                     "stop",
+                    "stopTracking",
+                    "trackTarget",
+                    "unpark",
                 )
             )
 
