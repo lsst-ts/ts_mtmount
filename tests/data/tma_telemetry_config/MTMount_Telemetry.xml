@@ -119,6 +119,34 @@
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_safetySystem</EFDB_Topic>
     <item>
+      <EFDB_Name>brakePressureAz</EFDB_Name>
+      <Description>Azimuth brake pressure 1.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>8</Count>
+    </item>
+    <item>
+      <EFDB_Name>brakePressureAzTimestamp</EFDB_Name>
+      <Description>Time at which brakePressureAz was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>8</Count>
+    </item>
+    <item>
+      <EFDB_Name>brakePressureEl</EFDB_Name>
+      <Description>Elevation brake pressure 1.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>2</Count>
+    </item>
+    <item>
+      <EFDB_Name>brakePressureElTimestamp</EFDB_Name>
+      <Description>Time at which brakePressureEl was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>2</Count>
+    </item>
+    <item>
       <EFDB_Name>timestamp</EFDB_Name>
       <Description>Time at which the data was measured (TAI, unix seconds).</Description>
       <IDL_Type>double</IDL_Type>
@@ -1004,6 +1032,48 @@
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_mainCabinetThermal</EFDB_Topic>
     <item>
+      <EFDB_Name>auxPxiTemperature</EFDB_Name>
+      <Description>Temperature of the AUX PXI CPU.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>auxPxiTemperatureTimestamp</EFDB_Name>
+      <Description>Time at which auxPxiTemperature was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>axesPxiTemperature</EFDB_Name>
+      <Description>Temperature of the AXES PXI CPU.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>axesPxiTemperatureTimestamp</EFDB_Name>
+      <Description>Time at which axesPxiTemperature was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>backupTemperature</EFDB_Name>
+      <Description>Temperature inside the cabinet used as backup when the RMC fails.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>backupTemperatureTimestamp</EFDB_Name>
+      <Description>Time at which backupTemperature was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
       <EFDB_Name>mainCabinetExternalTemperature</EFDB_Name>
       <Description>Temperature of the external sensor atached to cabinet surface.</Description>
       <IDL_Type>double</IDL_Type>
@@ -1048,6 +1118,34 @@
     <item>
       <EFDB_Name>timestamp</EFDB_Name>
       <Description>Time at which the data was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>tmaPxiTemperature</EFDB_Name>
+      <Description>Temperature of the TMA PXI CPU.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>tmaPxiTemperatureTimestamp</EFDB_Name>
+      <Description>Time at which tmaPxiTemperature was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>valveFeedback</EFDB_Name>
+      <Description>Actual position of cabinet valve.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>valveFeedbackTimestamp</EFDB_Name>
+      <Description>Time at which valveFeedback was measured (TAI, unix seconds).</Description>
       <IDL_Type>double</IDL_Type>
       <Units>second</Units>
       <Count>1</Count>
@@ -4089,6 +4187,20 @@
     <item>
       <EFDB_Name>oilTemperatureFacilities5121Timestamp</EFDB_Name>
       <Description>Time at which oilTemperatureFacilities5121 was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>setpointTemperatureCabinets</EFDB_Name>
+      <Description>Temperature setpoint for remote IO cabinets.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>setpointTemperatureCabinetsTimestamp</EFDB_Name>
+      <Description>Time at which setpointTemperatureCabinets was measured (TAI, unix seconds).</Description>
       <IDL_Type>double</IDL_Type>
       <Units>second</Units>
       <Count>1</Count>
