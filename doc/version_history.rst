@@ -6,6 +6,11 @@
 Version History
 ###############
 
+v0.28.1
+-------
+
+* Fix ccw_only unit test.
+
 v0.28.0
 -------
 
