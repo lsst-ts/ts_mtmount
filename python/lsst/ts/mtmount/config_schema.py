@@ -28,7 +28,7 @@ CONFIG_SCHEMA = yaml.safe_load(
 $schema: http://json-schema.org/draft-07/schema#
 $id: https://github.com/lsst-ts/ts_mtmount/blob/master/python/lsst/ts/mtmount/config_schema.py
 # title must end with one or more spaces followed by the schema version, which must begin with "v"
-title: MTMount v3
+title: MTMount v4
 description: Schema for MTMount configuration files
 type: object
 properties:
@@ -78,12 +78,57 @@ properties:
       rather than the usual demand position and velocity.
     type: number
     exclusiveMinimum: 0
+  park_settings:
+    description: >-
+      List of settings to load for parking/unparking the telescope.
+    type: array
+    items:
+      type: string
+  park_positions:
+    description: Parking positions.
+    type: object
+    additionalProperties: false
+    required:
+        - zenith
+        - horizon
+    properties:
+        additionalProperties: false
+        zenith:
+            description: Configuration for zenith parking position.
+            type: object
+            additionalProperties: false
+            required:
+                - elevation
+                - azimuth
+            properties:
+                elevation:
+                    type: number
+                    description: Elevation, in degrees.
+                azimuth:
+                    type: number
+                    description: Azimuth, in degrees.
+        horizon:
+            description: Configuration for zenith parking position.
+            type: object
+            additionalProperties: false
+            required:
+                - elevation
+                - azimuth
+            properties:
+                elevation:
+                    type: number
+                    description: Elevation, in degrees.
+                azimuth:
+                    type: number
+                    description: Azimuth, in degrees.
 required:
   - host
   - connection_timeout
   - ack_timeout
   - camera_cable_wrap_advance_time
   - max_rotator_position_error
+  - park_settings
+  - park_positions
 additionalProperties: false
 """
 )

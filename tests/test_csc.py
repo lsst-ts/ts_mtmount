@@ -29,16 +29,16 @@ import unittest
 
 import pytest
 from lsst.ts import mtmount, salobj, utils
-from lsst.ts.idl.enums.MTMount import (
+from lsst.ts.mtmount.mtmount_csc import SET_THERMAL_FIELD_SYSTEM_ID_DICT
+from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
     ElevationLockingPinMotionState,
+    ParkPosition,
     PowerState,
     System,
     ThermalCommandState,
 )
-from lsst.ts.mtmount.mtmount_csc import SET_THERMAL_FIELD_SYSTEM_ID_DICT
-from lsst.ts.xml.component_info import ComponentInfo
 from numpy.testing import assert_array_equal
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
@@ -604,32 +604,24 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
     async def test_standard_state_transitions(self):
         async with self.make_csc(initial_state=salobj.State.STANDBY):
-            additional_commands = [
-                "applySettingsSet",
-                "park",
-                "restoreDefaultSettings",
-                "unpark",
-            ]
-
-            component_info = ComponentInfo("MTMount", topic_subname="sal")
 
             enabled_commands = [
+                "applySettingsSet",
                 "closeMirrorCovers",
-                "openMirrorCovers",
                 "disableCameraCableWrapFollowing",
                 "enableCameraCableWrapFollowing",
                 "homeBothAxes",
                 "moveToTarget",
-                "startTracking",
-                "trackTarget",
+                "openMirrorCovers",
+                "park",
+                "restoreDefaultSettings",
                 "setThermal",
-                "stopTracking",
+                "startTracking",
                 "stop",
+                "stopTracking",
+                "trackTarget",
+                "unpark",
             ]
-
-            for additional_command in additional_commands:
-                if f"cmd_{additional_command}" in component_info.topics:
-                    enabled_commands.append(additional_command)
 
             await self.check_standard_state_transitions(
                 enabled_commands=enabled_commands
@@ -1813,3 +1805,124 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
                     await asyncio.sleep(0.1)
                     previous_tai = tai
+
+    async def test_apply_settings_set(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.remote.cmd_applySettingsSet.set_start(
+                settings="AT_CCWAux",
+                restoreDefaults=True,
+                timeout=STD_TIMEOUT,
+            )
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_apply_settings_set_bad_setting(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            with pytest.raises(
+                salobj.base.AckError, match="BAD_SETTING not a valid settings set."
+            ):
+                await self.remote.cmd_applySettingsSet.set_start(
+                    settings="BAD_SETTING",
+                    restoreDefaults=True,
+                    timeout=STD_TIMEOUT,
+                )
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_restore_default_settings(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.remote.cmd_restoreDefaultSettings.set_start(
+                timeout=STD_TIMEOUT,
+            )
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_park_zenith(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.cmd_park.set_start(position=ParkPosition.ZENITH)
+
+            elevation = await self.remote.tel_elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+
+            azimuth = await self.remote.tel_azimuth.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            assert elevation.actualPosition == pytest.approx(
+                self.csc.config.park_positions["zenith"]["elevation"],
+            )
+            assert azimuth.actualPosition == pytest.approx(
+                self.csc.config.park_positions["zenith"]["azimuth"],
+            )
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_park_horizon(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.cmd_park.set_start(position=ParkPosition.HORIZON)
+
+            elevation = await self.remote.tel_elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+
+            azimuth = await self.remote.tel_azimuth.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            assert elevation.actualPosition == pytest.approx(
+                self.csc.config.park_positions["horizon"]["elevation"],
+            )
+            assert azimuth.actualPosition == pytest.approx(
+                self.csc.config.park_positions["horizon"]["azimuth"],
+            )
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_unpark_telescope_unparked(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            with pytest.raises(salobj.AckError, match="outside unparking position"):
+                await self.remote.cmd_unpark.start()
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_unpark_parked_zenith(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.cmd_park.set_start(position=ParkPosition.ZENITH)
+            await self.remote.cmd_unpark.start()
+
+            elevation = await self.remote.tel_elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            elevation_controller_settings = (
+                await self.remote.evt_elevationControllerSettings.aget(
+                    timeout=STD_TIMEOUT
+                )
+            )
+            assert elevation.actualPosition < elevation_controller_settings.maxL1Limit
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_unpark_parked_horizon(self):
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.cmd_park.set_start(position=ParkPosition.HORIZON)
+            await self.remote.cmd_unpark.start()
+
+            elevation = await self.remote.tel_elevation.next(
+                flush=True, timeout=STD_TIMEOUT
+            )
+            elevation_controller_settings = (
+                await self.remote.evt_elevationControllerSettings.aget(
+                    timeout=STD_TIMEOUT
+                )
+            )
+            assert elevation.actualPosition > elevation_controller_settings.minL1Limit
+
+            await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
