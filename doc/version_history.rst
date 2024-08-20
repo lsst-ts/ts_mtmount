@@ -6,6 +6,27 @@
 Version History
 ###############
 
+v0.29.0
+-------
+
+* In ``telemetry_client``, update ``TelemetryTopicHandler.__call__`` to skip parsing data that is not in the xml interface.
+
+* Update mock controller telemetry output names to match the latest version of the interface.
+
+* In telemetry_map, update ArrayTelemetryFieldFunctor field name template to match the latest format used by Tekniker.
+
+* Update telemetry client test to allow missing values in the xml.
+
+  This is to provide backward compatibility with xml 22.
+
+* Update the TMA reference configuration file.
+
+* Update test telemetry to match the latest version of the TMA telemetry.
+
+* Update telemetry map with the latest version of the TMA telemetry provided by Tekniker.
+
+* Update tma_telemetry_config_parser to add topic description.
+
 v0.28.1
 -------
 
