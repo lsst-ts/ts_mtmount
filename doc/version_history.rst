@@ -6,6 +6,11 @@
 Version History
 ###############
 
+v0.29.0
+-------
+
+* Update TMA telemetry interface.
+
 v0.28.1
 -------
 
