@@ -938,7 +938,11 @@ class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
     def __init__(self, num_elements, field_name):
         if num_elements <= 1:
             raise ValueError(f"{num_elements=} must be > 1")
-        self.field_name_template = f"{field_name}{{0:d}}"
+        self.field_name_template = (
+            f"{field_name}{{0:d}}"
+            if not field_name.endswith("Timestamp")
+            else f"{field_name[:-9]}{{0:d}}Timestamp"
+        )
         super().__init__(num_elements=num_elements, field_name=field_name)
 
     def sal_value_from_llv_dict(self, data_dict):
