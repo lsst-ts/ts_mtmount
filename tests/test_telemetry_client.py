@@ -149,6 +149,30 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_handle_telemetry(self):
         """Test all telemetry topics."""
         random = np.random.default_rng(47)
+        backward_compatile_telemetry_attribute = dict(
+            safetySystem={
+                "brakePressureAz",
+                "brakePressureAzTimestamp",
+                "brakePressureEl",
+                "brakePressureElTimestamp",
+            },
+            mainCabinetThermal={
+                "auxPxiTemperature",
+                "auxPxiTemperatureTimestamp",
+                "axesPxiTemperature",
+                "axesPxiTemperatureTimestamp",
+                "backupTemperature",
+                "backupTemperatureTimestamp",
+                "tmaPxiTemperature",
+                "tmaPxiTemperatureTimestamp",
+                "valveFeedback",
+                "valveFeedbackTimestamp",
+            },
+            oilSupplySystem={
+                "setpointTemperatureCabinets",
+                "setpointTemperatureCabinetsTimestamp",
+            },
+        )
         async with self.make_all():
             for topic_id, (
                 sal_topic_name,
@@ -160,7 +184,17 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                 tma_data = dict(topicID=topic_id)
                 null_sal_data = topic.DataType()
                 for fieldname, fieldlen in field_len_dict.items():
-                    null_field_data = getattr(null_sal_data, fieldname)
+                    try:
+                        null_field_data = getattr(null_sal_data, fieldname)
+                    except AttributeError:
+                        if (
+                            sal_topic_name in backward_compatile_telemetry_attribute
+                            and fieldname
+                            in backward_compatile_telemetry_attribute[sal_topic_name]
+                        ):
+                            continue
+                        else:
+                            raise
                     if isinstance(null_field_data, list):
                         dtype = type(null_field_data[0])
                     else:
@@ -183,7 +217,13 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                     else:
                         desired_sal_data[fieldname] = list(values)
                         for i in range(fieldlen):
-                            tma_data[f"{fieldname}{i+1}"] = values[i]
+                            tma_data[
+                                (
+                                    f"{fieldname}{i+1}"
+                                    if not fieldname.endswith("Timestamp")
+                                    else f"{fieldname[:-9]}{i+1}Timestamp"
+                                )
+                            ] = values[i]
 
                 await self.publish_data(tma_data)
                 await self.assert_next_telemetry(topic, desired_sal_data)
