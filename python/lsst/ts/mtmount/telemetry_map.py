@@ -942,10 +942,16 @@ class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
         super().__init__(num_elements=num_elements, field_name=field_name)
 
     def sal_value_from_llv_dict(self, data_dict):
-        return [
-            data_dict[self.field_name_template.format(i)]
-            for i in range(1, self.num_elements + 1)
-        ]
+        try:
+            return [
+                data_dict[self.field_name_template.format(i)]
+                for i in range(1, self.num_elements + 1)
+            ]
+        except KeyError:
+            raise RuntimeError(
+                f"Field {self.field_name_template.format(0)} not in data_dict. "
+                f"Available fields {data_dict.keys()}:{data_dict}"
+            )
 
     def llv_dict_from_sal_value(self, value):
         if len(value) != self.num_elements:
