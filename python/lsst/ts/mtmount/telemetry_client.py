@@ -82,6 +82,7 @@ class TelemetryTopicHandler:
         sal_data = {
             sal_name: func.sal_value_from_llv_dict(data_dict)
             for sal_name, func in self.field_dict.items()
+            if hasattr(self.topic.DataType(), sal_name)
         }
         await self.topic.set_write(**sal_data)
 

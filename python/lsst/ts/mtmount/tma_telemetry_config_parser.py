@@ -601,7 +601,8 @@ class TMATelemetryConfigParser:
                     f"""
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
-    <EFDB_Topic>MTMount_{topic_info.sal_name}</EFDB_Topic>"""
+    <EFDB_Topic>MTMount_{topic_info.sal_name}</EFDB_Topic>
+    <Description>{topic_info.sal_name} data.</Description>"""
                 )
                 for field_info in topic_info.fields.values():
                     # Add terminating "." to field description, if needed.
