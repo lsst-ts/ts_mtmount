@@ -860,11 +860,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         except Exception as e:
             self.log.error(f"Failed to enable on one or more devices: {e!r}")
-            raise
-        self.camera_cable_wrap_follow_start_task = asyncio.create_task(
-            self.start_camera_cable_wrap_following()
-        )
-        await self.camera_cable_wrap_follow_start_task
+            # raise
+        else:
+            self.camera_cable_wrap_follow_start_task = asyncio.create_task(
+                self.start_camera_cable_wrap_following()
+            )
+            await self.camera_cable_wrap_follow_start_task
 
     def _get_devices_to_initialize(self):
         """Get a list of devices initialization commands."""
