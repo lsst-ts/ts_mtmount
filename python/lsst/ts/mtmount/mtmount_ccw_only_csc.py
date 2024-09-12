@@ -39,7 +39,7 @@ class MTMountCcwOnlyCsc(MTMountCsc):
         """Get a list of devices initialization commands."""
         return (
             (commands.CameraCableWrapResetAlarm(), None, False),
-            (commands.CameraCableWrapPower(on=True), None, False),
+            # (commands.CameraCableWrapPower(on=True), None, False),
         )
 
     async def do_clearError(self, data):
