@@ -1478,14 +1478,31 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
-        await self.send_commands(
-            commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoversPower(on=True),
-            commands.MirrorCoverSystemRetract(),
-            commands.MirrorCoversPower(on=False),
-            commands.MirrorCoverLocksPower(on=False),
-            do_lock=True,
-        )
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_openMirrorCovers.ack_in_progress, data=data
+        ):
+            for cover in [
+                MirrorCover.XPlus,
+                MirrorCover.XMinus,
+                MirrorCover.YPlus,
+                MirrorCover.YMinus,
+            ]:
+
+                self.log.info(f"Opening mirror cover {cover.name}.")
+
+                await self.send_commands(
+                    commands.MirrorCoverLocksResetAlarm(),
+                    commands.MirrorCoversResetAlarm(),
+                    commands.MirrorCoverLocksPower(drive=cover.value - 1, on=True),
+                    commands.MirrorCoversPower(drive=cover.value - 1, on=True),
+                    commands.MirrorCoverLocksMoveAll(
+                        drive=cover.value - 1, deploy=False
+                    ),
+                    commands.MirrorCoversRetract(drive=cover.value - 1),
+                    commands.MirrorCoversPower(drive=cover.value - 1, on=False),
+                    commands.MirrorCoverLocksPower(drive=cover.value - 1, on=False),
+                    do_lock=True,
+                )
 
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command."""
