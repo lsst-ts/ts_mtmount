@@ -977,15 +977,9 @@ class CcwOnlyCscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCas
                 == DeployableMotionState.DEPLOYED
             )
 
-            with pytest.raises(salobj.AckError):
-                await self.remote.cmd_openMirrorCovers.start(
-                    timeout=MIRROR_COVER_TIMEOUT
-                )
+            await self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
 
-            with pytest.raises(salobj.AckError):
-                await self.remote.cmd_closeMirrorCovers.start(
-                    timeout=MIRROR_COVER_TIMEOUT
-                )
+            await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
 
     async def test_move_to_target(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
