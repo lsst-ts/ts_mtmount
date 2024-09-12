@@ -37,6 +37,7 @@ import types
 from lsst.ts import salobj, tcpip, utils
 from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
+    MirrorCover,
     ParkPosition,
     PowerState,
     System,
@@ -1415,14 +1416,35 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
-        await self.send_commands(
-            commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoversPower(on=True),
-            commands.MirrorCoverSystemDeploy(),
-            commands.MirrorCoverLocksPower(on=False),
-            commands.MirrorCoversPower(on=False),
-            do_lock=True,
-        )
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_openMirrorCovers.ack_in_progress, data=data
+        ):
+            for cover in [
+                MirrorCover.XPlus,
+                MirrorCover.XMinus,
+                MirrorCover.YPlus,
+                MirrorCover.YMinus,
+            ]:
+
+                self.log.info(f"Closing mirror cover {cover.name}.")
+                await self.send_commands(
+                    commands.MirrorCoverLocksResetAlarm(),
+                    commands.MirrorCoversResetAlarm(),
+                    commands.MirrorCoverLocksPower(drive=cover.value - 1, on=True),
+                    commands.MirrorCoversPower(drive=cover.value - 1, on=True),
+                    commands.MirrorCoverLocksMoveAll(
+                        drive=cover.value - 1, deploy=False
+                    ),
+                    commands.MirrorCoverSystemDeploy(
+                        drive=cover.value - 1,
+                    ),
+                    commands.MirrorCoverLocksMoveAll(
+                        drive=cover.value - 1, deploy=True
+                    ),
+                    commands.MirrorCoverLocksPower(drive=cover.value - 1, on=False),
+                    commands.MirrorCoversPower(drive=cover.value - 1, on=False),
+                    do_lock=True,
+                )
 
     async def do_disableCameraCableWrapFollowing(self, data):
         """Handle the disableCameraCableWrapFollowing command."""
