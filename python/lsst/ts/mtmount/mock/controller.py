@@ -509,9 +509,9 @@ class Controller:
                 demandJerk=0.0,
                 demandJerkTimestamp=tai,
                 actualTorquePercentage1=torque_percent,
-                actualTorquePercentageTimestamp1=tai,
+                actualTorquePercentage1Timestamp=tai,
                 actualTorquePercentage2=torque_percent,
-                actualTorquePercentageTimestamp2=tai,
+                actualTorquePercentage2Timestamp=tai,
                 timestamp=tai,
             )
         else:

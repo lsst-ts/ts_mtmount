@@ -9,6 +9,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_azimuth</EFDB_Topic>
+    <Description>azimuth data.</Description>
     <item>
       <EFDB_Name>actualAcceleration</EFDB_Name>
       <Description>Calculated actual acceleration.</Description>
@@ -118,6 +119,35 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_safetySystem</EFDB_Topic>
+    <Description>safetySystem data.</Description>
+    <item>
+      <EFDB_Name>brakePressureAz</EFDB_Name>
+      <Description>Azimuth brake pressure 1.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>8</Count>
+    </item>
+    <item>
+      <EFDB_Name>brakePressureAzTimestamp</EFDB_Name>
+      <Description>Time at which brakePressureAz was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>8</Count>
+    </item>
+    <item>
+      <EFDB_Name>brakePressureEl</EFDB_Name>
+      <Description>Elevation brake pressure 1.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>bar</Units>
+      <Count>2</Count>
+    </item>
+    <item>
+      <EFDB_Name>brakePressureElTimestamp</EFDB_Name>
+      <Description>Time at which brakePressureEl was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>2</Count>
+    </item>
     <item>
       <EFDB_Name>timestamp</EFDB_Name>
       <Description>Time at which the data was measured (TAI, unix seconds).</Description>
@@ -143,6 +173,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_elevation</EFDB_Topic>
+    <Description>elevation data.</Description>
     <item>
       <EFDB_Name>actualAcceleration</EFDB_Name>
       <Description>Calculated actual acceleration.</Description>
@@ -266,6 +297,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_lockingPins</EFDB_Topic>
+    <Description>lockingPins data.</Description>
     <item>
       <EFDB_Name>actualPosition</EFDB_Name>
       <Description>Actual position of each pin.</Description>
@@ -319,6 +351,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_deployablePlatforms</EFDB_Topic>
+    <Description>deployablePlatforms data.</Description>
     <item>
       <EFDB_Name>actualPositionPlatform1Section</EFDB_Name>
       <Description>Actual position of each section of platform 1.</Description>
@@ -386,6 +419,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_cabinet0101Thermal</EFDB_Topic>
+    <Description>cabinet0101Thermal data.</Description>
     <item>
       <EFDB_Name>actualTemperature</EFDB_Name>
       <Description>Actual surface temperature of cabinet 0101.</Description>
@@ -453,6 +487,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_azimuthCableWrap</EFDB_Topic>
+    <Description>azimuthCableWrap data.</Description>
     <item>
       <EFDB_Name>actualPositionDrive</EFDB_Name>
       <Description>Actual position reported by each drive.</Description>
@@ -492,6 +527,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_cameraCableWrap</EFDB_Topic>
+    <Description>cameraCableWrap data.</Description>
     <item>
       <EFDB_Name>actualPosition</EFDB_Name>
       <Description>Actual position.</Description>
@@ -573,6 +609,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_balancing</EFDB_Topic>
+    <Description>balancing data.</Description>
     <item>
       <EFDB_Name>actualPosition</EFDB_Name>
       <Description>Actual position reported by each drive.</Description>
@@ -626,6 +663,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_azimuthDrives</EFDB_Topic>
+    <Description>azimuthDrives data.</Description>
     <item>
       <EFDB_Name>current</EFDB_Name>
       <Description>Actual current of each drive.</Description>
@@ -651,6 +689,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_azimuthDrivesThermal</EFDB_Topic>
+    <Description>azimuthDrivesThermal data.</Description>
     <item>
       <EFDB_Name>actualTemperature</EFDB_Name>
       <Description>Actual surface temperature of each drive.</Description>
@@ -718,6 +757,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_elevationDrives</EFDB_Topic>
+    <Description>elevationDrives data.</Description>
     <item>
       <EFDB_Name>current</EFDB_Name>
       <Description>Actual current of each drive.</Description>
@@ -743,6 +783,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_elevationDrivesThermal</EFDB_Topic>
+    <Description>elevationDrivesThermal data.</Description>
     <item>
       <EFDB_Name>actualTemperature10</EFDB_Name>
       <Description>Actual surface temperature of each drive.</Description>
@@ -880,6 +921,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_encoder</EFDB_Topic>
+    <Description>encoder data.</Description>
     <item>
       <EFDB_Name>azimuthEncoderAbsolutePosition</EFDB_Name>
       <Description>Azimuth absolute position read by each encoder head.</Description>
@@ -1003,6 +1045,49 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_mainCabinetThermal</EFDB_Topic>
+    <Description>mainCabinetThermal data.</Description>
+    <item>
+      <EFDB_Name>auxPxiTemperature</EFDB_Name>
+      <Description>Temperature of the AUX PXI CPU.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>auxPxiTemperatureTimestamp</EFDB_Name>
+      <Description>Time at which auxPxiTemperature was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>axesPxiTemperature</EFDB_Name>
+      <Description>Temperature of the AXES PXI CPU.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>axesPxiTemperatureTimestamp</EFDB_Name>
+      <Description>Time at which axesPxiTemperature was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>backupTemperature</EFDB_Name>
+      <Description>Temperature inside the cabinet used as backup when the RMC fails.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>backupTemperatureTimestamp</EFDB_Name>
+      <Description>Time at which backupTemperature was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
     <item>
       <EFDB_Name>mainCabinetExternalTemperature</EFDB_Name>
       <Description>Temperature of the external sensor atached to cabinet surface.</Description>
@@ -1052,10 +1137,39 @@
       <Units>second</Units>
       <Count>1</Count>
     </item>
+    <item>
+      <EFDB_Name>tmaPxiTemperature</EFDB_Name>
+      <Description>Temperature of the TMA PXI CPU.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>tmaPxiTemperatureTimestamp</EFDB_Name>
+      <Description>Time at which tmaPxiTemperature was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>valveFeedback</EFDB_Name>
+      <Description>Actual position of cabinet valve.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>valveFeedbackTimestamp</EFDB_Name>
+      <Description>Time at which valveFeedback was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
   </SALTelemetry>
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_mirrorCoverLocks</EFDB_Topic>
+    <Description>mirrorCoverLocks data.</Description>
     <item>
       <EFDB_Name>actualPosition</EFDB_Name>
       <Description>Actual position reported by each drive.</Description>
@@ -1095,6 +1209,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_mirrorCover</EFDB_Topic>
+    <Description>mirrorCover data.</Description>
     <item>
       <EFDB_Name>actualPosition</EFDB_Name>
       <Description>Actual position reported by each drive.</Description>
@@ -1134,6 +1249,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_mainPowerSupply</EFDB_Topic>
+    <Description>mainPowerSupply data.</Description>
     <item>
       <EFDB_Name>powerSupplyCurrent</EFDB_Name>
       <Description>DC current from the power supply to the capacitor bank.</Description>
@@ -1173,6 +1289,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_topEndChiller</EFDB_Topic>
+    <Description>topEndChiller data.</Description>
     <item>
       <EFDB_Name>actualTemperatureAmbient</EFDB_Name>
       <Description>Actual ambient temperature (?).</Description>
@@ -1422,6 +1539,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_auxiliaryCabinetsThermal</EFDB_Topic>
+    <Description>auxiliaryCabinetsThermal data.</Description>
     <item>
       <EFDB_Name>actualTemperatureAzimuthDriveCabinet0001</EFDB_Name>
       <Description>Actual temperature of the cabinet TMA_AZ_DR_CBT_0001.</Description>
@@ -1573,6 +1691,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_oilSupplySystem</EFDB_Topic>
+    <Description>oilSupplySystem data.</Description>
     <item>
       <EFDB_Name>actualTemperatureAzimuthCabinet5001</EFDB_Name>
       <Description>Temperature in OSS remote IO cabinet AZ_OS_CBT_5001.</Description>
@@ -4094,6 +4213,20 @@
       <Count>1</Count>
     </item>
     <item>
+      <EFDB_Name>setpointTemperatureCabinets</EFDB_Name>
+      <Description>Temperature setpoint for remote IO cabinets.</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>deg_C</Units>
+      <Count>1</Count>
+    </item>
+    <item>
+      <EFDB_Name>setpointTemperatureCabinetsTimestamp</EFDB_Name>
+      <Description>Time at which setpointTemperatureCabinets was measured (TAI, unix seconds).</Description>
+      <IDL_Type>double</IDL_Type>
+      <Units>second</Units>
+      <Count>1</Count>
+    </item>
+    <item>
       <EFDB_Name>timestamp</EFDB_Name>
       <Description>Time at which the data was measured (TAI, unix seconds).</Description>
       <IDL_Type>double</IDL_Type>
@@ -4118,6 +4251,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_compressedAir</EFDB_Topic>
+    <Description>compressedAir data.</Description>
     <item>
       <EFDB_Name>airPressureAzimuth0001</EFDB_Name>
       <Description>Compressed air pressure from azimuth gauge TMA-AZ-CP-CPM-0001.</Description>
@@ -4213,6 +4347,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_cooling</EFDB_Topic>
+    <Description>cooling data.</Description>
     <item>
       <EFDB_Name>glycolPressureAzimuth0001</EFDB_Name>
       <Description>Glycol water pressure from azimuth gauge TMA-AZ-GW-CPM-0001.</Description>
@@ -4686,6 +4821,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_dynaleneCooling</EFDB_Topic>
+    <Description>dynaleneCooling data.</Description>
     <item>
       <EFDB_Name>dynalenePressureAzimuth0001</EFDB_Name>
       <Description>Dynalene pressure from azimuth gauge TMA-AZ-DY-CPM-0001.</Description>
@@ -4907,6 +5043,7 @@
   <SALTelemetry>
     <Subsystem>MTMount</Subsystem>
     <EFDB_Topic>MTMount_generalPurposeGlycolWater</EFDB_Topic>
+    <Description>generalPurposeGlycolWater data.</Description>
     <item>
       <EFDB_Name>glycolPressureAzimuth0001</EFDB_Name>
       <Description>General purpose glycol water pressure from azimuth gauge TMA-AZ-GP-CPM-0001.</Description>
