@@ -23,6 +23,7 @@ __all__ = ["MTMountCsc", "run_mtmount"]
 
 import asyncio
 import contextlib
+import enum
 import functools
 import inspect
 import json
@@ -37,7 +38,6 @@ import types
 from lsst.ts import salobj, tcpip, utils
 from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
-    MirrorCover,
     ParkPosition,
     PowerState,
     System,
@@ -148,6 +148,16 @@ SET_THERMAL_FIELD_SYSTEM_ID_DICT = dict(
     oilSupplySystemCabinet=System.OIL_SUPPLY_SYSTEM,
     topEndChiller=System.TOP_END_CHILLER,
 )
+
+
+class MirrorCover(enum.IntEnum):
+    """Mirror cover."""
+
+    ALL = 0
+    XPlus = 1
+    YPlus = 2
+    XMinus = 3
+    YMinus = 4
 
 
 class SystemStateInfo:
