@@ -152,6 +152,10 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             log_level=log_level,
         ):
             yield
+            try:
+                await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+            except Exception:
+                pass
 
     @contextlib.contextmanager
     def pretend_to_be_disabling_devices(self):
@@ -999,13 +1003,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.DEPLOYED,
-                elementsState=[DeployableMotionState.DEPLOYED] * 4,
+                state=DeployableMotionState.RETRACTED,
+                elementsState=[DeployableMotionState.RETRACTED] * 4,
             )
             assert mirror_covers_device.motion_state() == DeployableMotionState.DEPLOYED
             assert (
                 mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.DEPLOYED
+                == DeployableMotionState.RETRACTED
             )
 
             # Open (retract) the mirror covers.
@@ -1020,8 +1024,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.RETRACTING,
-                elementsState=[DeployableMotionState.RETRACTING] * 4,
+                state=DeployableMotionState.DEPLOYING,
+                elementsState=[DeployableMotionState.DEPLOYING] * 4,
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_mirrorCoversMotionState,
@@ -1030,15 +1034,15 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.RETRACTED,
-                elementsState=[DeployableMotionState.RETRACTED] * 4,
+                state=DeployableMotionState.DEPLOYED,
+                elementsState=[DeployableMotionState.DEPLOYED] * 4,
             )
             assert (
                 mirror_covers_device.motion_state() == DeployableMotionState.RETRACTED
             )
             assert (
                 mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.RETRACTED
+                == DeployableMotionState.DEPLOYED
             )
 
             # Open the mirror covers again; this should be quick.
@@ -1051,7 +1055,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             assert (
                 mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.RETRACTED
+                == DeployableMotionState.DEPLOYED
             )
 
             # Close (deploy) the mirror covers.
@@ -1066,8 +1070,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.DEPLOYING,
-                elementsState=[DeployableMotionState.DEPLOYING] * 4,
+                state=DeployableMotionState.RETRACTING,
+                elementsState=[DeployableMotionState.RETRACTING] * 4,
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_mirrorCoversMotionState,
@@ -1076,13 +1080,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.DEPLOYED,
-                elementsState=[DeployableMotionState.DEPLOYED] * 4,
+                state=DeployableMotionState.RETRACTED,
+                elementsState=[DeployableMotionState.RETRACTED] * 4,
             )
             assert mirror_covers_device.motion_state() == DeployableMotionState.DEPLOYED
             assert (
                 mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.DEPLOYED
+                == DeployableMotionState.RETRACTED
             )
 
             # Close the mirror covers again;
@@ -1094,7 +1098,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             assert mirror_covers_device.motion_state() == DeployableMotionState.DEPLOYED
             assert (
                 mirror_cover_locks_device.motion_state()
-                == DeployableMotionState.DEPLOYED
+                == DeployableMotionState.RETRACTED
             )
 
             # Check that closeMirrorCovers and openMirrorCovers while
