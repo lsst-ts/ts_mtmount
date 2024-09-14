@@ -1523,17 +1523,81 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_openMirrorCovers(self, data):
         """Handle the openMirrorCovers command."""
         self.assert_enabled_and_not_disabling()
+
         await self.cmd_openMirrorCovers.ack_in_progress(
             data=data, timeout=MIRROR_COVER_TIMEOUT
         )
-        await self.send_commands(
-            commands.MirrorCoverLocksPower(on=True),
-            commands.MirrorCoversPower(on=True),
-            commands.MirrorCoverSystemRetract(),
-            commands.MirrorCoversPower(on=False),
-            commands.MirrorCoverLocksPower(on=False),
-            do_lock=True,
-        )
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_openMirrorCovers.ack_in_progress, data=data
+        ):
+            self.log.info("Resetting mirror cover alarms and powering up locks.")
+
+            await self.send_commands(
+                commands.MirrorCoverLocksResetAlarm(),
+                commands.MirrorCoversResetAlarm(),
+                commands.MirrorCoverLocksPower(on=True),
+                do_lock=True,
+            )
+
+            self.log.info("Powering up mirror covers.")
+            await asyncio.sleep(self.heartbeat_interval)
+
+            for cover in [
+                MirrorCover.XPlus,
+                MirrorCover.XMinus,
+                MirrorCover.YPlus,
+                MirrorCover.YMinus,
+            ]:
+
+                self.log.info(f"Powering up mirror cover {cover.name}.")
+                await self.send_commands(
+                    commands.MirrorCoversPower(drive=cover.value - 1, on=True),
+                    do_lock=True,
+                )
+                await asyncio.sleep(self.heartbeat_interval)
+
+            for cover in [
+                MirrorCover.XPlus,
+                MirrorCover.XMinus,
+                MirrorCover.YPlus,
+                MirrorCover.YMinus,
+            ]:
+                self.log.info(f"Open up mirror cover {cover.name}.")
+                await self.send_commands(
+                    commands.MirrorCoversRetract(
+                        drive=cover.value - 1,
+                    ),
+                    do_lock=True,
+                )
+                await asyncio.sleep(self.heartbeat_interval)
+
+            self.log.info("Locking mirror covers")
+            await self.send_commands(
+                commands.MirrorCoverLocksMoveAll(deploy=True), do_lock=True
+            )
+
+            self.log.info("Power down mirror covers and locks.")
+            await asyncio.sleep(self.heartbeat_interval)
+
+            for cover in [
+                MirrorCover.XPlus,
+                MirrorCover.XMinus,
+                MirrorCover.YPlus,
+                MirrorCover.YMinus,
+            ]:
+                self.log.info(f"Power down mirror cover {cover.name}.")
+                await self.send_commands(
+                    commands.MirrorCoversPower(drive=cover.value - 1, on=False),
+                    do_lock=True,
+                )
+                await asyncio.sleep(self.heartbeat_interval)
+
+            await self.send_commands(
+                commands.MirrorCoverLocksPower(
+                    on=False,
+                ),
+                do_lock=True,
+            )
 
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command."""
