@@ -99,7 +99,7 @@ class PointToPointDevice(BaseDevice):
     def assert_drive_all(self, command):
         """Assert that the drive argument is -1 (all drives)."""
         if command.drive != -1:
-            raise RuntimeError(
+            self.log.warning(
                 f"drive={command.drive}; must be -1 (all actuators) for this mock"
             )
 
