@@ -462,16 +462,17 @@ class CcwOnlyCscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCas
                 for i in range(nskip):
                     await topic.next(flush=False, timeout=STD_TIMEOUT)
 
-            for topic in (
-                self.remote.evt_mirrorCoverLocksMotionState,
-                self.remote.evt_mirrorCoversMotionState,
-            ):
-                await self.assert_next_sample(
-                    topic=topic,
-                    state=DeployableMotionState.DEPLOYED,
-                    elementsState=[DeployableMotionState.DEPLOYED] * 4,
-                )
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoversMotionState,
+                state=DeployableMotionState.DEPLOYED,
+                elementsState=[DeployableMotionState.DEPLOYED] * 4,
+            )
 
+            await self.assert_next_sample(
+                topic=self.remote.evt_mirrorCoverLocksMotionState,
+                state=DeployableMotionState.RETRACTED,
+                elementsState=[DeployableMotionState.RETRACTED] * 4,
+            )
             expected_safety_data = {field: 0 for field in SAFETY_INTERLOCKS_FIELDS}
             await self.assert_next_sample(
                 topic=self.remote.evt_safetyInterlocks, **expected_safety_data
@@ -968,24 +969,31 @@ class CcwOnlyCscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCas
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_mirrorCoverLocksMotionState,
-                state=DeployableMotionState.DEPLOYED,
-                elementsState=[DeployableMotionState.DEPLOYED] * 4,
+                state=DeployableMotionState.RETRACTED,
+                elementsState=[DeployableMotionState.RETRACTED] * 4,
             )
             assert mirror_covers_device.motion_state() == DeployableMotionState.DEPLOYED
+            assert (
+                mirror_cover_locks_device.motion_state()
+                == DeployableMotionState.RETRACTED
+            )
+
+            await self.remote.cmd_openMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
+
+            assert (
+                mirror_covers_device.motion_state() == DeployableMotionState.RETRACTED
+            )
             assert (
                 mirror_cover_locks_device.motion_state()
                 == DeployableMotionState.DEPLOYED
             )
 
-            with pytest.raises(salobj.AckError):
-                await self.remote.cmd_openMirrorCovers.start(
-                    timeout=MIRROR_COVER_TIMEOUT
-                )
-
-            with pytest.raises(salobj.AckError):
-                await self.remote.cmd_closeMirrorCovers.start(
-                    timeout=MIRROR_COVER_TIMEOUT
-                )
+            await self.remote.cmd_closeMirrorCovers.start(timeout=MIRROR_COVER_TIMEOUT)
+            assert mirror_covers_device.motion_state() == DeployableMotionState.DEPLOYED
+            assert (
+                mirror_cover_locks_device.motion_state()
+                == DeployableMotionState.RETRACTED
+            )
 
     async def test_move_to_target(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED), salobj.Controller(
