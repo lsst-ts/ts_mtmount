@@ -39,5 +39,5 @@ class MirrorCoverLocksDevice(DeployableDevice):
         super().__init__(
             controller=controller,
             system_id=System.MIRROR_COVER_LOCKS,
-            start_deployed=True,
+            start_deployed=False,
         )
