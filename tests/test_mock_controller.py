@@ -142,14 +142,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             assert device.power_on
 
             # Issue a background command
-            assert device.actuator.position() == pytest.approx(device.deployed_position)
-            deploy_command = mtmount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, deploy=False
-            )
-            await self.run_command(command=deploy_command, use_read_loop=use_read_loop)
             assert device.actuator.position() == pytest.approx(
                 device.retracted_position
             )
+            deploy_command = mtmount.commands.MirrorCoverLocksMoveAll(
+                drive=-1, deploy=True
+            )
+            await self.run_command(command=deploy_command, use_read_loop=use_read_loop)
+            assert device.actuator.position() == pytest.approx(device.deployed_position)
 
             # Issue a command (AzimuthTrackTarget) that gets no Done reply
             # but first enable the device and tracking
@@ -1366,12 +1366,12 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 elif reply.id == mtmount.ReplyId.LIMITS:
                     limits_systems.append(reply.system)
                     assert reply.limits == [0]
-                elif reply.id in (
-                    mtmount.ReplyId.MIRROR_COVERS_MOTION_STATE,
-                    mtmount.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE,
-                ):
+                elif reply.id == mtmount.ReplyId.MIRROR_COVERS_MOTION_STATE:
                     assert reply.state == DeployableMotionState.DEPLOYED
                     assert reply.elementsState == [DeployableMotionState.DEPLOYED] * 4
+                elif reply.id == mtmount.ReplyId.MIRROR_COVER_LOCKS_MOTION_STATE:
+                    assert reply.state == DeployableMotionState.RETRACTED
+                    assert reply.elementsState == [DeployableMotionState.RETRACTED] * 4
                 elif reply.id == mtmount.ReplyId.MOTION_CONTROLLER_STATE:
                     motion_controller_state_systems.append(reply.system)
                     nelts = self.controller.motion_controller_state_nelts[reply.system]
