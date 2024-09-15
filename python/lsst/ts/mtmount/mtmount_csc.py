@@ -1646,6 +1646,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
         if not self.disable_devices_task.done():
             self.log.info("Ignoring a stop command: already disabling devices")
             return
+        if not self.open_or_close_mirror_cover_task.done():
+            self.log.warning("Currently opening or closing mirror cover.")
+            self.open_or_close_mirror_cover_task.cancel()
+            try:
+                await self.open_or_close_mirror_cover_task
+            except asyncio.CancelledError:
+                self.log.info("Open/close task cancelled.")
+
         await self.cmd_stop.ack_in_progress(data, timeout=STOP_TIMEOUT)
         await self.send_commands(
             commands.BothAxesStop(),
