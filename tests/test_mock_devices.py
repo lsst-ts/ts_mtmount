@@ -158,7 +158,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 drive=-1, deploy=False
             ),
             stop_command=mtmount.commands.MirrorCoverLocksStop(drive=-1),
-            start_deployed=True,
+            start_deployed=False,
             move_min_timeout=0.5,
             power_on_min_timeout=None,
         )
