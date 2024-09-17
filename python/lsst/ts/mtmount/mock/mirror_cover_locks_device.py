@@ -39,5 +39,11 @@ class MirrorCoverLocksDevice(DeployableDevice):
         super().__init__(
             controller=controller,
             system_id=System.MIRROR_COVER_LOCKS,
-            start_deployed=True,
+            start_deployed=False,
         )
+
+    def do_lock(self, command):
+        return self.move(position=self.deployed_position, command=command)
+
+    def do_unlock(self, command):
+        return self.move(position=self.retracted_position, command=command)

@@ -78,6 +78,8 @@ __all__ = [
     "MirrorCoverLocksPower",
     "MirrorCoverLocksResetAlarm",
     "MirrorCoverLocksStop",
+    "MirrorCoverLocksLock",
+    "MirrorCoverLocksUnlock",
     "MirrorCoversDeploy",
     "MirrorCoversPower",
     "MirrorCoversResetAlarm",
@@ -719,6 +721,28 @@ class MirrorCoverLocksStop(BaseCommand):
     )
 
 
+class MirrorCoverLocksLock(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVER_LOCKS_LOCK,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
+            ),
+        ),
+    )
+
+
+class MirrorCoverLocksUnlock(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.MIRROR_COVER_LOCKS_UNLOCK,
+        (
+            field_info.IntFieldInfo(
+                name="drive", doc="Drive index: one of -1 (all), 0, 1, 2, 3", default=-1
+            ),
+        ),
+    )
+
+
 """
 Unsupported mirror cover commands:
 
@@ -974,6 +998,8 @@ Commands = (
     MirrorCoverLocksPower,
     MirrorCoverLocksResetAlarm,
     MirrorCoverLocksStop,
+    MirrorCoverLocksLock,
+    MirrorCoverLocksUnlock,
     MirrorCoversDeploy,
     MirrorCoversRetract,
     MirrorCoversPower,

@@ -53,30 +53,8 @@ class MTMountCcwOnlyCsc(MTMountCsc):
         """
         raise ExpectedError("Command not available in CCW only version of CSC.")
 
-    async def do_closeMirrorCovers(self, data):
-        """Handle the closeMirrorCovers command.
-
-        Raises
-        ------
-        NotImplementedError
-            This CSC is for testing the CCW with the Rotator only. All MTMount
-            methods have been disabled.
-        """
-        raise ExpectedError("Command not available in CCW only version of CSC.")
-
     async def do_homeBothAxes(self, data):
         """Handle the homeBothAxes command.
-
-        Raises
-        ------
-        NotImplementedError
-            This CSC is for testing the CCW with the Rotator only. All MTMount
-            methods have been disabled.
-        """
-        raise ExpectedError("Command not available in CCW only version of CSC.")
-
-    async def do_openMirrorCovers(self, data):
-        """Handle the openMirrorCovers command.
 
         Raises
         ------
