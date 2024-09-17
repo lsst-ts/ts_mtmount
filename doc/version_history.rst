@@ -6,6 +6,40 @@
 Version History
 ###############
 
+v0.30.0
+-------
+* In ``MTMountCSC``:
+
+  * Update closeMirrorCovers to operate one mirror cover at a time.
+  
+  * Update openMirrorCovers to operate one mirror cover at a time.
+  
+  * Update the stop command to handle stopping closing/opening mirror covers.
+
+* Update commands module to add 2 missing TMA commands, MirrorCoverLocksLock and MirrorCoverLocksUnlock.
+
+* Update mock/mirror_cover_locks_device to add lock and unlock commands.
+
+* Update MTMountCcwOnly to allow operating the mirror covers.
+
+* Update mock/point_to_point_device to allow operating the mirror covers one petal at a time.
+
+  This commits turns an exception into a warning to indicate that it is controlling multiple axis as one.
+
+* In mock/mirror_cover_locks_device, update initial status of the mirror cover locks to be RETRACTED instead of DEPLOYED.
+
+  The actual mirror covers have a slightly different behavior than it was initially implemented. When the cover is deployed the locks are retracted and when the covers are retracted the locks are deployed.
+
+* Update ccw only CSC tests to update mirror covers test, now that it is allowed by the CSC and to account for the new cover/lock behavior.
+
+* Update CSC unit tests to account for the new cover/lock bahavior.
+
+* Update MockController tests to account for change in the mirror cover behavior.
+
+* Update mock_devices unit tests to account for change in the mirror cover behavior.
+
+* Add information about the mirror covers in the TMA Interface document.
+
 v0.29.0
 -------
 
