@@ -248,3 +248,16 @@ Here are some of the most important parameters:
 * [Min|Max]SoftwareLimit: the software position limits.
 * [Negative|Positive]SoftwareLimitEnable: are the software position limits enabled?
 * [Negative|Positive]LimitSwitchEnable: are the direction inhibit limit switches enabled?
+
+Mirror Cover and Mirror Cover Locks
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The mirror cover operation has the following behavior:
+
+* When the mirror covers are closed (light obstructed) they are "deployed".
+* When the mirror covers are open (light reaches the M1M3 mirror) they are "retracted".
+* When the mirror covers are closed (deployed), the mirror cover locks are "retracted".
+* When the mirror covers are open (retracted), the mirror cover locks are "deployed".
+
+Deploying the mirror cover locks when the covers are retracted will prevent the covers from moving and obstructing the light path.
+
