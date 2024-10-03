@@ -736,7 +736,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             self.log.exception(err_msg)
             await self.fault(code=enums.CscErrorCode.COULD_NOT_CONNECT, report=err_msg)
-            return
+            raise salobj.ExpectedError(err_msg)
 
         # Run the telemetry client as a background process.
         args = [
@@ -755,7 +755,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.fault(
                 code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg
             )
-            return
+            raise salobj.ExpectedError(err_msg)
         try:
             await self.mtmount_remote.tel_cameraCableWrap.next(
                 flush=False, timeout=TELEMETRY_START_TIMEOUT
@@ -766,6 +766,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.fault(
                 code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg
             )
+            raise salobj.ExpectedError(err_msg)
         self.monitor_telemetry_client_task = asyncio.create_task(
             self.monitor_telemetry_client()
         )
