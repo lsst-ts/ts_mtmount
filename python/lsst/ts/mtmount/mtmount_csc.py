@@ -562,7 +562,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await super().begin_start(data)
         await self.cmd_start.ack_in_progress(
             data=data,
-            timeout=self.config.connection_timeout,
+            timeout=self.config.connection_timeout * 2.0,
         )
         self.connect_task.cancel()
         self.connect_task = asyncio.create_task(self.connect())
@@ -726,7 +726,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.set_thermal_task.cancel()
             self.read_loop_task = asyncio.create_task(self.read_loop())
             self.log.debug("Connection made; requesting current state")
-            await self.send_command(commands.StateInfo(), do_lock=True)
+            await self.send_command(
+                commands.StateInfo(),
+                do_lock=True,
+                timeout=self.config.ack_timeout_long + self.config.connection_timeout,
+            )
             await self.send_command(commands.GetActualSettings(), do_lock=True)
             self.log.debug("Connected to the low-level controller")
         except Exception as e:
@@ -736,7 +740,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             self.log.exception(err_msg)
             await self.fault(code=enums.CscErrorCode.COULD_NOT_CONNECT, report=err_msg)
-            return
+            raise salobj.ExpectedError(err_msg)
 
         # Run the telemetry client as a background process.
         args = [
@@ -755,7 +759,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.fault(
                 code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg
             )
-            return
+            raise salobj.ExpectedError(err_msg)
         try:
             await self.mtmount_remote.tel_cameraCableWrap.next(
                 flush=False, timeout=TELEMETRY_START_TIMEOUT
@@ -766,6 +770,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             await self.fault(
                 code=enums.CscErrorCode.TELEMETRY_CLIENT_ERROR, report=err_msg
             )
+            raise salobj.ExpectedError(err_msg)
         self.monitor_telemetry_client_task = asyncio.create_task(
             self.monitor_telemetry_client()
         )
