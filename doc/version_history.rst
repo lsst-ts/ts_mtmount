@@ -6,6 +6,19 @@
 Version History
 ###############
 
+v0.30.1
+-------
+
+* In ``MTMountCSC``:
+
+  * Fix a logic error in the ``connect`` method, that is called during ``begin_start``, which would transition the CSC to fault upon any error but would not raise any exception.
+    This was causing the CSC to continue executing the start command as if nothing had happened, so the CSC would transition to ``Fault`` and then proceed to transition to ``Disabled``.
+    Now the CSC will go to fault and interrupt the command execution by raising an exception, causing the command to fail, as it should.
+  
+  * Increase the timeout of the first startup request upon connecting to the mount controller.
+    The controller is delaying the initial response from time to time which would cause the CSC to fail the transition, even though the response would eventually come.
+    By using a "connect" timeout instead of a regular command timeout, we expect this issue will disappear.
+
 v0.30.0
 -------
 * In ``MTMountCSC``:
