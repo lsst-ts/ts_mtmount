@@ -1197,12 +1197,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.client.write(command_bytes)
         initial_timeout = self.config.ack_timeout if timeout is None else timeout
         new_timeout = await asyncio.wait_for(command_futures.ack, initial_timeout)
+        timeout_buffer = TIMEOUT_BUFFER if timeout is None else TIMEOUT_BUFFER + timeout
         if not command_futures.done.done():
             try:
                 await asyncio.wait_for(
                     command_futures.done,
                     timeout=(
-                        (TIMEOUT_BUFFER + new_timeout)
+                        (timeout_buffer + new_timeout)
                         if new_timeout is not None
                         else None
                     ),
@@ -1210,7 +1211,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except asyncio.TimeoutError:
                 self.command_futures_dict.pop(command.sequence_id, None)
                 raise asyncio.TimeoutError(
-                    f"Command {command} timed out after {new_timeout + TIMEOUT_BUFFER} seconds"
+                    f"Command {command} timed out after {new_timeout + timeout_buffer} seconds."
                 )
         return command_futures
 
