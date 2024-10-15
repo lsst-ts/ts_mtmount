@@ -564,9 +564,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
             data=data,
             timeout=self.config.connection_timeout * 2.0,
         )
-        self.connect_task.cancel()
-        self.connect_task = asyncio.create_task(self.connect())
-        await self.connect_task
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_start.ack_in_progress, data=data
+        ):
+            self.connect_task.cancel()
+            self.connect_task = asyncio.create_task(self.connect())
+            await self.connect_task
 
     async def end_standby(self, data):
         await super().begin_standby(data)
