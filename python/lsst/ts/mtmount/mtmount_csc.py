@@ -267,6 +267,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
     # reports all limits rounded to 2 decimal places.
     limits_margin = 0.01
 
+    # Velocity to use when parking/unparking
+    # the TMA (in deg/s)
+    park_velocity = 0.1
+    # Acceleration to use when parking/unparking
+    # the TMA (in deg/s^2)
+    park_acceleration = 0.1
+
     def __init__(
         self,
         config_dir=None,
@@ -1723,9 +1730,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info(f"Moving telescope to {park_position.name} park position.")
 
             cmd_futures = await self.send_command(
-                commands.BothAxesMove(
-                    azimuth=park_position_altaz["azimuth"],
-                    elevation=park_position_altaz["elevation"],
+                commands.ElevationMove(
+                    position=park_position_altaz["elevation"],
+                    velocity=self.park_velocity,
+                    acceleration=self.park_acceleration,
                 ),
                 do_lock=True,
             )
@@ -1818,9 +1826,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
             cmd_futures = await self.send_command(
-                commands.BothAxesMove(
-                    azimuth=unpark_azimuth,
-                    elevation=unpark_elevation,
+                commands.ElevationMove(
+                    position=unpark_elevation,
+                    velocity=self.park_velocity,
+                    acceleration=self.park_acceleration,
                 ),
                 do_lock=True,
             )
