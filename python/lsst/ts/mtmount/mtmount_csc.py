@@ -488,6 +488,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # but the simulation_mode attribute is usually set by super().start().
         self.evt_simulationMode.set(mode=simulation_mode)
 
+        self.consecutive_missed_track_target_commands = 0
+        self.max_missed_track_target_commands = 2
+
     @property
     def has_command(self):
         """Does the CSC have command of the low-level controller?"""
@@ -1629,12 +1632,26 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.send_command(
                     track_command, do_lock=False, timeout=TRACK_COMMAND_TIMEOUT
                 )
+                self.consecutive_missed_track_target_commands = 0
             except asyncio.TimeoutError as e:
                 message = str(e)
                 await self.fault(
                     code=enums.CscErrorCode.TRACK_TARGET_TIMED_OUT, report=message
                 )
                 raise salobj.ExpectedError(message)
+            except salobj.ExpectedError:
+                self.consecutive_missed_track_target_commands += 1
+                self.log.exception(
+                    "Missed track target command, "
+                    f"{self.consecutive_missed_track_target_commands} of "
+                    f"{self.max_missed_track_target_commands}."
+                )
+                if (
+                    self.consecutive_missed_track_target_commands
+                    >= self.max_missed_track_target_commands
+                ):
+                    raise
+
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
@@ -1653,6 +1670,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_startTracking.ack_in_progress(
             data, timeout=START_TRACKING_TIMEOUT
         )
+        self.consecutive_missed_track_target_commands = 0
         async with self.main_axes_lock:
             await self.send_command(commands.BothAxesEnableTracking(), do_lock=False)
 
