@@ -490,6 +490,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.evt_simulationMode.set(mode=simulation_mode)
 
         self.command_history = collections.deque(maxlen=100)
+        self.command_reply_history = collections.deque(maxlen=100)
 
     @property
     def has_command(self):
@@ -1016,14 +1017,31 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def handle_summary_state(self):
         if self.summary_state == salobj.State.FAULT:
-            await self.disable_devices()
-            command_history = (
-                f"Command history contains {len(self.command_history)} commands:\n\n"
-            )
-            for command in self.command_history:
-                command_history += f"{command.decode()}\n"
-            self.log.error(command_history)
-            self.command_history.clear()
+            try:
+                await self.disable_devices()
+            finally:
+                self.log.info("Logging command history.")
+                try:
+                    command_history = (
+                        f"Command history contains {len(self.command_history)} commands. "
+                        f"Response history containd {len(self.command_reply_history)}.\n\n"
+                    )
+                    if len(self.command_history) > 0:
+                        command_history += "Command history:\n\n"
+                        for command in self.command_history:
+                            command_history += f"{command}\n"
+
+                    if len(self.command_reply_history):
+                        command_history += "Reply history:\n\n"
+
+                        for reply in self.command_reply_history:
+                            command_history += f"{reply}\n"
+
+                    self.log.error(command_history)
+                except Exception:
+                    self.log.exception("Failed to log command history.")
+        self.command_history.clear()
+        self.command_reply_history.clear()
 
     async def set_thermal_on(self, system_id, setpoint):
         """Turn on a thermal controller with a specified setpoint.
@@ -1942,6 +1960,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_command_reply(self, reply):
         """Handle a ReplyId.CMD_x reply."""
         self.log.log(LOG_LEVEL_COMMANDS, "Handle command reply %s", reply)
+        self.command_reply_history.append(f"{reply}")
         reply_id = reply.id
         sequence_id = reply.sequenceId
         if reply_id == enums.ReplyId.CMD_ACKNOWLEDGED:
