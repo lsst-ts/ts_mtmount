@@ -22,6 +22,7 @@
 __all__ = ["MTMountCsc", "run_mtmount"]
 
 import asyncio
+import collections
 import contextlib
 import functools
 import inspect
@@ -487,6 +488,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Needed so `start` sees it. The value has been checked at this point,
         # but the simulation_mode attribute is usually set by super().start().
         self.evt_simulationMode.set(mode=simulation_mode)
+
+        self.command_history = collections.deque(maxlen=100)
 
     @property
     def has_command(self):
@@ -997,6 +1000,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_summary_state(self):
         if self.summary_state == salobj.State.FAULT:
             await self.disable_devices()
+            command_history = (
+                f"Command history contains {len(self.command_history)} commands:\n\n"
+            )
+            for command in self.command_history:
+                command_history += f"{command.decode()}\n"
+            self.log.error(command_history)
+            self.command_history.clear()
 
     async def set_thermal_on(self, system_id, setpoint):
         """Turn on a thermal controller with a specified setpoint.
@@ -1204,6 +1214,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_futures_dict[command.sequence_id] = command_futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
+        self.command_history.append(command_bytes)
         await self.client.write(command_bytes)
         initial_timeout = self.config.ack_timeout if timeout is None else timeout
         new_timeout = await asyncio.wait_for(command_futures.ack, initial_timeout)
