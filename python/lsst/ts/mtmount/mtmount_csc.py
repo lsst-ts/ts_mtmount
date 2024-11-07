@@ -471,7 +471,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
 
         self.rotator = salobj.Remote(
-            domain=self.domain, name="MTRotator", include=["rotation"]
+            domain=self.domain, name="MTRotator", include=["rotation", "summaryState"]
         )
 
         self.mtmount_remote = salobj.Remote(
@@ -583,6 +583,23 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def end_standby(self, data):
         await super().begin_standby(data)
+        try:
+            rotator_summary_state = await self.rotator.evt_summaryState.aget(
+                timeout=self.config.connection_timeout
+            )
+        except asyncio.TimeoutError:
+            self.log.warning("Could not determine rotator state. Continuing.")
+        else:
+            try:
+                if rotator_summary_state.summaryState == salobj.State.ENABLED:
+                    self.log.warning(
+                        "Rotator in Enabled state. Disabling Rotator so it won't fault."
+                    )
+                    await self.rotator.cmd_disable.start(
+                        timeout=self.config.connection_timeout
+                    )
+            except asyncio.TimeoutError:
+                self.log.warning("Could not disable rotator. Continuing.")
         await self.disconnect()
 
     @staticmethod
