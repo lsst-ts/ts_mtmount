@@ -1732,7 +1732,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Ignoring a stopTracking command: already disabling devices")
             return
         await self.cmd_stopTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
-        await self.send_command(commands.BothAxesStop(), do_lock=False)
+        async with self.main_axes_lock:
+            await self.send_command(commands.BothAxesStop(), do_lock=False)
 
     async def do_applySettingsSet(self, data):
         """Handle the applySettingsSet command."""
