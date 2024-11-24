@@ -1650,6 +1650,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         slow_lock_task = asyncio.create_task(print_slow_lock(data.taiTime))
 
         async with self.main_axes_lock:
+            if not self.track_started:
+                raise salobj.ExpectedError("Tracking not started.")
             slow_lock_task.cancel()
             # Note: the time now (the time at which the lock was obtained)
             # is essentially the same as the time at which the command will be
