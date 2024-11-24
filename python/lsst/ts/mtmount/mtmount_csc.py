@@ -381,6 +381,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # issue with tracking where a command is sent but seems to vanish.
         self.cmd_trackTarget.allow_multiple_callbacks = True
 
+        # Keep track of start tracking command issued so it is not
+        # sent more than once.
+        self.track_started = False
+
         # Dict of system ID: SystemStateInfo;
         # this provides useful information for handling replies and also
         # initializes the relevant fields of the events. Initialization is
@@ -1699,8 +1703,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_startTracking.ack_in_progress(
             data, timeout=START_TRACKING_TIMEOUT
         )
-        async with self.main_axes_lock:
-            await self.send_command(commands.BothAxesEnableTracking(), do_lock=False)
+        if not self.track_started:
+            self.track_started = True
+            async with self.main_axes_lock:
+                await self.send_command(
+                    commands.BothAxesEnableTracking(), do_lock=False
+                )
+        else:
+            self.log.info("Tracking already started, not sending command again.")
 
     async def do_stop(self, data):
         """Handle the stop command."""
@@ -1717,6 +1727,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.info("Open/close task cancelled.")
 
         await self.cmd_stop.ack_in_progress(data, timeout=STOP_TIMEOUT)
+        self.track_started = False
         await self.send_commands(
             commands.BothAxesStop(),
             commands.CameraCableWrapStop(),
@@ -1733,6 +1744,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             return
         await self.cmd_stopTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
         async with self.main_axes_lock:
+            self.track_started = False
             await self.send_command(commands.BothAxesStop(), do_lock=False)
 
     async def do_applySettingsSet(self, data):
@@ -1890,6 +1902,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def fault(self, code, report, traceback=""):
         self.should_be_commander = False
+        self.track_started = False
         await super().fault(code=code, report=report, traceback=traceback)
 
     async def handle_available_settings(self, reply):
