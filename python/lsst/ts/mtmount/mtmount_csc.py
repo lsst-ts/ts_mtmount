@@ -363,6 +363,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Log a warning every time this transitions to True.
         self.rotator_position_error_excessive = False
 
+        self.skippable_error_regexp = re.compile(
+            r"Command with id (\d+) has timed out after not receiving accept for"
+        )
+
         super().__init__(
             name="MTMount",
             index=0,
@@ -495,6 +499,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         self.command_history = collections.deque(maxlen=100)
         self.command_reply_history = collections.deque(maxlen=100)
+        self.subsequent_failed_track_target = 0
+        self.max_subsequent_failed_track_target = 2
 
     @property
     def has_command(self):
@@ -1691,6 +1697,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     code=enums.CscErrorCode.TRACK_TARGET_TIMED_OUT, report=message
                 )
                 raise salobj.ExpectedError(message)
+            except Exception as e:
+                self.log.exception(
+                    f"Track target command failed, track_started={self.track_started}."
+                )
+                await self.log_command_history()
+                no_skip_error = self.skippable_error_regexp.match(f"{e!r}") is None
+                if no_skip_error or (
+                    self.subsequent_failed_track_target
+                    >= self.max_subsequent_failed_track_target
+                ):
+                    raise e
+                self.subsequent_failed_track_target += 1
+
+            else:
+                self.subsequent_failed_track_target = 0
+
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
