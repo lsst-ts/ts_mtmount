@@ -6,6 +6,41 @@
 Version History
 ###############
 
+v0.31.0
+-------
+
+* In ``MTMountCSC``:
+
+  * Updated how _basic_send_command handles timeouts.
+    If no timeout is specified, use the current strategy.
+    If a timeout is specified add that to the total timeout.
+
+  * Report in_progress while executing the start command.
+
+  * Updated commands used to park/unpark the telescope based on what the EUI does.
+
+  * Keep a list of commands sent and log them in case of a fault.
+
+  * When MTMount goes to fault, check if rotator is enabled and send it to DISABLED to avoid causing it to go to Fault.
+
+  * Lock the main axes when stopping track.
+
+  * Keep track of track_started command so it is not sent more than once per tracking.
+
+  * Updated trackTarget command to raise an exception if tracking is not started.
+    
+    This was previously handled sort of by the TMA software but now that the CSC is keeping track of whether it started tracking or not, we can reject the command without having to send it out to the controller.
+
+  * Updated do_startTracking to log command history if BothAxesEnableTracking command fails.
+
+  * Updated do_trackTarget to allow skipping commands that had timeout internally on the TMA side and to log the command history when track target command fails.
+    
+    Sometimes the TMA software will have timeouts when sending track demands internally.
+    We noticed that, most times it is ok to skip one or two subsequent failures.
+    This change ensures that the CSC will ignore these particular issues, so long as they happen at most a max_subsequent_failed_track_target number of times.
+    In any case, the CSC will log the command history when this happens so we can track down what was going on.
+
+
 v0.30.1
 -------
 
