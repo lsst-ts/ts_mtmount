@@ -1711,9 +1711,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
         if not self.track_started:
             async with self.main_axes_lock:
-                await self.send_command(
-                    commands.BothAxesEnableTracking(), do_lock=False
-                )
+                try:
+                    await self.send_command(
+                        commands.BothAxesEnableTracking(), do_lock=False
+                    )
+                except Exception:
+                    await self.log_command_history()
+                    raise
             self.track_started = True
         else:
             self.log.info("Tracking already started, not sending command again.")
