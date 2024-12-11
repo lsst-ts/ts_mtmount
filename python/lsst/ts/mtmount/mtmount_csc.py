@@ -22,6 +22,7 @@
 __all__ = ["MTMountCsc", "run_mtmount"]
 
 import asyncio
+import collections
 import contextlib
 import functools
 import inspect
@@ -267,6 +268,13 @@ class MTMountCsc(salobj.ConfigurableCsc):
     # reports all limits rounded to 2 decimal places.
     limits_margin = 0.01
 
+    # Velocity to use when parking/unparking
+    # the TMA (in deg/s)
+    park_velocity = 0.1
+    # Acceleration to use when parking/unparking
+    # the TMA (in deg/s^2)
+    park_acceleration = 0.1
+
     def __init__(
         self,
         config_dir=None,
@@ -355,6 +363,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Log a warning every time this transitions to True.
         self.rotator_position_error_excessive = False
 
+        self.skippable_error_regexp = re.compile(
+            r"Command with id (\d+) has timed out after not receiving accept for"
+        )
+
         super().__init__(
             name="MTMount",
             index=0,
@@ -372,6 +384,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # this is meant to be temporary to help diagnose an intermittent
         # issue with tracking where a command is sent but seems to vanish.
         self.cmd_trackTarget.allow_multiple_callbacks = True
+
+        # Keep track of start tracking command issued so it is not
+        # sent more than once.
+        self.track_started = False
 
         # Dict of system ID: SystemStateInfo;
         # this provides useful information for handling replies and also
@@ -463,7 +479,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 )
 
         self.rotator = salobj.Remote(
-            domain=self.domain, name="MTRotator", include=["rotation"]
+            domain=self.domain, name="MTRotator", include=["rotation", "summaryState"]
         )
 
         self.mtmount_remote = salobj.Remote(
@@ -480,6 +496,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Needed so `start` sees it. The value has been checked at this point,
         # but the simulation_mode attribute is usually set by super().start().
         self.evt_simulationMode.set(mode=simulation_mode)
+
+        self.command_history = collections.deque(maxlen=100)
+        self.command_reply_history = collections.deque(maxlen=100)
+        self.subsequent_failed_track_target = 0
+        self.max_subsequent_failed_track_target = 2
 
     @property
     def has_command(self):
@@ -564,12 +585,32 @@ class MTMountCsc(salobj.ConfigurableCsc):
             data=data,
             timeout=self.config.connection_timeout * 2.0,
         )
-        self.connect_task.cancel()
-        self.connect_task = asyncio.create_task(self.connect())
-        await self.connect_task
+        async with self.in_progress_loop(
+            ack_in_progress=self.cmd_start.ack_in_progress, data=data
+        ):
+            self.connect_task.cancel()
+            self.connect_task = asyncio.create_task(self.connect())
+            await self.connect_task
 
     async def end_standby(self, data):
         await super().begin_standby(data)
+        try:
+            rotator_summary_state = await self.rotator.evt_summaryState.aget(
+                timeout=self.config.connection_timeout
+            )
+        except asyncio.TimeoutError:
+            self.log.warning("Could not determine rotator state. Continuing.")
+        else:
+            try:
+                if rotator_summary_state.summaryState == salobj.State.ENABLED:
+                    self.log.warning(
+                        "Rotator in Enabled state. Disabling Rotator so it won't fault."
+                    )
+                    await self.rotator.cmd_disable.start(
+                        timeout=self.config.connection_timeout
+                    )
+            except asyncio.TimeoutError:
+                self.log.warning("Could not disable rotator. Continuing.")
         await self.disconnect()
 
     @staticmethod
@@ -986,7 +1027,35 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def handle_summary_state(self):
         if self.summary_state == salobj.State.FAULT:
-            await self.disable_devices()
+            try:
+                await self.disable_devices()
+            finally:
+                await self.log_command_history()
+        self.command_history.clear()
+        self.command_reply_history.clear()
+
+    async def log_command_history(self):
+        """Log the command history."""
+        self.log.info("Logging command history.")
+        try:
+            command_history = (
+                f"Command history contains {len(self.command_history)} commands. "
+                f"Response history contains {len(self.command_reply_history)}.\n\n"
+            )
+            if len(self.command_history) > 0:
+                command_history += "Command history:\n\n"
+                for command in self.command_history:
+                    command_history += f"{command}\n"
+
+            if len(self.command_reply_history):
+                command_history += "Reply history:\n\n"
+
+                for reply in self.command_reply_history:
+                    command_history += f"{reply}\n"
+
+            self.log.error(command_history)
+        except Exception:
+            self.log.exception("Failed to log command history.")
 
     async def set_thermal_on(self, system_id, setpoint):
         """Turn on a thermal controller with a specified setpoint.
@@ -1194,15 +1263,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_futures_dict[command.sequence_id] = command_futures
         command_bytes = command.encode()
         self.log.log(LOG_LEVEL_COMMANDS, "Send command %s", command_bytes)
+        self.command_history.append(command_bytes)
         await self.client.write(command_bytes)
         initial_timeout = self.config.ack_timeout if timeout is None else timeout
         new_timeout = await asyncio.wait_for(command_futures.ack, initial_timeout)
+        timeout_buffer = TIMEOUT_BUFFER if timeout is None else TIMEOUT_BUFFER + timeout
         if not command_futures.done.done():
             try:
                 await asyncio.wait_for(
                     command_futures.done,
                     timeout=(
-                        (TIMEOUT_BUFFER + new_timeout)
+                        (timeout_buffer + new_timeout)
                         if new_timeout is not None
                         else None
                     ),
@@ -1210,7 +1281,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             except asyncio.TimeoutError:
                 self.command_futures_dict.pop(command.sequence_id, None)
                 raise asyncio.TimeoutError(
-                    f"Command {command} timed out after {new_timeout + TIMEOUT_BUFFER} seconds"
+                    f"Command {command} timed out after {new_timeout + timeout_buffer} seconds."
                 )
         return command_futures
 
@@ -1585,6 +1656,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         slow_lock_task = asyncio.create_task(print_slow_lock(data.taiTime))
 
         async with self.main_axes_lock:
+            if not self.track_started:
+                raise salobj.ExpectedError("Tracking not started.")
             slow_lock_task.cancel()
             # Note: the time now (the time at which the lock was obtained)
             # is essentially the same as the time at which the command will be
@@ -1624,6 +1697,22 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     code=enums.CscErrorCode.TRACK_TARGET_TIMED_OUT, report=message
                 )
                 raise salobj.ExpectedError(message)
+            except Exception as e:
+                self.log.exception(
+                    f"Track target command failed, track_started={self.track_started}."
+                )
+                await self.log_command_history()
+                no_skip_error = self.skippable_error_regexp.match(f"{e!r}") is None
+                if no_skip_error or (
+                    self.subsequent_failed_track_target
+                    >= self.max_subsequent_failed_track_target
+                ):
+                    raise e
+                self.subsequent_failed_track_target += 1
+
+            else:
+                self.subsequent_failed_track_target = 0
+
         await self.evt_target.set_write(
             azimuth=data.azimuth,
             elevation=data.elevation,
@@ -1642,8 +1731,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
         await self.cmd_startTracking.ack_in_progress(
             data, timeout=START_TRACKING_TIMEOUT
         )
-        async with self.main_axes_lock:
-            await self.send_command(commands.BothAxesEnableTracking(), do_lock=False)
+        if not self.track_started:
+            async with self.main_axes_lock:
+                try:
+                    await self.send_command(
+                        commands.BothAxesEnableTracking(), do_lock=False
+                    )
+                except Exception:
+                    await self.log_command_history()
+                    raise
+            self.track_started = True
+        else:
+            self.log.info("Tracking already started, not sending command again.")
 
     async def do_stop(self, data):
         """Handle the stop command."""
@@ -1660,6 +1759,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 self.log.info("Open/close task cancelled.")
 
         await self.cmd_stop.ack_in_progress(data, timeout=STOP_TIMEOUT)
+        self.track_started = False
         await self.send_commands(
             commands.BothAxesStop(),
             commands.CameraCableWrapStop(),
@@ -1675,7 +1775,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info("Ignoring a stopTracking command: already disabling devices")
             return
         await self.cmd_stopTracking.ack_in_progress(data, timeout=STOP_TIMEOUT)
-        await self.send_command(commands.BothAxesStop(), do_lock=False)
+        async with self.main_axes_lock:
+            self.track_started = False
+            await self.send_command(commands.BothAxesStop(), do_lock=False)
 
     async def do_applySettingsSet(self, data):
         """Handle the applySettingsSet command."""
@@ -1719,9 +1821,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             self.log.info(f"Moving telescope to {park_position.name} park position.")
 
             cmd_futures = await self.send_command(
-                commands.BothAxesMove(
-                    azimuth=park_position_altaz["azimuth"],
-                    elevation=park_position_altaz["elevation"],
+                commands.ElevationMove(
+                    position=park_position_altaz["elevation"],
+                    velocity=self.park_velocity,
+                    acceleration=self.park_acceleration,
                 ),
                 do_lock=True,
             )
@@ -1814,9 +1917,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
             cmd_futures = await self.send_command(
-                commands.BothAxesMove(
-                    azimuth=unpark_azimuth,
-                    elevation=unpark_elevation,
+                commands.ElevationMove(
+                    position=unpark_elevation,
+                    velocity=self.park_velocity,
+                    acceleration=self.park_acceleration,
                 ),
                 do_lock=True,
             )
@@ -1830,6 +1934,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     async def fault(self, code, report, traceback=""):
         self.should_be_commander = False
+        self.track_started = False
         await super().fault(code=code, report=report, traceback=traceback)
 
     async def handle_available_settings(self, reply):
@@ -1901,6 +2006,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def handle_command_reply(self, reply):
         """Handle a ReplyId.CMD_x reply."""
         self.log.log(LOG_LEVEL_COMMANDS, "Handle command reply %s", reply)
+        self.command_reply_history.append(f"{reply}")
         reply_id = reply.id
         sequence_id = reply.sequenceId
         if reply_id == enums.ReplyId.CMD_ACKNOWLEDGED:
