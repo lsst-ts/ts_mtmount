@@ -6,6 +6,12 @@
 Version History
 ###############
 
+v0.31.1
+-------
+
+* Add placeholders for lock/unlock commands.
+* Update conda recipe.
+
 v0.31.0
 -------
 
