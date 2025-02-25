@@ -1932,6 +1932,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 settings_to_apply=[],
             )
 
+    async def do_lockMotion(self, data):
+        self.assert_enabled()
+        raise NotImplementedError("Command not implemented.")
+
+    async def do_unlockMotion(self, data):
+        self.assert_enabled()
+        raise NotImplementedError("Command not implemented.")
+
     async def fault(self, code, report, traceback=""):
         self.should_be_commander = False
         self.track_started = False
