@@ -81,6 +81,13 @@ logging.basicConfig()
 
 
 class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.log = logging.getLogger(type(cls).__name__)
+
+    def setUp(self):
+        self.mock_controller = None
+
     def basic_make_csc(
         self, initial_state, config_dir, simulation_mode, internal_mock_controller
     ):
@@ -1534,6 +1541,11 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                         **good_kwargs, timeout=STD_TIMEOUT
                     )
 
+            for device in mock_azimuth, mock_elevation:
+                assert device.power_on
+                assert device.enabled
+                assert device.tracking_enabled
+
             # Test that out-of-range tracking commands are rejected,
             # while leaving the mock devices enabled and tracking.
             for (
@@ -1571,15 +1583,31 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                     azimuthVelocity=azimuth_velocity,
                     elevationVelocity=elevation_velocity,
                 )
+                self.log.info(f"{bad_kwargs=}")
                 with salobj.assertRaisesAckError():
                     await self.remote.cmd_trackTarget.set_start(
                         **bad_kwargs, timeout=STD_TIMEOUT
                     )
-            for device in mock_azimuth, mock_elevation:
-                assert device.power_on
-                assert device.enabled
-                assert device.tracking_enabled
+                for i in range(5):
+                    good_kwargs = self.make_track_target_kwargs(
+                        azimuth=initial_azimuth + 3,
+                        elevation=initial_elevation + 1,
+                        azimuthVelocity=0,
+                        elevationVelocity=0,
+                    )
+                    await self.remote.cmd_trackTarget.set_start(
+                        **good_kwargs, timeout=STD_TIMEOUT
+                    )
+                    await asyncio.sleep(TRACK_ADVANCE_TIME)
 
+                for device in mock_azimuth, mock_elevation:
+                    try:
+                        assert device.power_on
+                        assert device.enabled
+                        assert device.tracking_enabled
+                    except AssertionError:
+                        self.log.exception(f"{device=} in unexpected state.")
+                        raise
             # Check that the camera cable wrap is still following the rotator.
             data = self.remote.evt_cameraCableWrapFollowing.get()
             assert data.enabled
@@ -1900,6 +1928,7 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def test_unpark_parked_zenith(self):
 
         async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.remote.tel_elevation.next(flush=True, timeout=STD_TIMEOUT)
             await self.remote.cmd_park.set_start(position=ParkPosition.ZENITH)
             await self.remote.cmd_unpark.start()
 
