@@ -473,7 +473,7 @@ class AxisDevice(BaseDevice):
         (while tracking is not paused).
         """
         await asyncio.sleep(duration)
-        self.log.error("Tracking timed out")
+        self.log.error("Tracking timed out after {duration}s")
         self.alarm_on = True
         self.power_on = False
         self.enabled = False
