@@ -39,6 +39,7 @@ from lsst.ts import salobj, tcpip, utils
 from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
     MirrorCover,
+    MotionLockState,
     ParkPosition,
     PowerState,
     System,
@@ -314,6 +315,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         # Set True if the CSC should be connected.
         self.should_be_connected = False
+
+        # Prevent CSC from moving az/el axis?
+        self.motion_locked = False
 
         # Subprocess running the telemetry client
         self.telemetry_client_process = None
@@ -1955,8 +1959,41 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def do_lockMotion(self, data):
-        self.assert_enabled()
-        raise NotImplementedError("Command not implemented.")
+        self.assert_enabled_and_not_disabling()
+
+        if self.track_started:
+            raise salobj.ExpectedError(
+                "Mount is currently tracking, "
+                "cannot lock motion in this state. "
+                "Stop tracking before trying to lock it."
+            )
+        elif not self.move_p2p_task.done():
+            raise salobj.ExpectedError(
+                "Mount is currently moving, "
+                "cannot lock motion in this state. "
+                "Stop motion before trying to lock it."
+            )
+        elif self.evt_motionLockState.data.lockState in {
+            MotionLockState.LOCKING,
+            MotionLockState.UNLOCKING,
+        }:
+            lock_state = MotionLockState(self.evt_motionLockState.data.lockState)
+            raise salobj.ExpectedError(f"Currently {lock_state!r}. Cannot lock motion.")
+        elif self.evt_motionLockState.data.lockState == MotionLockState.LOCKED:
+            self.log.info("Motion already locked, nothing to do.")
+            return
+
+        await self.evt_motionLockState.set_write(
+            lockState=MotionLockState.LOCKING,
+            identity=data.private_identity,
+        )
+
+        async with self.main_axes_lock:
+            self.motion_locked = True
+            await self.evt_motionLockState.set_write(
+                lockState=MotionLockState.LOCKED,
+                identity=data.private_identity,
+            )
 
     async def do_unlockMotion(self, data):
         self.assert_enabled()
