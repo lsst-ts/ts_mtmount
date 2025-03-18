@@ -6,6 +6,12 @@
 Version History
 ###############
 
+v0.32.0
+-------
+
+* Implements lockMotion and unlockMotion commands.
+* Adds feature that rejects move command if tracking or start tracking command while moving.
+
 v0.31.1
 -------
 
