@@ -1738,6 +1738,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled_and_not_disabling()
+        assert self.move_p2p_task.done(), (
+            "Mount is currently moving, "
+            "cannot start tracking while the mount is moving. "
+            "Stop mount before start tracking."
+        )
+
         await self.cmd_startTracking.ack_in_progress(
             data, timeout=START_TRACKING_TIMEOUT
         )
