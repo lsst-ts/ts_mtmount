@@ -633,6 +633,8 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 "stopTracking",
                 "trackTarget",
                 "unpark",
+                "lockMotion",
+                "unlockMotion",
             ]
 
             await self.check_standard_state_transitions(
