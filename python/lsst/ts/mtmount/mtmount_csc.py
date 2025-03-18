@@ -358,6 +358,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Task to hold open/close mirror cover operation.
         self.open_or_close_mirror_cover_task = utils.make_done_future()
 
+        self.move_p2p_task = utils.make_done_future()
+
         # Is camera rotator actual position - demand position
         # greater than config.max_rotator_position_error?
         # Log a warning every time this transitions to True.
@@ -1557,15 +1559,23 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command."""
         self.assert_enabled_and_not_disabling()
-        cmd_futures = await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
-            do_lock=True,
-        )
-        timeout = cmd_futures.timeout + TIMEOUT_BUFFER
-        await self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
-        await cmd_futures.done
-        # Note: the target position is reported
-        # by the TMA as ReplyId.AXIS_MOTION_STATE
+        assert (
+            not self.track_started
+        ), "Mount is currently tracking, cannot move while tracking. Stop tracking before moving."
+        self.move_p2p_task = asyncio.Future()
+
+        try:
+            cmd_futures = await self.send_command(
+                commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
+                do_lock=True,
+            )
+            timeout = cmd_futures.timeout + TIMEOUT_BUFFER
+            await self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
+            await cmd_futures.done
+            # Note: the target position is reported
+            # by the TMA as ReplyId.AXIS_MOTION_STATE
+        finally:
+            self.move_p2p_task.set_result(None)
 
     async def do_setThermal(self, data):
         """Handle the setThermal command."""
