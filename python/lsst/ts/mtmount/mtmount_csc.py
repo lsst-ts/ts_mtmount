@@ -39,6 +39,7 @@ from lsst.ts import salobj, tcpip, utils
 from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
     MirrorCover,
+    MotionLockState,
     ParkPosition,
     PowerState,
     System,
@@ -315,6 +316,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
         # Set True if the CSC should be connected.
         self.should_be_connected = False
 
+        # Prevent CSC from moving az/el axis?
+        self.motion_locked = False
+
         # Subprocess running the telemetry client
         self.telemetry_client_process = None
 
@@ -357,6 +361,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         # Task to hold open/close mirror cover operation.
         self.open_or_close_mirror_cover_task = utils.make_done_future()
+
+        self.move_p2p_task = utils.make_done_future()
 
         # Is camera rotator actual position - demand position
         # greater than config.max_rotator_position_error?
@@ -1031,6 +1037,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.disable_devices()
             finally:
                 await self.log_command_history()
+        elif self.summary_state == salobj.State.ENABLED:
+            await self.evt_motionLockState.set_write(
+                lockState=MotionLockState.UNLOCKED,
+                identity="",
+            )
+            self.motion_locked = False
         self.command_history.clear()
         self.command_reply_history.clear()
 
@@ -1557,15 +1569,28 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command."""
         self.assert_enabled_and_not_disabling()
-        cmd_futures = await self.send_command(
-            commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
-            do_lock=True,
+        assert (
+            not self.track_started
+        ), "Mount is currently tracking, cannot move while tracking. Stop tracking before moving."
+        assert not self.motion_locked, (
+            "Motion is currently locked. "
+            "In order to move the CSC you need to unlock it with the unlockMotion command."
+            "Ensure it is safe to move the CSC before doing so."
         )
-        timeout = cmd_futures.timeout + TIMEOUT_BUFFER
-        await self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
-        await cmd_futures.done
-        # Note: the target position is reported
-        # by the TMA as ReplyId.AXIS_MOTION_STATE
+        self.move_p2p_task = asyncio.Future()
+
+        try:
+            cmd_futures = await self.send_command(
+                commands.BothAxesMove(azimuth=data.azimuth, elevation=data.elevation),
+                do_lock=True,
+            )
+            timeout = cmd_futures.timeout + TIMEOUT_BUFFER
+            await self.cmd_moveToTarget.ack_in_progress(data=data, timeout=timeout)
+            await cmd_futures.done
+            # Note: the target position is reported
+            # by the TMA as ReplyId.AXIS_MOTION_STATE
+        finally:
+            self.move_p2p_task.set_result(None)
 
     async def do_setThermal(self, data):
         """Handle the setThermal command."""
@@ -1728,6 +1753,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled_and_not_disabling()
+        assert self.move_p2p_task.done(), (
+            "Mount is currently moving, "
+            "cannot start tracking while the mount is moving. "
+            "Stop mount before start tracking."
+        )
+        assert not self.motion_locked, (
+            "Motion is currently locked. "
+            "In order to start tracking the CSC you need to unlock it with the unlockMotion command. "
+            "Ensure it is safe to move the CSC before doing so."
+        )
+
         await self.cmd_startTracking.ack_in_progress(
             data, timeout=START_TRACKING_TIMEOUT
         )
@@ -1933,12 +1969,65 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def do_lockMotion(self, data):
-        self.assert_enabled()
-        raise NotImplementedError("Command not implemented.")
+        self.assert_enabled_and_not_disabling()
+
+        if self.track_started:
+            raise salobj.ExpectedError(
+                "Mount is currently tracking, "
+                "cannot lock motion in this state. "
+                "Stop tracking before trying to lock it."
+            )
+        elif not self.move_p2p_task.done():
+            raise salobj.ExpectedError(
+                "Mount is currently moving, "
+                "cannot lock motion in this state. "
+                "Stop motion before trying to lock it."
+            )
+        elif self.evt_motionLockState.data.lockState in {
+            MotionLockState.LOCKING,
+            MotionLockState.UNLOCKING,
+        }:
+            lock_state = MotionLockState(self.evt_motionLockState.data.lockState)
+            raise salobj.ExpectedError(f"Currently {lock_state!r}. Cannot lock motion.")
+        elif self.evt_motionLockState.data.lockState == MotionLockState.LOCKED:
+            self.log.info("Motion already locked, nothing to do.")
+            return
+
+        await self.evt_motionLockState.set_write(
+            lockState=MotionLockState.LOCKING,
+            identity=data.private_identity,
+        )
+
+        async with self.main_axes_lock:
+            self.motion_locked = True
+            await self.evt_motionLockState.set_write(
+                lockState=MotionLockState.LOCKED,
+                identity=data.private_identity,
+            )
 
     async def do_unlockMotion(self, data):
-        self.assert_enabled()
-        raise NotImplementedError("Command not implemented.")
+        self.assert_enabled_and_not_disabling()
+        if self.evt_motionLockState.data.lockState in {
+            MotionLockState.LOCKING,
+            MotionLockState.UNLOCKING,
+        }:
+            lock_state = MotionLockState(self.evt_motionLockState.data.lockState)
+            raise salobj.ExpectedError(
+                f"Currently {lock_state!r}. Cannot unlock motion."
+            )
+
+        await self.evt_motionLockState.set_write(
+            lockState=MotionLockState.UNLOCKING,
+            identity=data.private_identity,
+        )
+        if self.motion_locked:
+            self.motion_locked = False
+            await self.evt_motionLockState.set_write(
+                lockState=MotionLockState.UNLOCKED,
+                identity=data.private_identity,
+            )
+        else:
+            self.log.info("Motion not locked, nothing to do.")
 
     async def fault(self, code, report, traceback=""):
         self.should_be_commander = False
