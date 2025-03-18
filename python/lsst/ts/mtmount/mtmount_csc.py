@@ -1033,6 +1033,12 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.disable_devices()
             finally:
                 await self.log_command_history()
+        elif self.summary_state == salobj.State.ENABLED:
+            await self.evt_motionLockState.set_write(
+                lockState=MotionLockState.UNLOCKED,
+                identity="",
+            )
+            self.motion_locked = False
         self.command_history.clear()
         self.command_reply_history.clear()
 
