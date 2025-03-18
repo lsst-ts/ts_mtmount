@@ -34,6 +34,7 @@ from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
     ElevationLockingPinMotionState,
+    MotionLockState,
     ParkPosition,
     PowerState,
     System,
@@ -2034,3 +2035,146 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             assert elevation.actualPosition > elevation_controller_settings.minL1Limit
 
             await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
+
+    async def test_lock_unlock_static_condition(self):
+        """Test locking the MTMount when it is initially
+        static, not moving or tracking.
+        """
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKED,
+                identity="",
+                flush=False,
+                timeout=STD_TIMEOUT,
+            )
+            # Need to home the axis first
+            await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
+
+            # lock CSC
+            await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.LOCKING,
+                identity=self.remote.salinfo.identity,
+                flush=False,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.LOCKED,
+                identity=self.remote.salinfo.identity,
+                flush=False,
+                timeout=STD_TIMEOUT,
+            )
+
+            # try to move the mount with move command
+            with salobj.assertRaisesAckError(
+                ack=salobj.SalRetCode.CMD_FAILED,
+                result_contains="Motion is currently locked",
+            ):
+                await self.remote.cmd_moveToTarget.set_start(
+                    azimuth=0.0,
+                    elevation=45.0,
+                    timeout=STD_TIMEOUT,
+                )
+
+            # try to start tracking
+            with salobj.assertRaisesAckError(
+                ack=salobj.SalRetCode.CMD_FAILED,
+                result_contains="Motion is currently locked",
+            ):
+                await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
+
+            await self.remote.cmd_unlockMotion.start(timeout=STD_TIMEOUT)
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKING,
+                identity=self.remote.salinfo.identity,
+                flush=False,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKED,
+                identity=self.remote.salinfo.identity,
+                flush=False,
+                timeout=STD_TIMEOUT,
+            )
+
+            self.remote.evt_target.flush()
+            await self.remote.cmd_moveToTarget.set_start(
+                azimuth=0.0,
+                elevation=45.0,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_target, flush=False, timeout=STD_TIMEOUT
+            )
+
+    async def test_lock_tracking(self):
+        """Test locking the MTMount while it is tracking."""
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            # Need to home the axis first
+            await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
+
+            await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
+            track_target_task = asyncio.create_task(
+                self.track_target_loop(
+                    azimuth=3,
+                    elevation=45,
+                    azimuth_velocity=0.003,
+                    elevation_velocity=0.003,
+                )
+            )
+
+            with salobj.assertRaisesAckError(
+                ack=salobj.SalRetCode.CMD_FAILED,
+                result_contains="Mount is currently tracking",
+            ):
+                await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
+
+            await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
+            track_target_task.cancel()
+            try:
+                await track_target_task
+            except asyncio.CancelledError:
+                pass
+
+            await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
+
+    async def test_lock_moving(self):
+        """Test locking the MTMount while it is moving."""
+
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            # Need to home the axis first
+            await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
+
+            self.log.info("Start move command in the background.")
+            move_task = asyncio.create_task(
+                self.remote.cmd_moveToTarget.set_start(
+                    azimuth=180.0,
+                    elevation=45.0,
+                    timeout=STD_TIMEOUT,
+                )
+            )
+
+            await asyncio.sleep(1.0)
+
+            self.log.info("Check that lock motion is rejected while moving.")
+            with salobj.assertRaisesAckError(
+                ack=salobj.SalRetCode.CMD_FAILED,
+                result_contains="Mount is currently moving",
+            ):
+                await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
+
+            self.log.info("Wait for move command to finish.")
+            await move_task
+
+            self.log.info("Check that now lock will work.")
+            await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
