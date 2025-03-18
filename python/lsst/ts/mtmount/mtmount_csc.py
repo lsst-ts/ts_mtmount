@@ -1758,6 +1758,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             "cannot start tracking while the mount is moving. "
             "Stop mount before start tracking."
         )
+        assert not self.motion_locked, (
+            "Motion is currently locked. "
+            "In order to start tracking the CSC you need to unlock it with the unlockMotion command. "
+            "Ensure it is safe to move the CSC before doing so."
+        )
 
         await self.cmd_startTracking.ack_in_progress(
             data, timeout=START_TRACKING_TIMEOUT
