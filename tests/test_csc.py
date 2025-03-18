@@ -1271,6 +1271,43 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             await self.remote.cmd_standby.start(timeout=STD_TIMEOUT)
             await self.assert_axes_in_position(elevation=False, azimuth=False)
 
+    async def test_move_while_tracking(self):
+        """Test that trying to move while tracking fails."""
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            # Need to home the axis first
+            await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
+
+            try:
+                await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
+
+                track_target_task = asyncio.create_task(
+                    self.track_target_loop(
+                        azimuth=3,
+                        elevation=45,
+                        azimuth_velocity=0.003,
+                        elevation_velocity=0.003,
+                    )
+                )
+
+                with salobj.assertRaisesAckError(
+                    ack=salobj.SalRetCode.CMD_FAILED,
+                    result_contains="Mount is currently tracking",
+                ):
+                    await self.remote.cmd_moveToTarget.set_start(
+                        azimuth=180.0,
+                        elevation=45.0,
+                        timeout=STD_TIMEOUT,
+                    )
+            finally:
+                await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
+
+                track_target_task.cancel()
+                try:
+                    await track_target_task
+                except asyncio.CancelledError:
+                    pass
+
     async def test_set_thermal(self):
         system_id_thermal_prefix_dict = {
             value: key for key, value in SET_THERMAL_FIELD_SYSTEM_ID_DICT.items()
