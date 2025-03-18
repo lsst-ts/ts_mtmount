@@ -1668,6 +1668,40 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
             # is still following the rotator.
             assert len(self.csc.command_futures_dict) < 2
 
+    async def test_tracking_while_moving(self):
+        """Test that trying to start tracking when moving fails."""
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            # Need to home the axis first
+            await self.remote.cmd_homeBothAxes.start(timeout=STD_TIMEOUT)
+
+            try:
+                move_task = asyncio.create_task(
+                    self.remote.cmd_moveToTarget.set_start(
+                        azimuth=180.0,
+                        elevation=45.0,
+                        timeout=STD_TIMEOUT,
+                    )
+                )
+
+                await asyncio.sleep(1.0)
+
+                with salobj.assertRaisesAckError(
+                    ack=salobj.SalRetCode.CMD_FAILED,
+                    result_contains="Mount is currently moving",
+                ):
+                    await self.remote.cmd_startTracking.start(timeout=STD_TIMEOUT)
+            except Exception:
+                try:
+                    self.log.info("Test failed, issuing stop tracking.")
+                    await self.remote.cmd_stopTracking.start(timeout=STD_TIMEOUT)
+                except Exception:
+                    self.log.exception("Ignoring exception in stop tracking.")
+                    pass
+            finally:
+                self.log.debug("Waiting move task to complete.")
+                await move_task
+
     async def track_target_loop(
         self, azimuth, elevation, azimuth_velocity, elevation_velocity
     ):
