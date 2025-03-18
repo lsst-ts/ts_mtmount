@@ -1572,6 +1572,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
         assert (
             not self.track_started
         ), "Mount is currently tracking, cannot move while tracking. Stop tracking before moving."
+        assert not self.motion_locked, (
+            "Motion is currently locked. "
+            "In order to move the CSC you need to unlock it with the unlockMotion command."
+            "Ensure it is safe to move the CSC before doing so."
+        )
         self.move_p2p_task = asyncio.Future()
 
         try:
