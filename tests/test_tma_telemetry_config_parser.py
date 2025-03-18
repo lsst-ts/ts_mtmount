@@ -57,6 +57,7 @@ class TMATelemetryConfigParserParserTestCase(unittest.TestCase):
             "tel_cabinet0101Thermal",
             "tel_azimuthCableWrap",
             "tel_cameraCableWrap",
+            "tel_capacitorBank",
             "tel_balancing",
             "tel_azimuthDrives",
             "tel_azimuthDrivesThermal",
