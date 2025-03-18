@@ -1996,8 +1996,28 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def do_unlockMotion(self, data):
-        self.assert_enabled()
-        raise NotImplementedError("Command not implemented.")
+        self.assert_enabled_and_not_disabling()
+        if self.evt_motionLockState.data.lockState in {
+            MotionLockState.LOCKING,
+            MotionLockState.UNLOCKING,
+        }:
+            lock_state = MotionLockState(self.evt_motionLockState.data.lockState)
+            raise salobj.ExpectedError(
+                f"Currently {lock_state!r}. Cannot unlock motion."
+            )
+
+        await self.evt_motionLockState.set_write(
+            lockState=MotionLockState.UNLOCKING,
+            identity=data.private_identity,
+        )
+        if self.motion_locked:
+            self.motion_locked = False
+            await self.evt_motionLockState.set_write(
+                lockState=MotionLockState.UNLOCKED,
+                identity=data.private_identity,
+            )
+        else:
+            self.log.info("Motion not locked, nothing to do.")
 
     async def fault(self, code, report, traceback=""):
         self.should_be_commander = False
