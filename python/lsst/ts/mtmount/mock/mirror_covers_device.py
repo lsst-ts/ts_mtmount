@@ -21,7 +21,7 @@
 
 __all__ = ["MirrorCoversDevice"]
 
-from lsst.ts.idl.enums.MTMount import System
+from lsst.ts.xml.enums.MTMount import System
 
 from .deployable_device import DeployableDevice
 

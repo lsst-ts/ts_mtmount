@@ -28,7 +28,7 @@ import unittest
 
 import pytest
 from lsst.ts import mtmount, salobj, utils
-from lsst.ts.idl.enums.MTMount import (
+from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
     ElevationLockingPinMotionState,

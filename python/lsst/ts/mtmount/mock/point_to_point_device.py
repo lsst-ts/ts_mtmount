@@ -42,7 +42,7 @@ class PointToPointDevice(BaseDevice):
     ----------
     controller : `MockController`
         Mock controller.
-    system_id : `lsst.ts.idl.enums.MTMount.System`
+    system_id : `lsst.ts.xml.enums.MTMount.System`
         System ID
     min_position : `float`
         Minimum position.
