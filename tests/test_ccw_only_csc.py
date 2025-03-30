@@ -250,7 +250,7 @@ class CcwOnlyCscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCas
             System.CAMERA_CABLE_WRAP,
         ):
             with self.subTest(system=system):
-                salobj.set_random_lsst_dds_partition_prefix()
+                salobj.set_test_topic_subname()
                 async with self.make_csc(
                     initial_state=salobj.State.ENABLED, internal_mock_controller=False
                 ):
