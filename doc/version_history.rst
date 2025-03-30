@@ -6,6 +6,11 @@
 Version History
 ###############
 
+v0.32.1
+-------
+
+* Replace idl references with xml ones.
+
 v0.32.0
 -------
 
