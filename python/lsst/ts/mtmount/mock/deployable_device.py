@@ -22,7 +22,7 @@
 __all__ = ["DeployableDevice"]
 
 from lsst.ts import utils
-from lsst.ts.idl.enums.MTMount import DeployableMotionState
+from lsst.ts.xml.enums.MTMount import DeployableMotionState
 
 from .point_to_point_device import PointToPointDevice
 
@@ -36,7 +36,7 @@ class DeployableDevice(PointToPointDevice):
     ----------
     controller : `MockController`
         Mock controller.
-    system_id : `lsst.ts.idl.enums.MTMount.System`
+    system_id : `lsst.ts.xml.enums.MTMount.System`
         System ID.
     start_deployed : `bool`
         Start deployed (True) or retracted (False)?
@@ -104,7 +104,7 @@ class DeployableDevice(PointToPointDevice):
 
         Returns
         -------
-        state : `lsst.ts.idl.enums.MTMount.DeployableMotionState`
+        state : `lsst.ts.xml.enums.MTMount.DeployableMotionState`
             Motion state.
         """
         if tai is None:

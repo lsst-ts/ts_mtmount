@@ -21,7 +21,7 @@
 
 __all__ = ["Limits", "CmdLimitsDict"]
 
-from lsst.ts.idl.enums.MTMount import System
+from lsst.ts.xml.enums.MTMount import System
 
 
 class Limits:

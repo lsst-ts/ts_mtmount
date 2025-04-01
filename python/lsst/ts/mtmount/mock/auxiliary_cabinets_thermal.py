@@ -21,7 +21,7 @@
 
 __all__ = ["AuxiliaryCabinetsThermalDevice"]
 
-from lsst.ts.idl.enums.MTMount import System
+from lsst.ts.xml.enums.MTMount import System
 
 from .base_thermal_device import BaseThermalDevice
 

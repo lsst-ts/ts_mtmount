@@ -21,7 +21,7 @@
 
 __all__ = ["BaseDevice"]
 
-from lsst.ts.idl.enums.MTMount import System
+from lsst.ts.xml.enums.MTMount import System
 
 from .. import commands, enums
 
@@ -33,7 +33,7 @@ class BaseDevice:
     ----------
     controller : `MockController`
         Mock controller.
-    system_id : `lsst.ts.idl.enums.MTMount.System`
+    system_id : `lsst.ts.xml.enums.MTMount.System`
         System ID.
 
     Notes
