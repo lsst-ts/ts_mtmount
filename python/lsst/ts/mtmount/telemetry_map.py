@@ -981,7 +981,7 @@ class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
 
     def sal_value_from_llv_dict(self, data_dict):
         return [
-            data_dict[self.field_name_template.format(i)]
+            data_dict.get(self.field_name_template.format(i), None)
             for i in range(1, self.num_elements + 1)
         ]
 
