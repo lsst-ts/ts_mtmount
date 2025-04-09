@@ -841,6 +841,40 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   glycolTemperaturePier0002: 1
   glycolTemperaturePier0002Timestamp: 1
   timestamp: 1
+
+18:
+- capacitorBank
+- blownAzimuth3Fuse: 4
+  blownAzimuth3FuseTimestamp: 4
+  blownAzimuth4Fuse: 4
+  blownAzimuth4FuseTimestamp: 4
+  blownAzimuth5Fuse: 4
+  blownAzimuth5FuseTimestamp: 4
+  blownAzimuth6Fuse: 4
+  blownAzimuth6FuseTimestamp: 4
+  blownElevation7Fuse: 6
+  blownElevation7FuseTimestamp: 6
+  blownElevation8Fuse: 6
+  blownElevation8FuseTimestamp: 6
+  currentCapacitorBank1Fuse: 5
+  currentCapacitorBank1FuseTimestamp: 5
+  currentCapacitorBank2Fuse: 5
+  currentCapacitorBank2FuseTimestamp: 5
+  currentCapacitorBank3Fuse: 5
+  currentCapacitorBank3FuseTimestamp: 5
+  currentCapacitorBank4Fuse: 5
+  currentCapacitorBank4FuseTimestamp: 5
+  currentCapacitorBank5Fuse: 5
+  currentCapacitorBank5FuseTimestamp: 5
+  currentCapacitorBank6Fuse: 5
+  currentCapacitorBank6FuseTimestamp: 5
+  currentCapacitorBank7Fuse: 5
+  currentCapacitorBank7FuseTimestamp: 5
+  currentCapacitorBank8Fuse: 5
+  currentCapacitorBank8FuseTimestamp: 5
+  internalTemperatureCapacitorBank: 8
+  internalTemperatureCapacitorBankTimestamp: 8
+  timestamp: 1
 """
 )
 
