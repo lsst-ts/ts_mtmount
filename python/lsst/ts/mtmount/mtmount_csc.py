@@ -994,8 +994,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             for command in [
                 commands.BothAxesStop(),
                 commands.CameraCableWrapStop(),
-                commands.AzimuthPower(on=False),
                 commands.ElevationPower(on=False),
+                commands.AzimuthPower(on=False),
                 commands.CameraCableWrapPower(on=False),
             ]:
                 try:
