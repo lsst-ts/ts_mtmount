@@ -2396,10 +2396,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         settings_to_apply : `list`[`str`]
             Names of the settings to apply.
         """
-        self.log.info("Starting background task to disable devices.")
+        self.log.info("Disabling devices.")
         self.should_be_commander = False
-        disable_devices_task = asyncio.create_task(self.disable_devices())
-
+        try:
+            await self.disable_devices()
+        except Exception as e:
+            await self.fault(
+                code=enums.CscErrorCode.DISABLE_DEVICES_FAILED,
+                report="Failed to disable devices.",
+                traceback=traceback.format_exc(),
+            )
+            raise e
         if restore_defaults:
             self.log.info("Restoring default settings.")
             await self.send_command(
@@ -2415,17 +2422,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 do_lock=True,
                 timeout=SHORT_COMMAND_TIMEOUT,
             )
-
-        self.log.info("Waiting for devices to finish disabling.")
-        try:
-            await disable_devices_task
-        except Exception as e:
-            await self.fault(
-                code=enums.CscErrorCode.DISABLE_DEVICES_FAILED,
-                report="Failed to disable devices.",
-                traceback=traceback.format_exc(),
-            )
-            raise e
 
         self.log.info("Re-enabling drives to apply settings.")
 
