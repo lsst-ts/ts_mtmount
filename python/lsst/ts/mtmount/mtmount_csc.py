@@ -2043,6 +2043,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise salobj.ExpectedError(
                 f"Currently {lock_state!r}. Cannot unlock motion."
             )
+        elif self.evt_motionLockState.data.lockState == MotionLockState.UNLOCKED:
+            self.log.debug("Already locked.")
+            return
 
         await self.evt_motionLockState.set_write(
             lockState=MotionLockState.UNLOCKING,
