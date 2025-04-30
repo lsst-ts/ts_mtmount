@@ -1046,7 +1046,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.disable_devices()
             finally:
                 await self.log_command_history()
-        elif self.summary_state == salobj.State.ENABLED:
+        elif self.disabled_or_enabled:
             await self.evt_motionLockState.set_write(
                 lockState=MotionLockState.UNLOCKED,
                 identity="",
@@ -1997,7 +1997,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def do_lockMotion(self, data):
-        self.assert_enabled_and_not_disabling()
+        assert (
+            self.disabled_or_enabled
+        ), "CSC needs to be in Disabled or Enabled to lock motion."
 
         if self.track_started:
             raise salobj.ExpectedError(
@@ -2034,7 +2036,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def do_unlockMotion(self, data):
-        self.assert_enabled_and_not_disabling()
+
+        assert (
+            self.disabled_or_enabled
+        ), "CSC needs to be in Disabled or Enabled to unlock motion."
+
         if self.evt_motionLockState.data.lockState in {
             MotionLockState.LOCKING,
             MotionLockState.UNLOCKING,
