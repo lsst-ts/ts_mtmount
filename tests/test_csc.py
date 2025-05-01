@@ -2010,6 +2010,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def test_unpark_telescope_unparked(self):
 
         async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.remote.cmd_moveToTarget.set_start(
+                azimuth=0.0,
+                elevation=45.0,
+                timeout=STD_TIMEOUT,
+            )
+
             with pytest.raises(salobj.AckError, match="outside unparking position"):
                 await self.remote.cmd_unpark.start()
 
