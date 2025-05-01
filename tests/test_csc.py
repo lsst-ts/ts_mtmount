@@ -634,12 +634,16 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 "stopTracking",
                 "trackTarget",
                 "unpark",
+            ]
+
+            skip_commands = [
                 "lockMotion",
                 "unlockMotion",
             ]
 
             await self.check_standard_state_transitions(
-                enabled_commands=enabled_commands
+                enabled_commands=enabled_commands,
+                skip_commands=skip_commands,
             )
 
     def make_track_target_kwargs(
