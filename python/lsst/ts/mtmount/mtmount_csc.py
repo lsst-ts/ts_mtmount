@@ -1990,11 +1990,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             await cmd_futures.done
 
-            # reset settings
-            await self.handle_apply_settings_set(
-                restore_defaults=True,
-                settings_to_apply=[],
-            )
+            # Will leave the mount in the park/unpark settings.
+            # It is on the user to load the settings they want
+            # to operate later.
 
     async def do_lockMotion(self, data):
         assert (
