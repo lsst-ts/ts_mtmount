@@ -271,7 +271,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     # Velocity to use when parking/unparking
     # the TMA (in deg/s)
-    park_velocity = 0.1
+    park_velocity = 0.5
     # Acceleration to use when parking/unparking
     # the TMA (in deg/s^2)
     park_acceleration = 0.1
