@@ -1977,20 +1977,32 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def test_park_horizon(self):
 
         async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.remote.cmd_homeBothAxes.start()
+
+            expected_park_azimuth = (
+                await self.assert_next_sample(
+                    self.remote.tel_azimuth, flush=True, timeout=STD_TIMEOUT
+                )
+            ).actualPosition
+
             await self.remote.cmd_park.set_start(position=ParkPosition.HORIZON)
 
-            elevation = await self.remote.tel_elevation.next(
-                flush=True, timeout=STD_TIMEOUT
-            )
+            self.remote.tel_elevation.callback = None
 
-            azimuth = await self.remote.tel_azimuth.next(
-                flush=True, timeout=STD_TIMEOUT
+            await self.assert_next_sample(
+                self.remote.tel_elevation,
+                flush=True,
+                timeout=STD_TIMEOUT,
+                actualPosition=pytest.approx(
+                    self.csc.config.park_positions["horizon"]["elevation"]
+                ),
             )
-            assert elevation.actualPosition == pytest.approx(
-                self.csc.config.park_positions["horizon"]["elevation"],
-            )
-            assert azimuth.actualPosition == pytest.approx(
-                self.csc.config.park_positions["horizon"]["azimuth"],
+            await self.assert_next_sample(
+                self.remote.tel_azimuth,
+                flush=True,
+                timeout=STD_TIMEOUT,
+                actualPosition=pytest.approx(expected_park_azimuth),
             )
 
             await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
