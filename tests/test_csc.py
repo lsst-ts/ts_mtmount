@@ -2201,3 +2201,57 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             self.log.info("Check that now lock will work.")
             await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
+
+    async def test_lock_unlock_in_disabled(self):
+        """Test locking/unlocking the MTMount while in disabled."""
+
+        async with self.make_csc(initial_state=salobj.State.DISABLED):
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKED,
+                flush=False,
+            )
+
+            await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.LOCKING,
+                flush=False,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.LOCKED,
+                flush=False,
+            )
+
+            await self.remote.cmd_unlockMotion.start(timeout=STD_TIMEOUT)
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKING,
+                flush=False,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKED,
+                flush=False,
+            )
+
+    async def test_unlock_when_unlocked(self):
+        """Test that unlocking when it is already unlocked is a noop."""
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKED,
+                flush=False,
+            )
+
+            await self.remote.cmd_unlockMotion.start(timeout=STD_TIMEOUT)
+
+            with pytest.raises(asyncio.TimeoutError):
+                await self.assert_next_sample(
+                    self.remote.evt_motionLockState, timeout=SHORT_TIMEOUT, flush=False
+                )
