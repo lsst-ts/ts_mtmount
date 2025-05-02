@@ -24,7 +24,7 @@ __all__ = ["MAX_TRACKING_DELAY", "AxisDevice"]
 import asyncio
 
 from lsst.ts import simactuators, utils
-from lsst.ts.idl.enums.MTMount import AxisMotionState, System
+from lsst.ts.xml.enums.MTMount import AxisMotionState, System
 
 from ..exceptions import CommandSupersededException
 from . import limits
@@ -57,7 +57,7 @@ class AxisDevice(BaseDevice):
     ----------
     controller : `MockController`
         Mock controller.
-    system_id : `lsst.ts.idl.enums.MTMount.System`
+    system_id : `lsst.ts.xml.enums.MTMount.System`
         System ID. Must be one of:
 
         * System.AZIMUTH
@@ -382,7 +382,7 @@ class AxisDevice(BaseDevice):
 
         Returns
         -------
-        motion_state : `ts.idl.enums.MTMount.AxisMotionState`
+        motion_state : `ts.xml.enums.MTMount.AxisMotionState`
             Motion state.
         """
         if tai is None:

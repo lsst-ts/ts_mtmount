@@ -25,7 +25,7 @@ import unittest
 
 import pytest
 from lsst.ts import mtmount, simactuators, utils
-from lsst.ts.idl.enums.MTMount import AxisMotionState, DeployableMotionState, System
+from lsst.ts.xml.enums.MTMount import AxisMotionState, DeployableMotionState, System
 
 STD_TIMEOUT = 2  # Timeout for short operations (sec)
 # Padding for the time limit returned by device do_methods

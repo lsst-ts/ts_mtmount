@@ -32,7 +32,7 @@ import warnings
 import numpy.testing
 import pytest
 from lsst.ts import mtmount, salobj, tcpip, utils
-from lsst.ts.idl.enums.MTMount import (
+from lsst.ts.xml.enums.MTMount import (
     AxisMotionState,
     DeployableMotionState,
     ElevationLockingPinMotionState,

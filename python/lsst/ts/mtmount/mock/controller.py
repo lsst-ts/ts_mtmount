@@ -30,7 +30,7 @@ import signal
 
 import astropy.time
 from lsst.ts import salobj, tcpip, utils
-from lsst.ts.idl.enums.MTMount import (
+from lsst.ts.xml.enums.MTMount import (
     DeployableMotionState,
     ElevationLockingPinMotionState,
     PowerState,
@@ -884,7 +884,7 @@ class Controller:
 
         Parameters
         ----------
-        system_id : `lsst.ts.idl.enums.MTMount.System`
+        system_id : `lsst.ts.xml.enums.MTMount.System`
             System ID.
         """
         for system_id in (
