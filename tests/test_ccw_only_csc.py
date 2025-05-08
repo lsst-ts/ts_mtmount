@@ -612,7 +612,11 @@ class CcwOnlyCscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCas
                     "stopTracking",
                     "trackTarget",
                     "unpark",
-                )
+                ),
+                skip_commands=[
+                    "lockMotion",
+                    "unlockMotion",
+                ],
             )
 
     def make_track_target_kwargs(

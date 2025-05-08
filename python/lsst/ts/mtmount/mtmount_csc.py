@@ -271,10 +271,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
     # Velocity to use when parking/unparking
     # the TMA (in deg/s)
-    park_velocity = 0.1
+    park_velocity = 0.5
     # Acceleration to use when parking/unparking
     # the TMA (in deg/s^2)
     park_acceleration = 0.1
+
+    # When unparking the telescope, what is the
+    # offset that should be applied to the elevation axis
+    # (in deg).
+    unpark_elevation_offset = 10.0
 
     def __init__(
         self,
@@ -318,6 +323,10 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         # Prevent CSC from moving az/el axis?
         self.motion_locked = False
+
+        # Is CSC is performing an operation that might
+        # cause an axis to Fault?
+        self._axis_might_fault = False
 
         # Subprocess running the telemetry client
         self.telemetry_client_process = None
@@ -994,8 +1003,8 @@ class MTMountCsc(salobj.ConfigurableCsc):
             for command in [
                 commands.BothAxesStop(),
                 commands.CameraCableWrapStop(),
-                commands.AzimuthPower(on=False),
                 commands.ElevationPower(on=False),
+                commands.AzimuthPower(on=False),
                 commands.CameraCableWrapPower(on=False),
             ]:
                 try:
@@ -1037,7 +1046,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 await self.disable_devices()
             finally:
                 await self.log_command_history()
-        elif self.summary_state == salobj.State.ENABLED:
+        elif self.disabled_or_enabled:
             await self.evt_motionLockState.set_write(
                 lockState=MotionLockState.UNLOCKED,
                 identity="",
@@ -1853,14 +1862,27 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 settings_to_apply=self.config.park_settings,
             )
 
+            self.log.info("Homing both axes.")
+
+            await self.send_command(
+                commands.ElevationHome(),
+                do_lock=True,
+            )
+
             # move telescope to the park position
-            self.log.info(f"Moving telescope to {park_position.name} park position.")
+            position = park_position_altaz["elevation"]
+            velocity = self.park_velocity
+            acceleration = self.park_acceleration
+            self.log.info(
+                f"Moving telescope to {park_position.name} park position: "
+                f"{position=}, {velocity=}, {acceleration=}."
+            )
 
             cmd_futures = await self.send_command(
                 commands.ElevationMove(
-                    position=park_position_altaz["elevation"],
-                    velocity=self.park_velocity,
-                    acceleration=self.park_acceleration,
+                    position=position,
+                    velocity=velocity,
+                    acceleration=acceleration,
                 ),
                 do_lock=True,
             )
@@ -1911,34 +1933,40 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 unpark_azimuth = current_azimuth.actualPosition
 
             # Check it the telescope is pointing at horizon or zenith
-            if unpark_elevation >= self.evt_elevationControllerSettings.data.maxL1Limit:
+            zenith_unpark_limit = (
+                self.evt_elevationControllerSettings.data.maxL1Limit
+                - self.unpark_elevation_offset
+            )
+            horizon_unpark_limit = (
+                self.evt_elevationControllerSettings.data.minL1Limit
+                + self.unpark_elevation_offset
+            )
+            if unpark_elevation >= zenith_unpark_limit:
                 self.log.info(
                     f"Current telescope elevation at {unpark_elevation:.2f}. "
                     "Unparking from Zenith."
                 )
                 unpark_elevation = (
                     self.evt_elevationControllerSettings.data.maxL1Limit
-                    - self.limits_margin
+                    - self.unpark_elevation_offset
                 )
 
-            elif (
-                unpark_elevation <= self.evt_elevationControllerSettings.data.minL1Limit
-            ):
+            elif unpark_elevation <= horizon_unpark_limit:
                 self.log.info(
                     f"Current telescope elevation at {unpark_elevation:.2f}. "
                     "Unparking from Horizon."
                 )
                 unpark_elevation = (
                     self.evt_elevationControllerSettings.data.minL1Limit
-                    + self.limits_margin
+                    + self.unpark_elevation_offset
                 )
             else:
                 raise RuntimeError(
                     f"Current telescope elevation {unpark_elevation:.2f} "
                     "outside unparking position. Must be larger than "
-                    f"{self.evt_elevationControllerSettings.data.maxL1Limit} "
+                    f"{zenith_unpark_limit} to unpark from zenith"
                     "or smaller than "
-                    f"{self.evt_elevationControllerSettings.data.minL1Limit}."
+                    f"{horizon_unpark_limit} to unpark from horizon."
                 )
 
             # load park settings
@@ -1962,14 +1990,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             await cmd_futures.done
 
-            # reset settings
-            await self.handle_apply_settings_set(
-                restore_defaults=True,
-                settings_to_apply=[],
-            )
+            # Will leave the mount in the park/unpark settings.
+            # It is on the user to load the settings they want
+            # to operate later.
 
     async def do_lockMotion(self, data):
-        self.assert_enabled_and_not_disabling()
+        assert (
+            self.disabled_or_enabled
+        ), "CSC needs to be in Disabled or Enabled to lock motion."
 
         if self.track_started:
             raise salobj.ExpectedError(
@@ -2006,7 +2034,11 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
 
     async def do_unlockMotion(self, data):
-        self.assert_enabled_and_not_disabling()
+
+        assert (
+            self.disabled_or_enabled
+        ), "CSC needs to be in Disabled or Enabled to unlock motion."
+
         if self.evt_motionLockState.data.lockState in {
             MotionLockState.LOCKING,
             MotionLockState.UNLOCKING,
@@ -2015,6 +2047,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise salobj.ExpectedError(
                 f"Currently {lock_state!r}. Cannot unlock motion."
             )
+        elif self.evt_motionLockState.data.lockState == MotionLockState.UNLOCKED:
+            self.log.debug("Already locked.")
+            return
 
         await self.evt_motionLockState.set_write(
             lockState=MotionLockState.UNLOCKING,
@@ -2357,11 +2392,15 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # * the axis is azimuth and elevation
             # * the axis is camera cable wrap and
             #   camera cable wrap following is enabled
-            if reply.system in {
-                System.AZIMUTH,
-                System.ELEVATION,
-                System.CAMERA_CABLE_WRAP,
-            }:
+            if (
+                reply.system
+                in {
+                    System.AZIMUTH,
+                    System.ELEVATION,
+                    System.CAMERA_CABLE_WRAP,
+                }
+                and not self._axis_might_fault
+            ):
                 axis_name = System(reply.system).name.lower().replace("_", " ")
                 await self.fault(
                     code=enums.CscErrorCode.AXIS_FAULT,
@@ -2396,10 +2435,6 @@ class MTMountCsc(salobj.ConfigurableCsc):
         settings_to_apply : `list`[`str`]
             Names of the settings to apply.
         """
-        self.log.info("Starting background task to disable devices.")
-        self.should_be_commander = False
-        disable_devices_task = asyncio.create_task(self.disable_devices())
-
         if restore_defaults:
             self.log.info("Restoring default settings.")
             await self.send_command(
@@ -2416,34 +2451,49 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 timeout=SHORT_COMMAND_TIMEOUT,
             )
 
-        self.log.info("Waiting for devices to finish disabling.")
-        try:
-            await disable_devices_task
-        except Exception as e:
-            await self.fault(
-                code=enums.CscErrorCode.DISABLE_DEVICES_FAILED,
-                report="Failed to disable devices.",
-                traceback=traceback.format_exc(),
-            )
-            raise e
+        with self.axis_might_fault():
+            self.log.info("Disabling devices.")
+            for command in [
+                commands.BothAxesStop(),
+                commands.BothAxesPower(on=False),
+            ]:
+                try:
+                    await self.send_command(command, do_lock=False)
+                    await asyncio.sleep(10 * self.heartbeat_interval)
+                except Exception:
+                    wait_time = 60 * self.heartbeat_interval
+                    self.log.warning(
+                        f"Failed to perform operation {command!r}. "
+                        f"Waiting {wait_time}s and continuing."
+                    )
+                    await asyncio.sleep(wait_time)
 
-        self.log.info("Re-enabling drives to apply settings.")
+            self.log.info("Re-enabling drives to apply settings.")
+            for command, timeout, retry in [
+                (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, True),
+                (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, False),
+                (commands.BothAxesPower(on=True), None, False),
+            ]:
 
-        await self.send_command(
-            commands.AskForCommand(commander=enums.Source.CSC),
-            do_lock=True,
-            timeout=SHORT_COMMAND_TIMEOUT,
-        )
-        self.should_be_commander = True
-        try:
-            await self.enable_devices()
-        except Exception as e:
-            await self.fault(
-                code=enums.CscErrorCode.ENABLE_DEVICES_FAILED,
-                report="Failed to enable devices.",
-                traceback=traceback.format_exc(),
-            )
-            raise e
+                try:
+                    await self.send_command(command, do_lock=False, timeout=timeout)
+                    await asyncio.sleep(10 * self.heartbeat_interval)
+                except Exception as e:
+                    if not retry:
+                        await self.fault(
+                            code=enums.CscErrorCode.ENABLE_DEVICES_FAILED,
+                            report="Failed to enable devices.",
+                            traceback=traceback.format_exc(),
+                        )
+                        raise e
+                    else:
+                        wait_time = 60 * self.heartbeat_interval
+                        self.log.warning(
+                            "Initialization command failed but set to retry. "
+                            f"Waiting {wait_time}s and continuing."
+                        )
+                        await asyncio.sleep(wait_time)
+
         self.log.info("Get state info and actual settings.")
         await self.send_command(commands.StateInfo(), do_lock=True)
         await self.send_command(commands.GetActualSettings(), do_lock=True)
@@ -2623,6 +2673,16 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 yield
             finally:
                 ack_in_progress_task.cancel()
+
+    @contextlib.contextmanager
+    def axis_might_fault(self):
+        """Context manager to handle operations that might cause an axis to
+        fault."""
+        try:
+            self._axis_might_fault = True
+            yield
+        finally:
+            self._axis_might_fault = False
 
     async def _in_progress_loop(self, ack_in_progress, data):
         """Coroutine to continuously send in progress acknowledgements."""

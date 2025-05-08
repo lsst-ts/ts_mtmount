@@ -130,14 +130,6 @@ class MTMountCcwOnlyCsc(MTMountCsc):
         """
         raise ExpectedError("Command not available in CCW only version of CSC.")
 
-    async def do_lockMotion(self, data):
-        self.assert_enabled()
-        raise ExpectedError("Command not available in CCW only version of CSC.")
-
-    async def do_unlockMotion(self, data):
-        self.assert_enabled()
-        raise ExpectedError("Command not available in CCW only version of CSC.")
-
 
 def run_mtmount_ccw_only() -> None:
     """Run the MTMountCcwOnly CSC."""

@@ -634,12 +634,16 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 "stopTracking",
                 "trackTarget",
                 "unpark",
+            ]
+
+            skip_commands = [
                 "lockMotion",
                 "unlockMotion",
             ]
 
             await self.check_standard_state_transitions(
-                enabled_commands=enabled_commands
+                enabled_commands=enabled_commands,
+                skip_commands=skip_commands,
             )
 
     def make_track_target_kwargs(
@@ -1973,20 +1977,32 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def test_park_horizon(self):
 
         async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.remote.cmd_homeBothAxes.start()
+
+            expected_park_azimuth = (
+                await self.assert_next_sample(
+                    self.remote.tel_azimuth, flush=True, timeout=STD_TIMEOUT
+                )
+            ).actualPosition
+
             await self.remote.cmd_park.set_start(position=ParkPosition.HORIZON)
 
-            elevation = await self.remote.tel_elevation.next(
-                flush=True, timeout=STD_TIMEOUT
-            )
+            self.remote.tel_elevation.callback = None
 
-            azimuth = await self.remote.tel_azimuth.next(
-                flush=True, timeout=STD_TIMEOUT
+            await self.assert_next_sample(
+                self.remote.tel_elevation,
+                flush=True,
+                timeout=STD_TIMEOUT,
+                actualPosition=pytest.approx(
+                    self.csc.config.park_positions["horizon"]["elevation"]
+                ),
             )
-            assert elevation.actualPosition == pytest.approx(
-                self.csc.config.park_positions["horizon"]["elevation"],
-            )
-            assert azimuth.actualPosition == pytest.approx(
-                self.csc.config.park_positions["horizon"]["azimuth"],
+            await self.assert_next_sample(
+                self.remote.tel_azimuth,
+                flush=True,
+                timeout=STD_TIMEOUT,
+                actualPosition=pytest.approx(expected_park_azimuth),
             )
 
             await salobj.set_summary_state(self.remote, salobj.State.STANDBY)
@@ -1994,6 +2010,13 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def test_unpark_telescope_unparked(self):
 
         async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.remote.cmd_moveToTarget.set_start(
+                azimuth=0.0,
+                elevation=45.0,
+                timeout=STD_TIMEOUT,
+            )
+
             with pytest.raises(salobj.AckError, match="outside unparking position"):
                 await self.remote.cmd_unpark.start()
 
@@ -2178,3 +2201,57 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
 
             self.log.info("Check that now lock will work.")
             await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
+
+    async def test_lock_unlock_in_disabled(self):
+        """Test locking/unlocking the MTMount while in disabled."""
+
+        async with self.make_csc(initial_state=salobj.State.DISABLED):
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKED,
+                flush=False,
+            )
+
+            await self.remote.cmd_lockMotion.start(timeout=STD_TIMEOUT)
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.LOCKING,
+                flush=False,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.LOCKED,
+                flush=False,
+            )
+
+            await self.remote.cmd_unlockMotion.start(timeout=STD_TIMEOUT)
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKING,
+                flush=False,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKED,
+                flush=False,
+            )
+
+    async def test_unlock_when_unlocked(self):
+        """Test that unlocking when it is already unlocked is a noop."""
+        async with self.make_csc(initial_state=salobj.State.ENABLED):
+
+            await self.assert_next_sample(
+                self.remote.evt_motionLockState,
+                lockState=MotionLockState.UNLOCKED,
+                flush=False,
+            )
+
+            await self.remote.cmd_unlockMotion.start(timeout=STD_TIMEOUT)
+
+            with pytest.raises(asyncio.TimeoutError):
+                await self.assert_next_sample(
+                    self.remote.evt_motionLockState, timeout=SHORT_TIMEOUT, flush=False
+                )

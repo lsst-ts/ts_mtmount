@@ -6,6 +6,30 @@
 Version History
 ###############
 
+v0.33.0
+-------
+
+- Updates to the CSC:
+
+  - Updated unpark command to leave CSC in the park/unpark state at the end.
+
+  - Updated park velocity to 0.5deg/s.
+
+  - Allow the lock/unlock motion commands to be executed when the CSC is in Disabled or Enabled.
+
+  - Fixed issue with the unlockMotion command which would leave the system in UNLOCKING if the command was sent when the CSC was already locked.
+
+  - Updated handle_apply_settings_set first load the new settings and then to only power off/on the elevation and azimuth axis.
+
+  - Updated _disable_devices_impl to change order in which the drives are disabled.
+    Do elevation before azimuth.
+
+  - Updated handle_apply_settings_set to await for devices to disable, intead of doing that in the background.
+
+- In mtmount_ccw_only_csc, allows lock/unlock motion commands.
+
+- Added new capacitor bank telemetry.
+
 v0.32.1
 -------
 
