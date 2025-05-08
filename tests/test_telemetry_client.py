@@ -207,6 +207,10 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                         values = [
                             int(value) for value in random.integers(0, 10000, fieldlen)
                         ]
+                    elif dtype is bool:
+                        values = [
+                            bool(value) for value in random.integers(0, 10000, fieldlen)
+                        ]
                     else:
                         raise RuntimeError(
                             f"Unrecognized {dtype=} for {sal_topic_name}.{fieldname}, {null_field_data=}"
