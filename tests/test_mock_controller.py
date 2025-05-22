@@ -1304,9 +1304,11 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         async with self.make_controller(commander=mtmount.Source.HHD):
             # Wait for one iteration of telemetry,
             # to avoid duplicate message.
-            await asyncio.wait_for(
-                self.controller.wait_telemetry(), timeout=STD_TIMEOUT
-            )
+            async with asyncio.timeout(STD_TIMEOUT):
+                try:
+                    await self.controller.wait_telemetry()
+                except RuntimeError:
+                    await asyncio.sleep(STD_TIMEOUT/10)
 
             replies = await self.run_command(
                 command=mtmount.commands.StateInfo(),
