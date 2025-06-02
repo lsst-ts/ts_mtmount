@@ -6,6 +6,11 @@
 Version History
 ###############
 
+v0.33.1
+-------
+
+- Updated the ``startTracking`` command to add a delay between the time the command is sent to the TMA controller and the command returns.
+
 v0.33.0
 -------
 
