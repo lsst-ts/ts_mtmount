@@ -25,7 +25,7 @@ import asyncio
 
 from lsst.ts import simactuators
 
-from ..exceptions import CommandSupersededException
+from ..exceptions import CommandSupersededError
 from .base_device import BaseDevice
 
 
@@ -145,7 +145,7 @@ class PointToPointDevice(BaseDevice):
         """Report the current move command (if any) as superseded."""
         if not self._move_result_task.done():
             self._move_result_task.set_exception(
-                CommandSupersededException(command=command)
+                CommandSupersededError(command=command)
             )
         self._monitor_move_task.cancel()
 

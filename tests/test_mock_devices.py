@@ -123,7 +123,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(task, timeout=timeout + STD_TIMEOUT)
             if should_fail:
                 self.fail(f"Command {command} succeeded but should_fail true")
-        except (mtmount.CommandSupersededException, asyncio.CancelledError) as e:
+        except (mtmount.CommandSupersededError, asyncio.CancelledError) as e:
             if not should_be_superseded:
                 self.fail(
                     f"Command {command} superseded, but should_be_superseded false: {e!r}"
