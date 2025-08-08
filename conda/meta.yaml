@@ -28,12 +28,12 @@ requirements:
   host:
     - pip
     - python {{ python }}
-    - setuptools
-    - setuptools_scm
+    - setuptools {{ setuptools }}
+    - setuptools_scm {{ setuptools_scm }}
   run:
     - python {{ python }}
-    - setuptools
-    - setuptools_scm
+    - setuptools {{ setuptools }}
+    - setuptools_scm {{ setuptools_scm }}
     - ts-xml {{ xml_version }}
     - ts-salobj {{ salobj_version }}
     - ts-simactuators

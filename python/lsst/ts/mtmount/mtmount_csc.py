@@ -516,6 +516,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_reply_history = collections.deque(maxlen=100)
         self.subsequent_failed_track_target = 0
         self.max_subsequent_failed_track_target = 2
+        self._start_tracking_delay = 0.5
 
     @property
     def has_command(self):
@@ -1774,14 +1775,21 @@ class MTMountCsc(salobj.ConfigurableCsc):
         )
 
         await self.cmd_startTracking.ack_in_progress(
-            data, timeout=START_TRACKING_TIMEOUT
+            data, timeout=START_TRACKING_TIMEOUT, result="Issuing start tracking."
         )
+
         if not self.track_started:
             async with self.main_axes_lock:
                 try:
                     await self.send_command(
                         commands.BothAxesEnableTracking(), do_lock=False
                     )
+                    await self.cmd_startTracking.ack_in_progress(
+                        data,
+                        timeout=START_TRACKING_TIMEOUT,
+                        result=f"Wait {self._start_tracking_delay}s for system to be ready.",
+                    )
+                    await asyncio.sleep(self._start_tracking_delay)
                 except Exception:
                     await self.log_command_history()
                     raise

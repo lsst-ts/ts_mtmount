@@ -19,10 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["CommandSupersededException"]
+__all__ = ["CommandSupersededError"]
 
 
-class CommandSupersededException(Exception):
+class CommandSupersededError(Exception):
     def __init__(self, command):
         self.command = command
         super().__init__("Superseded")

@@ -38,7 +38,7 @@ from lsst.ts.xml.enums.MTMount import (
 )
 
 from .. import commands, constants, enums
-from ..exceptions import CommandSupersededException
+from ..exceptions import CommandSupersededError
 from ..telemetry_map import TelemetryTopicId
 from .auxiliary_cabinets_thermal import AuxiliaryCabinetsThermalDevice
 
@@ -1585,7 +1585,7 @@ class Controller:
         except asyncio.CancelledError:
             if self.command_server.connected:
                 await self.write_cmd_superseded(command, superseded_by=None)
-        except CommandSupersededException as e:
+        except CommandSupersededError as e:
             if self.command_server.connected:
                 await self.write_cmd_superseded(command, superseded_by=e.command)
         except Exception as e:

@@ -26,7 +26,7 @@ import asyncio
 from lsst.ts import simactuators, utils
 from lsst.ts.xml.enums.MTMount import AxisMotionState, System
 
-from ..exceptions import CommandSupersededException
+from ..exceptions import CommandSupersededError
 from . import limits
 from .base_device import BaseDevice
 
@@ -193,7 +193,7 @@ class AxisDevice(BaseDevice):
         """Report the current move command (if any) as superseded."""
         if not self._move_result_task.done():
             self._move_result_task.set_exception(
-                CommandSupersededException(command=command)
+                CommandSupersededError(command=command)
             )
         self._monitor_move_task.cancel()
 
