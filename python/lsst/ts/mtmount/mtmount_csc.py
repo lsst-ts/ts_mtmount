@@ -1114,7 +1114,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
                     commands.OilSupplySystemCabinetsThermalSetpoint(setpoint=setpoint),
                 )
             case System.TOP_END_CHILLER:
-                raise RuntimeError("The top end chiller is not yet supported")
+                command_list = (
+                    commands.TopEndChillerThermalSetpoint(setpoint=setpoint),
+                )
             case _:
                 command_prefix = self.command_prefixes.get(system_id)
                 if command_prefix is None:
