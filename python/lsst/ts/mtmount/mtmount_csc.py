@@ -279,7 +279,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
     # When unparking the telescope, what is the
     # offset that should be applied to the elevation axis
     # (in deg).
-    unpark_elevation_offset = 10.0
+    unpark_elevation_offset = 20.0
 
     def __init__(
         self,
