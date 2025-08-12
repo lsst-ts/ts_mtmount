@@ -41,14 +41,8 @@ class TopEndChillerDevice(BaseThermalDevice):
     def __init__(self, controller):
         super().__init__(controller=controller, system_id=System.TOP_END_CHILLER)
 
-    def do_track_ambient(self, command):
+    def do_thermal_setpoint(self, command):
         self.assert_on()
-        self.thermal_mode = (
-            ThermalMode.TRACK_AMBIENT
-            if command.track_ambient
-            else ThermalMode.TRACK_SETPOINT
-        )
-        if command.track_ambient:
-            self.set_ambient(setpoint=self.controller.ambient_temperature)
-        else:
-            self.set_setpoint(setpoint=command.setpoint)
+        self.thermal_mode = ThermalMode.TRACK_SETPOINT
+
+        self.set_setpoint(setpoint=command.setpoint)
