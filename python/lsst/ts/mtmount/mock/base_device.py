@@ -129,6 +129,12 @@ class BaseDevice:
     def do_power(self, command):
         self.power_on = command.on
 
+    def do_power_on(self, command):
+        self.power_on = True
+
+    def do_power_off(self, command):
+        self.power_on = False
+
     def do_reset_alarm(self, command):
         self.alarm_on = False
 
