@@ -100,9 +100,10 @@ __all__ = [
     "RestoreDefaultSettings",
     "SafetyReset",
     "StateInfo",
-    "TopEndChillerPower",
+    "TopEndChillerPowerOn",
+    "TopEndChillerPowerOff",
     "TopEndChillerResetAlarm",
-    "TopEndChillerTrackAmbient",
+    "TopEndChillerThermalSetpoint",
     "Commands",
     "CommandDict",
     "parse_command",
@@ -913,29 +914,27 @@ class StateInfo(BaseCommand):
     )
 
 
-class TopEndChillerPower(BaseCommand):
+class TopEndChillerPowerOn(BaseCommand):
     field_infos = make_command_field_infos(
-        enums.CommandCode.TOP_END_CHILLER_POWER,
-        _OnOffParameter,
+        enums.CommandCode.TOP_END_CHILLER_POWER_ON,
     )
 
+class TopEndChillerPowerOff(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.TOP_END_CHILLER_POWER_OFF,
+    )
+
+class TopEndChillerThermalSetpoint(BaseCommand):
+    field_infos = make_command_field_infos(
+        enums.CommandCode.TOP_END_CHILLER_THERMAL_SETPOINT,
+        (
+            field_info.FloatFieldInfo(name="setpoint", doc="desired setpoint (C)"),
+        ),
+    )
 
 class TopEndChillerResetAlarm(BaseCommand):
     field_infos = make_command_field_infos(
         enums.CommandCode.TOP_END_CHILLER_RESET_ALARM,
-    )
-
-
-class TopEndChillerTrackAmbient(BaseCommand):
-    field_infos = make_command_field_infos(
-        enums.CommandCode.TOP_END_CHILLER_TRACK_AMBIENT,
-        (
-            field_info.BoolFieldInfo(
-                name="track_ambient",
-                doc="What to track: ambient if true, setpoint if false",
-            ),
-            field_info.FloatFieldInfo(name="setpoint", doc="desired setpoint (C)"),
-        ),
     )
 
 
@@ -1018,9 +1017,10 @@ Commands = (
     RestoreDefaultSettings,
     SafetyReset,
     StateInfo,
-    TopEndChillerPower,
+    TopEndChillerPowerOn,
+    TopEndChillerPowerOff,
     TopEndChillerResetAlarm,
-    TopEndChillerTrackAmbient,
+    TopEndChillerThermalSetpoint,
 )
 
 for command in Commands:
