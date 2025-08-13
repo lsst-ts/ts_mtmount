@@ -79,6 +79,11 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             (System.AUXILIARY_CABINETS_THERMAL, System.MAIN_CABINET_THERMAL)
         )
 
+        # systems that have a separate commands to power on and off
+        self.system_ids_power_onoff_command = frozenset(
+            (System.TOP_END_CHILLER,)
+        )
+
     def get_command_class(self, command_code_name):
         command_code = getattr(mtmount.CommandCode, command_code_name.upper())
         return mtmount.commands.CommandDict[command_code]
@@ -576,21 +581,6 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         system_id = System.TOP_END_CHILLER
         device = self.controller.device_dict[system_id]
         self.check_device_repr(device)
-
-        track_ambient_command_class = mtmount.commands.TopEndChillerTrackAmbient
-
-        def make_track_setpoint_command(setpoint):
-            return track_ambient_command_class(track_ambient=False, setpoint=setpoint)
-
-        def make_track_ambient_command(setpoint):
-            return track_ambient_command_class(track_ambient=True, setpoint=setpoint)
-
-        await self.check_thermal_device(
-            system_id=system_id,
-            make_power_command=mtmount.commands.TopEndChillerPower,
-            make_track_ambient_command=make_track_ambient_command,
-            make_track_setpoint_command=make_track_setpoint_command,
-        )
 
     async def test_axis_devices(self):
         for system_id in (
@@ -1126,6 +1116,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         device_has_power_command = (
             device.system_id not in self.system_ids_no_power_command
         )
+        device_has_power_onoff_command = device.system_id in self.system_ids_power_onoff_command
 
         self.controller.main_axes_power_supply.power_on = False
 
@@ -1136,7 +1127,16 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             assert device.power_on
 
         device_prefix = device.system_id.name
-        if device_has_power_command:
+        if device_has_power_command and device_has_power_onoff_command:
+            power_on_command_class = self.get_command_class(device_prefix + "_POWER_ON")
+            power_off_command_class = self.get_command_class(device_prefix + "_POWER_OFF")
+            if drive is not None:
+                power_kwargs = dict(drive=drive)
+            else:
+                power_kwargs = {}
+            power_command_on = power_on_command_class(**power_kwargs)
+            power_command_off = power_off_command_class(**power_kwargs)
+        elif device_has_power_command:
             power_command_class = self.get_command_class(device_prefix + "_POWER")
             if drive is not None:
                 power_kwargs = dict(drive=drive)

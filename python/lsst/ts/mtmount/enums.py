@@ -188,9 +188,10 @@ class CommandCode(enum.IntEnum):
     ASK_FOR_COMMAND = 2103
     # The top end chiller commands may change,
     # once control is implemented.
-    TOP_END_CHILLER_POWER = 2201
-    TOP_END_CHILLER_TRACK_AMBIENT = 2202
+    TOP_END_CHILLER_POWER_ON = 2201
+    TOP_END_CHILLER_POWER_OFF = 2202
     TOP_END_CHILLER_RESET_ALARM = 2203
+    TOP_END_CHILLER_THERMAL_SETPOINT = 2216
     TRANSFER_FUNCTION_AZIMUTH_EXCITATION = 2301
     TRANSFER_FUNCTION_ELEVATION_EXCITATION = 2302
     # Get actual set of settings to send them to TCS.

@@ -6,6 +6,23 @@
 Version History
 ###############
 
+v0.33.2
+-------
+
+* Update mock devices unit test to take into account the updates done to the top end chiller controller.
+
+* In ``mtmount_csc.py``, update ``unpark_elevation_offset`` to 20 degrees.
+
+* In ``mock/top_end_chiller_device.py``, rename ``do_track_ambient`` -> ``do_thermal_setpoint``.
+
+* In ``mock/base_device.py``, add methods to support the top end chiller operation.
+
+* In ``mtmount_csc.py``, implement top end chiller thermal set point command.
+
+* In ``commands.py``, update top end chiller related commands.
+
+* In ``enums.py``, update top end chiller related ``CommandCode`` enumeration values.
+
 v0.33.1
 -------
 
