@@ -6,6 +6,11 @@
 Version History
 ###############
 
+v0.33.3
+-------
+
+* Fixed enumeration value for the ``RESTORE_DEFAULT_SETTINGS`` command.
+
 v0.33.2
 -------
 
