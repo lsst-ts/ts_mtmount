@@ -280,6 +280,10 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 - topEndChiller
 - actualTemperatureAmbient: 1
   actualTemperatureAmbientTimestamp: 1
+  airCompressedValveFailure: 1
+  airCompressedValveFailureTimestamp: 1
+  airCompressedValveStatus: 1
+  airCompressedValveStatusTimestamp: 1
   ambientRelativeHumiditySensor0501: 1
   ambientRelativeHumiditySensor0501Timestamp: 1
   ambientRelativeHumiditySensor0502: 1
@@ -872,10 +876,12 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   currentCapacitorBank7FuseTimestamp: 5
   currentCapacitorBank8Fuse: 5
   currentCapacitorBank8FuseTimestamp: 5
+  fuseCapacitorBank: 8
+  fuseCapacitorBankTimestamp: 8
   internalTemperatureCapacitorBank: 8
   internalTemperatureCapacitorBankTimestamp: 8
   timestamp: 1
-"""
+  """
 )
 
 
