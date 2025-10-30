@@ -110,10 +110,7 @@ class BaseCommand:
                     f"{type(cls).__name__} requires exactly {num_field_infos} fields, "
                     f"but got {len(fields)}: {fields}"
                 )
-        kwargs = {
-            finfo.name: finfo.value_from_str(fields[i])
-            for i, finfo in enumerate(cls.field_infos)
-        }
+        kwargs = {finfo.name: finfo.value_from_str(fields[i]) for i, finfo in enumerate(cls.field_infos)}
         if cls.has_extra_data:
             kwargs["extra_data"] = tuple(fields[num_field_infos:])
         return cls(**kwargs)
@@ -126,9 +123,7 @@ class BaseCommand:
             param_doc = wrap_parameter_doc(finfo.doc)
             is_optional = finfo.default is not None or finfo.name == "sequence_id"
             optional_str = ", optional" if is_optional else ""
-            param_strings.append(
-                f"{finfo.name} : `{finfo.dtype.__name__}{optional_str}`\n{param_doc}"
-            )
+            param_strings.append(f"{finfo.name} : `{finfo.dtype.__name__}{optional_str}`\n{param_doc}")
         param_block = "\n".join(param_strings)
         cls.__doc__ = f"""{cls.__name__} command.
 
@@ -146,10 +141,7 @@ Parameters
 
     def str_fields(self):
         """Return the data as a list of string fields."""
-        str_list = [
-            field.str_from_value(getattr(self, field.name))
-            for field in self.field_infos
-        ]
+        str_list = [field.str_from_value(getattr(self, field.name)) for field in self.field_infos]
         if self.has_extra_data:
             str_list += list(self.extra_data)
         return str_list
@@ -164,9 +156,6 @@ Parameters
         return self.str_fields() == other.str_fields()
 
     def __repr__(self):
-        arglist = [
-            f"{finfo.name}={self._get_formatted_value(finfo.name)}"
-            for finfo in self.field_infos
-        ]
+        arglist = [f"{finfo.name}={self._get_formatted_value(finfo.name)}" for finfo in self.field_infos]
         argstr = ", ".join(arglist)
         return f"{type(self).__name__}({argstr})"

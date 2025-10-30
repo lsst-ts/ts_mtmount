@@ -72,8 +72,7 @@ class BaseThermalDevice(BaseDevice):
         self.ambient = setpoint
         if self.power_on and self.track_ambient:
             self.temperature = (
-                self.controller.ambient_temperature
-                + TEMPERATURE_SLOP_FACTOR * self.temperature_slop
+                self.controller.ambient_temperature + TEMPERATURE_SLOP_FACTOR * self.temperature_slop
             )
 
     def set_setpoint(self, setpoint):
@@ -81,6 +80,4 @@ class BaseThermalDevice(BaseDevice):
             raise RuntimeError("In fault state")
         self.setpoint = setpoint
         if self.power_on and self.track_setpoint:
-            self.temperature = (
-                self.setpoint + TEMPERATURE_SLOP_FACTOR * self.temperature_slop
-            )
+            self.temperature = self.setpoint + TEMPERATURE_SLOP_FACTOR * self.temperature_slop

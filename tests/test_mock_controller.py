@@ -48,9 +48,7 @@ TIMEOUT_PADDING = 5
 logging.basicConfig()
 
 
-UNSUPPORTED_COMMAND_CODE = (
-    mtmount.enums.CommandCode.TRANSFER_FUNCTION_AZIMUTH_EXCITATION
-)
+UNSUPPORTED_COMMAND_CODE = mtmount.enums.CommandCode.TRANSFER_FUNCTION_AZIMUTH_EXCITATION
 
 SYSTEMS_INITIALLY_ON = frozenset(
     (
@@ -88,9 +86,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
           a convenient way to test ``ASK_FOR_COMMAND`` failures.
         """
         log = logging.getLogger()
-        self.controller = mtmount.mock.Controller(
-            log=log, commander=commander, random_ports=True
-        )
+        self.controller = mtmount.mock.Controller(log=log, commander=commander, random_ports=True)
         t0 = time.monotonic()
         await asyncio.wait_for(self.controller.start_task, timeout=START_TIMEOUT)
 
@@ -142,12 +138,8 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             assert device.power_on
 
             # Issue a background command
-            assert device.actuator.position() == pytest.approx(
-                device.retracted_position
-            )
-            deploy_command = mtmount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, deploy=True
-            )
+            assert device.actuator.position() == pytest.approx(device.retracted_position)
+            deploy_command = mtmount.commands.MirrorCoverLocksMoveAll(drive=-1, deploy=True)
             await self.run_command(command=deploy_command, use_read_loop=use_read_loop)
             assert device.actuator.position() == pytest.approx(device.deployed_position)
 
@@ -195,9 +187,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             )
             # Issue one more command to be sure we really didn't get
             # a Done reply for the previous command
-            await self.run_command(
-                command=mtmount.commands.AzimuthStop(), use_read_loop=use_read_loop
-            )
+            await self.run_command(command=mtmount.commands.AzimuthStop(), use_read_loop=use_read_loop)
             assert device.power_on
             assert device.enabled
             assert not device.tracking_enabled
@@ -217,9 +207,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             assert unsupported_command.command_code not in mtmount.commands.CommandDict
             new_command_dict = mtmount.commands.CommandDict.copy()
             new_command_dict[unsupported_command.command_code] = UnsupportedCommand
-            with unittest.mock.patch(
-                "lsst.ts.mtmount.commands.CommandDict", new_command_dict
-            ):
+            with unittest.mock.patch("lsst.ts.mtmount.commands.CommandDict", new_command_dict):
                 await self.run_command(
                     command=unsupported_command,
                     final_reply_code=mtmount.ReplyId.CMD_REJECTED,
@@ -247,9 +235,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             if system is None:
                 system = reply.axis
             if (reply.id, system) in replies_set:
-                raise RuntimeError(
-                    f"Already saw a reply with this ID and system: {reply=}"
-                )
+                raise RuntimeError(f"Already saw a reply with this ID and system: {reply=}")
             replies_set = (reply.id, system)
             match reply.id:
                 case mtmount.ReplyId.HOMED:
@@ -257,20 +243,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 case mtmount.ReplyId.IN_POSITION:
                     assert not reply.inPosition
                 case mtmount.ReplyId.MOTION_CONTROLLER_STATE:
-                    assert all(
-                        state == PowerState.OFF for state in reply.motionControllerState
-                    )
+                    assert all(state == PowerState.OFF for state in reply.motionControllerState)
                 case mtmount.ReplyId.POWER_STATE:
                     expected_power_state = (
-                        PowerState.ON
-                        if reply.system in SYSTEMS_INITIALLY_ON
-                        else PowerState.OFF
+                        PowerState.ON if reply.system in SYSTEMS_INITIALLY_ON else PowerState.OFF
                     )
                     assert reply.powerState == expected_power_state
                     elements_state = getattr(reply, "elementsPowerState", ())
-                    assert all(
-                        state == expected_power_state for state in elements_state
-                    )
+                    assert all(state == expected_power_state for state in elements_state)
                 case mtmount.ReplyId.AXIS_MOTION_STATE:
                     assert reply.state == AxisMotionState.STOPPED
                 case _:
@@ -306,18 +286,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         Return it as a types.SimpleNamespace with the parameters
         hoisted to the top level.
         """
-        reply_dict = await asyncio.wait_for(
-            self.command_client.read_json(), timeout=timeout
-        )
+        reply_dict = await asyncio.wait_for(self.command_client.read_json(), timeout=timeout)
         return types.SimpleNamespace(
             id=mtmount.ReplyId(reply_dict["id"]),
             timestamp=reply_dict["timestamp"],
             **reply_dict["parameters"],
         )
 
-    async def read_replies(
-        self, wait_reply_codes, other_reply_codes=(), return_all_replies=False
-    ):
+    async def read_replies(self, wait_reply_codes, other_reply_codes=(), return_all_replies=False):
         """Wait for one or more replies of the specified types.
 
         Return a list of the all replies read.
@@ -426,29 +402,24 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             )
         )
         if final_reply_code not in cmd_reply_codes:
-            raise ValueError(
-                f"final_reply_code={final_reply_code} not a command reply code"
-            )
+            raise ValueError(f"final_reply_code={final_reply_code} not a command reply code")
 
         bad_nonack_codes = set(wait_reply_codes) & cmd_reply_codes
         if bad_nonack_codes:
             raise ValueError(
-                f"wait_reply_codes={wait_reply_codes} contains "
-                f"{bad_nonack_codes}, which are cmd replies"
+                f"wait_reply_codes={wait_reply_codes} contains {bad_nonack_codes}, which are cmd replies"
             )
 
         other_reply_codes_set = set(other_reply_codes)
         if len(other_reply_codes_set) < len(other_reply_codes):
             warnings.warn(
-                "There is no need to specify duplicate codes "
-                f"in other_reply_codes={other_reply_codes}"
+                f"There is no need to specify duplicate codes in other_reply_codes={other_reply_codes}"
             )
 
         bad_nonack_codes = other_reply_codes_set & cmd_reply_codes
         if bad_nonack_codes:
             raise ValueError(
-                f"other_reply_codes={other_reply_codes} contains "
-                f"{bad_nonack_codes}, which are cmd replies"
+                f"other_reply_codes={other_reply_codes} contains {bad_nonack_codes}, which are cmd replies"
             )
 
         nonack_reply_codes_remaining = list(wait_reply_codes)
@@ -662,9 +633,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             # is powered off (unfortunately; I wish it was rejected)
             for device in devices:
                 device.alarm_on = True
-            await self.run_command(
-                command=mtmount.commands.BothAxesResetAlarm(), use_read_loop=True
-            )
+            await self.run_command(command=mtmount.commands.BothAxesResetAlarm(), use_read_loop=True)
             for device in devices:
                 assert device.alarm_on
 
@@ -673,9 +642,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 command=mtmount.commands.MainAxesPowerSupplyPower(on=True),
                 use_read_loop=True,
             )
-            await self.run_command(
-                command=mtmount.commands.BothAxesResetAlarm(), use_read_loop=True
-            )
+            await self.run_command(command=mtmount.commands.BothAxesResetAlarm(), use_read_loop=True)
             for device in devices:
                 assert not device.alarm_on
                 assert not device.power_on
@@ -715,9 +682,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     assert reply.powerState == desired_power_state
                 assert device.power_on == power_on
 
-            for azimuth_on, elevation_on in itertools.product(
-                (False, True), (False, True)
-            ):
+            for azimuth_on, elevation_on in itertools.product((False, True), (False, True)):
                 if azimuth_on and elevation_on:
                     continue
                 await set_axis_power(azimuth_device, azimuth_on)
@@ -793,9 +758,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert device.homed
                 assert not device.tracking_enabled
 
-            await self.run_command(
-                command=mtmount.commands.BothAxesEnableTracking(), use_read_loop=True
-            )
+            await self.run_command(command=mtmount.commands.BothAxesEnableTracking(), use_read_loop=True)
             for device in devices:
                 assert not device.alarm_on
                 assert device.power_on
@@ -807,16 +770,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         """Test the BothAxesMove command and InPosition replies."""
         async with self.make_controller():
             n_in_position = len(self.controller.in_position_dict)
-            n_motion_controller_state = len(
-                self.controller.motion_controller_state_dict
-            )
+            n_motion_controller_state = len(self.controller.motion_controller_state_dict)
             n_axis_motion_state = len(self.controller.axis_motion_state_dict)
             n_power_state = len(self.controller.power_state_dict)
             replies = await asyncio.wait_for(
                 self.read_replies(
                     wait_reply_codes=[mtmount.ReplyId.IN_POSITION] * n_in_position
-                    + [mtmount.ReplyId.MOTION_CONTROLLER_STATE]
-                    * n_motion_controller_state
+                    + [mtmount.ReplyId.MOTION_CONTROLLER_STATE] * n_motion_controller_state
                     + [mtmount.ReplyId.POWER_STATE] * n_power_state
                     + [mtmount.ReplyId.AXIS_MOTION_STATE] * n_axis_motion_state,
                 ),
@@ -839,9 +799,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                         or reply.system == System.AZIMUTH_CABLE_WRAP
                     )
                     expected_power_state = (
-                        PowerState.ON
-                        if reply.system in SYSTEMS_INITIALLY_ON
-                        else PowerState.OFF
+                        PowerState.ON if reply.system in SYSTEMS_INITIALLY_ON else PowerState.OFF
                     )
                     assert reply.powerState == expected_power_state
                 elif reply.id == mtmount.ReplyId.AXIS_MOTION_STATE:
@@ -849,18 +807,10 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     assert reply.state == AxisMotionState.STOPPED
 
             both_axis_device_ids = (System.AZIMUTH, System.ELEVATION)
-            devices = [
-                self.controller.device_dict[device_id]
-                for device_id in both_axis_device_ids
-            ]
-            start_positions = [
-                device.actuator.path.at(utils.current_tai()).position
-                for device in devices
-            ]
+            devices = [self.controller.device_dict[device_id] for device_id in both_axis_device_ids]
+            start_positions = [device.actuator.path.at(utils.current_tai()).position for device in devices]
             end_positions = [pos + 1 for pos in start_positions]
-            move_command = mtmount.commands.BothAxesMove(
-                azimuth=end_positions[0], elevation=end_positions[1]
-            )
+            move_command = mtmount.commands.BothAxesMove(azimuth=end_positions[0], elevation=end_positions[1])
             await self.run_command(
                 command=mtmount.commands.MainAxesPowerSupplyPower(on=True),
                 use_read_loop=True,
@@ -912,9 +862,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert not device.tracking_enabled
             for reply in non_cmd_replies:
                 assert reply.inPosition
-            assert {reply.axis for reply in non_cmd_replies} == set(
-                both_axis_device_ids
-            )
+            assert {reply.axis for reply in non_cmd_replies} == set(both_axis_device_ids)
 
             # Test telemetry after move
             axis_telems = [
@@ -979,10 +927,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             }
 
             both_axis_device_ids = (System.AZIMUTH, System.ELEVATION)
-            devices = [
-                self.controller.device_dict[device_id]
-                for device_id in both_axis_device_ids
-            ]
+            devices = [self.controller.device_dict[device_id] for device_id in both_axis_device_ids]
 
             await self.run_command(
                 command=mtmount.commands.MainAxesPowerSupplyPower(on=True),
@@ -994,9 +939,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert not device.homed
                 assert not device.tracking_enabled
 
-            await self.run_command(
-                command=mtmount.commands.BothAxesPower(on=True), use_read_loop=True
-            )
+            await self.run_command(command=mtmount.commands.BothAxesPower(on=True), use_read_loop=True)
             for device in devices:
                 assert device.power_on
                 assert device.enabled
@@ -1031,10 +974,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 assert device.enabled
                 assert device.tracking_enabled
 
-            start_positions = [
-                device.actuator.path.at(utils.current_tai()).position
-                for device in devices
-            ]
+            start_positions = [device.actuator.path.at(utils.current_tai()).position for device in devices]
             end_positions = [start_position + 3 for start_position in start_positions]
             previous_tai = 0
             # Send tracking updates until an IN_POSITION reply is seen.
@@ -1233,15 +1173,9 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                     assert ccw_settings["MinPosition"] == ccw_cmd_limits.min_position
                     assert ccw_settings["MaxPosition"] == ccw_cmd_limits.max_position
                     assert ccw_settings["MaxSpeed"] == ccw_cmd_limits.max_velocity
-                    assert (
-                        ccw_settings["MaxAcceleration"]
-                        == ccw_cmd_limits.max_acceleration
-                    )
+                    assert ccw_settings["MaxAcceleration"] == ccw_cmd_limits.max_acceleration
                     assert ccw_settings["TrackingSpeed"] == ccw_actuator.max_velocity
-                    assert (
-                        ccw_settings["TrackingAcceleration"]
-                        == ccw_actuator.max_acceleration
-                    )
+                    assert ccw_settings["TrackingAcceleration"] == ccw_actuator.max_acceleration
 
                     for axis_name, system_id in (
                         ("Azimuth", System.AZIMUTH),
@@ -1272,26 +1206,11 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                                 assert not axis_settings[limit_enable_name]
                             else:
                                 assert axis_settings[limit_enable_name]
-                        assert (
-                            axis_settings["LimitsMinPositionValue"]
-                            == axis_cmd_limits.min_position
-                        )
-                        assert (
-                            axis_settings["LimitsMaxPositionValue"]
-                            == axis_cmd_limits.max_position
-                        )
-                        assert (
-                            axis_settings["TcsMaxVelocity"]
-                            == axis_cmd_limits.max_velocity
-                        )
-                        assert (
-                            axis_settings["TcsMaxAcceleration"]
-                            == axis_cmd_limits.max_acceleration
-                        )
-                        assert (
-                            axis_settings["SoftmotionTrackingMaxSpeed"]
-                            == axis_actuator.max_velocity
-                        )
+                        assert axis_settings["LimitsMinPositionValue"] == axis_cmd_limits.min_position
+                        assert axis_settings["LimitsMaxPositionValue"] == axis_cmd_limits.max_position
+                        assert axis_settings["TcsMaxVelocity"] == axis_cmd_limits.max_velocity
+                        assert axis_settings["TcsMaxAcceleration"] == axis_cmd_limits.max_acceleration
+                        assert axis_settings["SoftmotionTrackingMaxSpeed"] == axis_actuator.max_velocity
                         assert (
                             axis_settings["SoftmotionTrackingMaxAcceleration"]
                             == axis_actuator.max_acceleration
@@ -1308,7 +1227,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 try:
                     await self.controller.wait_telemetry()
                 except RuntimeError:
-                    await asyncio.sleep(STD_TIMEOUT/10)
+                    await asyncio.sleep(STD_TIMEOUT / 10)
 
             replies = await self.run_command(
                 command=mtmount.commands.StateInfo(),
@@ -1324,9 +1243,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
                 if reply.id == mtmount.ReplyId.AVAILABLE_SETTINGS:
                     assert len(reply.sets) == len(self.controller.available_settings)
 
-                    for data, desired in zip(
-                        reply.sets, self.controller.available_settings
-                    ):
+                    for data, desired in zip(reply.sets, self.controller.available_settings):
                         assert data.keys() == desired.keys()
                         for key in ("name", "description"):
                             assert isinstance(data[key], str)
@@ -1361,10 +1278,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
                 elif reply.id == mtmount.ReplyId.ELEVATION_LOCKING_PIN_MOTION_STATE:
                     assert reply.state == ElevationLockingPinMotionState.UNLOCKED
-                    assert (
-                        reply.elementsState
-                        == [ElevationLockingPinMotionState.UNLOCKED] * 2
-                    )
+                    assert reply.elementsState == [ElevationLockingPinMotionState.UNLOCKED] * 2
                 elif reply.id == mtmount.ReplyId.LIMITS:
                     limits_systems.append(reply.system)
                     assert reply.limits == [0]
@@ -1427,21 +1341,14 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             assert len(set(motion_state_axes)) == len(motion_state_axes)
             assert set(motion_state_axes) >= axes_systems
             assert len(set(chiller_state_systems)) == len(chiller_state_systems)
+            assert set(chiller_state_systems) == self.controller.chiller_state_nelts.keys()
+            assert len(set(motion_controller_state_systems)) == len(motion_controller_state_systems)
             assert (
-                set(chiller_state_systems) == self.controller.chiller_state_nelts.keys()
-            )
-            assert len(set(motion_controller_state_systems)) == len(
-                motion_controller_state_systems
-            )
-            assert (
-                set(motion_controller_state_systems)
-                == self.controller.motion_controller_state_nelts.keys()
+                set(motion_controller_state_systems) == self.controller.motion_controller_state_nelts.keys()
             )
             assert len(set(power_state_systems)) == len(power_state_systems)
             print(f"{set(power_state_systems)=}")
-            power_state_system_ids = sorted(
-                [item.value for item in self.controller.power_state_nelts]
-            )
+            power_state_system_ids = sorted([item.value for item in self.controller.power_state_nelts])
             print(f"{power_state_system_ids=}")
             assert set(power_state_systems) == self.controller.power_state_nelts.keys()
 
@@ -1451,9 +1358,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
             # Create the command queue with specified maxsize.
             maxsize = 47
-            self.controller.set_command_queue(
-                queue_heartbeat_commands=True, maxsize=maxsize
-            )
+            self.controller.set_command_queue(queue_heartbeat_commands=True, maxsize=maxsize)
             assert isinstance(self.controller.command_queue, asyncio.Queue)
             assert self.controller.command_queue.maxsize == maxsize
             assert self.controller.queue_heartbeat_commands
@@ -1541,9 +1446,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
 
             # Work around Docker time issues on macOS with an offset
             tai0 = utils.current_tai() - 0.1
-            ccw_telem = await self.next_telemetry(
-                mtmount.TelemetryTopicId.cameraCableWrap
-            )
+            ccw_telem = await self.next_telemetry(mtmount.TelemetryTopicId.cameraCableWrap)
             for name in (
                 "actualPosition",
                 "actualVelocity",

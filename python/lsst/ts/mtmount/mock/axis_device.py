@@ -192,9 +192,7 @@ class AxisDevice(BaseDevice):
     def supersede_move_command(self, command):
         """Report the current move command (if any) as superseded."""
         if not self._move_result_task.done():
-            self._move_result_task.set_exception(
-                CommandSupersededError(command=command)
-            )
+            self._move_result_task.set_exception(CommandSupersededError(command=command))
         self._monitor_move_task.cancel()
 
     def do_drive_enable(self, command):
@@ -240,9 +238,7 @@ class AxisDevice(BaseDevice):
         else:
             # Pause tracking (this must be the camera cable wrap).
             if not self.tracking_enabled:
-                raise RuntimeError(
-                    "Tracking cannot be paused because tracking is not enabled"
-                )
+                raise RuntimeError("Tracking cannot be paused because tracking is not enabled")
             self._tracking_timeout_task.cancel()
             self.tracking_paused = True
 
@@ -261,29 +257,21 @@ class AxisDevice(BaseDevice):
         motion_state = self.motion_state(tai)
         if motion_state != AxisMotionState.STOPPED:
             raise RuntimeError(
-                f"Axis motion state is {self.motion_state!r}; "
-                f"must be {AxisMotionState.STOPPED}"
+                f"Axis motion state is {self.motion_state!r}; must be {AxisMotionState.STOPPED}"
             )
         current_position = self.actuator.path[-1].at(tai).position
-        center_position = (
-            self.cmd_limits.min_position + self.cmd_limits.max_position
-        ) / 2
+        center_position = (self.cmd_limits.min_position + self.cmd_limits.max_position) / 2
         if current_position > center_position:
             home_position = current_position - self.home_offset
         else:
             home_position = current_position + self.home_offset
-        if (
-            home_position < self.cmd_limits.min_position
-            or home_position > self.cmd_limits.max_position
-        ):
+        if home_position < self.cmd_limits.min_position or home_position > self.cmd_limits.max_position:
             raise RuntimeError(
                 f"Cannot compute a suitable home position; {current_position=}; "
                 f"{self.cmd_limits.min_position=}; {self.cmd_limits.max_position=}; "
                 f"{self.home_offset=}; {home_position=}"
             )
-        return self.move_point_to_point(
-            position=home_position, command=command, homing=True
-        )
+        return self.move_point_to_point(position=home_position, command=command, homing=True)
 
     def do_move(self, command):
         """Set target position.
@@ -299,9 +287,7 @@ class AxisDevice(BaseDevice):
         self.assert_enabled()
         self.has_target = True
         self.homing = False
-        return self.move_point_to_point(
-            position=command.position, command=command, homing=False
-        )
+        return self.move_point_to_point(position=command.position, command=command, homing=False)
 
     def do_move_velocity(self, command):
         raise NotImplementedError("Not implemented")
@@ -348,27 +334,19 @@ class AxisDevice(BaseDevice):
         self.assert_main_axes_power_supply_power_on()
         self.assert_enabled()
         self.assert_tracking_enabled(True)
-        if (
-            not self.cmd_limits.min_position
-            <= command.position
-            <= self.cmd_limits.max_position
-        ):
+        if not self.cmd_limits.min_position <= command.position <= self.cmd_limits.max_position:
             raise ValueError(
                 f"position={command.position} not in range [{self.cmd_limits.min_position}, "
                 f"{self.cmd_limits.max_position}]"
             )
         if abs(command.velocity) > self.cmd_limits.max_velocity:
-            raise ValueError(
-                f"abs(velocity)=abs({command.velocity}) > {self.cmd_limits.max_velocity}"
-            )
+            raise ValueError(f"abs(velocity)=abs({command.velocity}) > {self.cmd_limits.max_velocity}")
         self.supersede_move_command(command)
         if self.tracking_paused:
             self._tracking_timeout_task.cancel()
             return
         self.start_tracking_timer(command)
-        self.actuator.set_target(
-            tai=command.tai, position=command.position, velocity=command.velocity
-        )
+        self.actuator.set_target(tai=command.tai, position=command.position, velocity=command.velocity)
         self.has_target = True
 
     def motion_state(self, tai=None):
@@ -401,11 +379,7 @@ class AxisDevice(BaseDevice):
                 motion_state = AxisMotionState.STOPPED
             else:
                 motion_state = AxisMotionState.MOVING_POINT_TO_POINT
-        elif (
-            motion_state == AxisMotionState.STOPPED
-            and self.tracking_enabled
-            and self.tracking_paused
-        ):
+        elif motion_state == AxisMotionState.STOPPED and self.tracking_enabled and self.tracking_paused:
             motion_state = AxisMotionState.TRACKING_PAUSED
         return motion_state
 
@@ -462,9 +436,7 @@ class AxisDevice(BaseDevice):
         duration = MAX_TRACKING_DELAY + command.tai - utils.current_tai()
         if duration <= 0:
             raise RuntimeError(f"track command too late by {-duration:0.2} seconds")
-        self._tracking_timeout_task = asyncio.create_task(
-            self._tracking_timer(duration)
-        )
+        self._tracking_timeout_task = asyncio.create_task(self._tracking_timer(duration))
 
     async def _tracking_timer(self, duration):
         """Wait for the specified duration (sec) and kill tracking.

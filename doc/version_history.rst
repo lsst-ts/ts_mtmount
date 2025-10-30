@@ -6,6 +6,13 @@
 Version History
 ###############
 
+v0.33.4
+-------
+
+* Syncronized telemetry map.
+* Updated formatting.
+* Update conda recipe to handle python version.
+
 v0.33.3
 -------
 

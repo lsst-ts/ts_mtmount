@@ -80,17 +80,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
         # systems that have a separate commands to power on and off
-        self.system_ids_power_onoff_command = frozenset(
-            (System.TOP_END_CHILLER,)
-        )
+        self.system_ids_power_onoff_command = frozenset((System.TOP_END_CHILLER,))
 
     def get_command_class(self, command_code_name):
         command_code = getattr(mtmount.CommandCode, command_code_name.upper())
         return mtmount.commands.CommandDict[command_code]
 
-    async def run_command(
-        self, command, min_timeout=None, should_be_superseded=False, should_fail=False
-    ):
+    async def run_command(self, command, min_timeout=None, should_be_superseded=False, should_fail=False):
         """Run a command that should succeed and wait for replies.
 
         Parameters
@@ -130,9 +126,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 self.fail(f"Command {command} succeeded but should_fail true")
         except (mtmount.CommandSupersededError, asyncio.CancelledError) as e:
             if not should_be_superseded:
-                self.fail(
-                    f"Command {command} superseded, but should_be_superseded false: {e!r}"
-                )
+                self.fail(f"Command {command} superseded, but should_be_superseded false: {e!r}")
         except Exception as e:
             if not should_fail:
                 self.fail(f"Command {command} failed, but should_fail false: {e!r}")
@@ -156,12 +150,8 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         await self.check_deployable_device(
             device=device,
             power_on_command=mtmount.commands.MirrorCoverLocksPower(drive=-1, on=True),
-            deploy_command=mtmount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, deploy=True
-            ),
-            retract_command=mtmount.commands.MirrorCoverLocksMoveAll(
-                drive=-1, deploy=False
-            ),
+            deploy_command=mtmount.commands.MirrorCoverLocksMoveAll(drive=-1, deploy=True),
+            retract_command=mtmount.commands.MirrorCoverLocksMoveAll(drive=-1, deploy=False),
             stop_command=mtmount.commands.MirrorCoverLocksStop(drive=-1),
             start_deployed=False,
             move_min_timeout=0.5,
@@ -198,9 +188,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # You must be in auto mode to use the OilSupplySystemPower
         with pytest.raises(RuntimeError):
-            await self.run_command(
-                command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0
-            )
+            await self.run_command(command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0)
         with pytest.raises(RuntimeError):
             await self.run_command(
                 command=mtmount.commands.OilSupplySystemPower(on=True),
@@ -212,18 +200,14 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.main_pump_on
         assert not device.auto_mode
 
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemSetMode(auto=True)
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemSetMode(auto=True))
         assert not device.power_on
         assert not device.cooling_on
         assert not device.circulation_pump_on
         assert not device.main_pump_on
         assert device.auto_mode
 
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemPower(on=True), min_timeout=900
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemPower(on=True), min_timeout=900)
         assert device.power_on
         assert device.cooling_on
         assert device.circulation_pump_on
@@ -232,9 +216,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Test cabinet thermal control while in auto mode and power is on
         make_power_command = self.get_command_class(device_prefix + "_POWER")
-        set_setpoint_command_class = self.get_command_class(
-            device_prefix + "_CABINETS_THERMAL_SETPOINT"
-        )
+        set_setpoint_command_class = self.get_command_class(device_prefix + "_CABINETS_THERMAL_SETPOINT")
 
         def make_track_setpoint_command(setpoint):
             return set_setpoint_command_class(setpoint=setpoint)
@@ -246,18 +228,14 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             make_track_ambient_command=None,
         )
 
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemPower(on=False), min_timeout=0)
         assert not device.power_on
         assert not device.cooling_on
         assert not device.circulation_pump_on
         assert not device.main_pump_on
         assert device.auto_mode
 
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemSetMode(auto=False)
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemSetMode(auto=False))
         assert not device.power_on
         assert not device.cooling_on
         assert not device.circulation_pump_on
@@ -278,9 +256,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         }
 
         # All of these commands are rejected if in auto mode
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemSetMode(auto=True)
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemSetMode(auto=True))
         assert device.auto_mode
         for command in subsystem_command_dict.values():
             with pytest.raises(RuntimeError):
@@ -294,9 +270,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.main_pump_on
         assert device.auto_mode
 
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemSetMode(auto=False)
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemSetMode(auto=False))
         assert not device.power_on
         assert not device.cooling_on
         assert not device.circulation_pump_on
@@ -323,14 +297,10 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Cannot turn on main pump if circulation pump off
         with pytest.raises(RuntimeError):
-            await self.run_command(
-                command=mtmount.commands.OilSupplySystemPowerMainPump(on=True)
-            )
+            await self.run_command(command=mtmount.commands.OilSupplySystemPowerMainPump(on=True))
 
         # Turn on circulation pump
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemPowerCirculationPump(on=True)
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemPowerCirculationPump(on=True))
         assert device.cooling_on
         assert device.circulation_pump_on
         assert not device.main_pump_on
@@ -338,14 +308,10 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Cannot turn off cooling if circulation pump is on
         with pytest.raises(RuntimeError):
-            await self.run_command(
-                command=mtmount.commands.OilSupplySystemPowerCooling(on=False)
-            )
+            await self.run_command(command=mtmount.commands.OilSupplySystemPowerCooling(on=False))
 
         # Turn on main pump
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemPowerMainPump(on=True)
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemPowerMainPump(on=True))
         assert device.cooling_on
         assert device.circulation_pump_on
         assert device.main_pump_on
@@ -365,18 +331,14 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         # states, so don't test that again.
 
         # Turn off main pump
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemPowerMainPump(on=False)
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemPowerMainPump(on=False))
         assert device.cooling_on
         assert device.circulation_pump_on
         assert not device.main_pump_on
         assert not device.auto_mode
 
         # Turn off circulation pump
-        await self.run_command(
-            command=mtmount.commands.OilSupplySystemPowerCirculationPump(on=False)
-        )
+        await self.run_command(command=mtmount.commands.OilSupplySystemPowerCirculationPump(on=False))
         assert device.cooling_on
         assert not device.circulation_pump_on
         assert not device.main_pump_on
@@ -405,19 +367,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
             make_power_command = self.get_command_class(device_prefix + "_POWER")
 
-            set_mode_command_class = self.get_command_class(
-                device_prefix + "_CONTROL_MODE"
-            )
+            set_mode_command_class = self.get_command_class(device_prefix + "_CONTROL_MODE")
 
             def make_track_setpoint_command(setpoint):
-                return set_mode_command_class(
-                    mode=mtmount.ThermalMode.TRACK_SETPOINT, setpoint=setpoint
-                )
+                return set_mode_command_class(mode=mtmount.ThermalMode.TRACK_SETPOINT, setpoint=setpoint)
 
             def make_track_ambient_command(setpoint):
-                return set_mode_command_class(
-                    mode=mtmount.ThermalMode.TRACK_AMBIENT, setpoint=setpoint
-                )
+                return set_mode_command_class(mode=mtmount.ThermalMode.TRACK_AMBIENT, setpoint=setpoint)
 
             await self.check_thermal_device(
                 system_id=system_id,
@@ -459,19 +415,13 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             power_min_timeout = 0
 
         if make_power_command is not None:
-            await self.run_command(
-                make_power_command(on=True), min_timeout=power_min_timeout
-            )
+            await self.run_command(make_power_command(on=True), min_timeout=power_min_timeout)
             assert device.power_on
             assert not device.alarm_on
-            await self.run_command(
-                make_power_command(on=False), min_timeout=power_min_timeout
-            )
+            await self.run_command(make_power_command(on=False), min_timeout=power_min_timeout)
             assert not device.power_on
             assert not device.alarm_on
-            await self.run_command(
-                make_power_command(on=True), min_timeout=power_min_timeout
-            )
+            await self.run_command(make_power_command(on=True), min_timeout=power_min_timeout)
             assert device.power_on
             assert not device.alarm_on
 
@@ -483,9 +433,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             assert device.track_setpoint
             assert not device.track_ambient
             assert device.setpoint == setpoint
-            assert device.temperature == pytest.approx(
-                setpoint, abs=device.temperature_slop
-            )
+            assert device.temperature == pytest.approx(setpoint, abs=device.temperature_slop)
 
         # In ambient mode temperature should match current controller ambient.
         if make_track_ambient_command is not None:
@@ -501,9 +449,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         # Commands should fail if off.
         if make_power_command is not None:
-            await self.run_command(
-                make_power_command(on=False), min_timeout=power_min_timeout
-            )
+            await self.run_command(make_power_command(on=False), min_timeout=power_min_timeout)
             assert not device.power_on
             assert not device.alarm_on
             with pytest.raises(RuntimeError):
@@ -512,9 +458,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 with pytest.raises(RuntimeError):
                     await self.run_command(make_track_ambient_command(setpoint=0))
 
-            await self.run_command(
-                make_power_command(on=True), min_timeout=power_min_timeout
-            )
+            await self.run_command(make_power_command(on=True), min_timeout=power_min_timeout)
             assert device.power_on
             assert not device.alarm_on
 
@@ -531,9 +475,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         # Reset alarm state turn power back on.
         device.alarm_on = False
         if make_power_command is not None:
-            await self.run_command(
-                make_power_command(on=True), min_timeout=power_min_timeout
-            )
+            await self.run_command(make_power_command(on=True), min_timeout=power_min_timeout)
         assert device.power_on
         assert not device.alarm_on
 
@@ -544,9 +486,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert not device.alarm_on
 
         for on in (True, False):
-            await self.run_command(
-                mtmount.commands.AuxiliaryCabinetsThermalFanPower(on=on)
-            )
+            await self.run_command(mtmount.commands.AuxiliaryCabinetsThermalFanPower(on=on))
             assert device.fans_on == on
 
         def make_track_setpoint_command(setpoint):
@@ -612,9 +552,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.check_device_repr(device)
 
-        assert device.is_azel == (
-            device.system_id in {System.ELEVATION, System.AZIMUTH}
-        )
+        assert device.is_azel == (device.system_id in {System.ELEVATION, System.AZIMUTH})
         assert not device.power_on
         assert not device.enabled
         assert not device.has_target
@@ -636,12 +574,10 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             short_command_names.append("home")
         dev_prefix = f"{device.system_id.name}_"
         command_codes = {
-            name: getattr(mtmount.CommandCode, dev_prefix + name.upper())
-            for name in short_command_names
+            name: getattr(mtmount.CommandCode, dev_prefix + name.upper()) for name in short_command_names
         }
         command_classes = {
-            name: mtmount.commands.CommandDict[cmd_id]
-            for name, cmd_id in command_codes.items()
+            name: mtmount.commands.CommandDict[cmd_id] for name, cmd_id in command_codes.items()
         }
         slow_command_codes = {command_codes[name] for name in ("move", "track_target")}
 
@@ -687,9 +623,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 if command is None:
                     continue
                 with self.subTest(command=str(command)):
-                    min_timeout = (
-                        0 if command.command_code in slow_command_codes else None
-                    )
+                    min_timeout = 0 if command.command_code in slow_command_codes else None
                     with pytest.raises(RuntimeError):
                         await self.run_command(command, min_timeout=min_timeout)
                     assert not device.power_on
@@ -784,21 +718,15 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
 
             # Test homing at the limits and in between.
             assert device.motion_state() == AxisMotionState.STOPPED
-            middle_position = (
-                device.cmd_limits.min_position + device.cmd_limits.max_position
-            ) / 2
+            middle_position = (device.cmd_limits.min_position + device.cmd_limits.max_position) / 2
             for position in (
                 device.cmd_limits.min_position,
                 device.cmd_limits.max_position,
                 middle_position,
             ):
                 # Rather than wait for these long moves, just set the position.
-                segment = simactuators.path.PathSegment(
-                    tai=utils.current_tai(), position=position
-                )
-                device.actuator.path = simactuators.path.Path(
-                    segment, kind=simactuators.path.Kind.Stopped
-                )
+                segment = simactuators.path.PathSegment(tai=utils.current_tai(), position=position)
+                device.actuator.path = simactuators.path.Path(segment, kind=simactuators.path.Kind.Stopped)
                 await self.run_command(home_command, min_timeout=0)
 
         # Do a point to point move
@@ -852,9 +780,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         end_position = device.cmd_limits.max_position
         slow_move_command = move_command_class(position=end_position)
         task = asyncio.create_task(
-            self.run_command(
-                slow_move_command, min_timeout=0.5, should_be_superseded=True
-            )
+            self.run_command(slow_move_command, min_timeout=0.5, should_be_superseded=True)
         )
 
         await asyncio.sleep(0.1)
@@ -1007,10 +933,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             assert not device.has_target
             # Note: there may eventually be an AxisMotionState for paused
             # tracking but Tekniker does not report it yet.
-            assert (
-                device.motion_state(tai=device.actuator.path[-1].tai - 0.01)
-                == AxisMotionState.STOPPING
-            )
+            assert device.motion_state(tai=device.actuator.path[-1].tai - 0.01) == AxisMotionState.STOPPING
             assert (
                 device.motion_state(tai=device.actuator.path[-1].tai + 0.01)
                 == AxisMotionState.TRACKING_PAUSED
@@ -1113,9 +1036,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             Value for ``drive`` argument of power commands.
             If `None` then the ``drive`` argument is not provided.
         """
-        device_has_power_command = (
-            device.system_id not in self.system_ids_no_power_command
-        )
+        device_has_power_command = device.system_id not in self.system_ids_no_power_command
         device_has_power_onoff_command = device.system_id in self.system_ids_power_onoff_command
 
         self.controller.main_axes_power_supply.power_on = False
@@ -1148,9 +1069,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
             power_command_on = None
             power_command_off = None
 
-        reset_alarm_command_class = self.get_command_class(
-            device_prefix + "_RESET_ALARM"
-        )
+        reset_alarm_command_class = self.get_command_class(device_prefix + "_RESET_ALARM")
         reset_alarm_command = reset_alarm_command_class()
 
         is_azel = device.system_id in {System.ELEVATION, System.AZIMUTH}
@@ -1192,9 +1111,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         if device.system_id == System.OIL_SUPPLY_SYSTEM:
             # The oil supply system must be in auto mode to turn it on
             # using the standard power command.
-            await self.run_command(
-                command=mtmount.commands.OilSupplySystemSetMode(auto=True)
-            )
+            await self.run_command(command=mtmount.commands.OilSupplySystemSetMode(auto=True))
             assert device.auto_mode
         if device_has_power_command:
             await self.run_command(power_command_on, min_timeout=min_on_timeout)
@@ -1256,9 +1173,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 self.fail(f"Unrecognized motion_state={motion_state}")
 
         assert_motion_state(
-            DeployableMotionState.DEPLOYED
-            if start_deployed
-            else DeployableMotionState.RETRACTED
+            DeployableMotionState.DEPLOYED if start_deployed else DeployableMotionState.RETRACTED
         )
 
         # Test that moves fail if not powered on.
@@ -1275,9 +1190,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
                 min_timeout=move_min_timeout,
             )
 
-        await self.run_command(
-            command=power_on_command, min_timeout=power_on_min_timeout
-        )
+        await self.run_command(command=power_on_command, min_timeout=power_on_min_timeout)
 
         # Deploy the device, if not already deployed.
         if not start_deployed:
@@ -1292,9 +1205,7 @@ class MockDevicesTestCase(unittest.IsolatedAsyncioTestCase):
         assert_motion_state(DeployableMotionState.DEPLOYED)
 
         # Start retracting and check motion state
-        task = asyncio.create_task(
-            self.run_command(command=retract_command, min_timeout=move_min_timeout)
-        )
+        task = asyncio.create_task(self.run_command(command=retract_command, min_timeout=move_min_timeout))
         await asyncio.sleep(0.1)  # Let the move begin
         assert_motion_state(DeployableMotionState.RETRACTING)
 

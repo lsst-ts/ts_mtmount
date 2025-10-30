@@ -121,9 +121,7 @@ class FieldInfoTestCase(unittest.TestCase):
         )
 
     def test_enum_field_info(self):
-        field_info = mtmount.field_info.EnumFieldInfo(
-            name=self.name, doc=self.doc, dtype=ExampleEnum
-        )
+        field_info = mtmount.field_info.EnumFieldInfo(name=self.name, doc=self.doc, dtype=ExampleEnum)
         self.check_name_doc(field_info)
         self.check_field_basics(
             field_info=field_info,
@@ -134,20 +132,14 @@ class FieldInfoTestCase(unittest.TestCase):
 
     def test_fixed_enum_field_info(self):
         def factory(default):
-            return mtmount.field_info.FixedEnumFieldInfo(
-                name=self.name, default=default
-            )
+            return mtmount.field_info.FixedEnumFieldInfo(name=self.name, default=default)
 
-        self.check_fixed_field_info(
-            factory=factory, dtype=ExampleEnum, expected_name=self.name
-        )
+        self.check_fixed_field_info(factory=factory, dtype=ExampleEnum, expected_name=self.name)
 
     def test_float_field_info(self):
         field_info = mtmount.field_info.FloatFieldInfo(name=self.name, doc=self.doc)
         self.check_name_doc(field_info)
-        str_value_dict = {
-            str(float(value)): value for value in (0, 1, -1, 3.14, 9e99, 1e-5)
-        }
+        str_value_dict = {str(float(value)): value for value in (0, 1, -1, 3.14, 9e99, 1e-5)}
         self.check_field_basics(
             field_info=field_info,
             str_value_dict=str_value_dict,
@@ -170,9 +162,7 @@ class FieldInfoTestCase(unittest.TestCase):
         self.check_name_doc(field_info)
         self.check_field_basics(
             field_info=field_info,
-            str_value_dict={
-                strval: strval for strval in ("0", "None", "Vera Rubin Observatory")
-            },
+            str_value_dict={strval: strval for strval in ("0", "None", "Vera Rubin Observatory")},
             bad_values=(None, False, True, 1, 5.5),
         )
 

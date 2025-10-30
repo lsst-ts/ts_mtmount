@@ -280,6 +280,10 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
 - topEndChiller
 - actualTemperatureAmbient: 1
   actualTemperatureAmbientTimestamp: 1
+  airCompressedValveFailure: 1
+  airCompressedValveFailureTimestamp: 1
+  airCompressedValveStatus: 1
+  airCompressedValveStatusTimestamp: 1
   ambientRelativeHumiditySensor0501: 1
   ambientRelativeHumiditySensor0501Timestamp: 1
   ambientRelativeHumiditySensor0502: 1
@@ -872,10 +876,12 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   currentCapacitorBank7FuseTimestamp: 5
   currentCapacitorBank8Fuse: 5
   currentCapacitorBank8FuseTimestamp: 5
+  fuseCapacitorBank: 8
+  fuseCapacitorBankTimestamp: 8
   internalTemperatureCapacitorBank: 8
   internalTemperatureCapacitorBankTimestamp: 8
   timestamp: 1
-"""
+  """
 )
 
 
@@ -980,19 +986,12 @@ class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
         super().__init__(num_elements=num_elements, field_name=field_name)
 
     def sal_value_from_llv_dict(self, data_dict):
-        return [
-            data_dict[self.field_name_template.format(i)]
-            for i in range(1, self.num_elements + 1)
-        ]
+        return [data_dict[self.field_name_template.format(i)] for i in range(1, self.num_elements + 1)]
 
     def llv_dict_from_sal_value(self, value):
         if len(value) != self.num_elements:
-            raise ValueError(
-                f"{value=} must contain exactly {self.num_elements} elements"
-            )
-        return {
-            self.field_name_template.format(i + 1): item for i, item in enumerate(value)
-        }
+            raise ValueError(f"{value=} must contain exactly {self.num_elements} elements")
+        return {self.field_name_template.format(i + 1): item for i, item in enumerate(value)}
 
 
 #: Dict of topic_id: [sal_topic_name, field_extraction_func_dict] where:
@@ -1008,9 +1007,7 @@ class ArrayTelemetryFieldFunctor(BaseTelemetryFieldFunctor):
 TELEMETRY_MAP = dict()
 for topic_id, topic_data in RAW_TELEMETRY_MAP.items():
     if len(topic_data) != 2:
-        raise ValueError(
-            f"cannot parse {topic_id=}: {topic_data=} must have two elements"
-        )
+        raise ValueError(f"cannot parse {topic_id=}: {topic_data=} must have two elements")
     sal_topic_name = topic_data[0]
     field_len_dict = topic_data[1]
     field_extraction_func_dict = dict()

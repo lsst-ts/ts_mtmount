@@ -245,18 +245,14 @@ class TMATelemetryConfigParser:
             raise ValueError(f"No such file {tma_config_path}")
         self.config = self.create_config(tma_config_path)
 
-    def create_config(
-        self, tma_config_path: pathlib.Path | str
-    ) -> configparser.ConfigParser:
+    def create_config(self, tma_config_path: pathlib.Path | str) -> configparser.ConfigParser:
         """Create a config parser that reads the specified file."""
         config = configparser.ConfigParser(interpolation=None)
         config.optionxform = str  # preserve key case
         config.read(tma_config_path)
         return config
 
-    def make_basic_fields(
-        self, section: configparser.SectionProxy
-    ) -> tuple[int, FieldsType]:
+    def make_basic_fields(self, section: configparser.SectionProxy) -> tuple[int, FieldsType]:
         """Process one section (topic).
 
         Do not consolidate array-like values.
@@ -295,16 +291,14 @@ class TMATelemetryConfigParser:
         for i, (key, value) in enumerate(section.items()):
             if not value.startswith('"'):
                 raise RuntimeError(
-                    f'All values must start with ": key={key}; value={value!r}; '
-                    f"section={section.name}"
+                    f'All values must start with ": key={key}; value={value!r}; section={section.name}'
                 )
             value = value[1:-1]
             key_kind = key.rsplit(".", 1)[-1]
             if i == 0:
                 if key != "TopicID":
                     raise RuntimeError(
-                        "The first line of each section must be TopicID: "
-                        f"key={key}; section={section.name}"
+                        f"The first line of each section must be TopicID: key={key}; section={section.name}"
                     )
                 topic_id = int(value)
             elif key in {
@@ -341,19 +335,13 @@ class TMATelemetryConfigParser:
                             print(f"*** skipping string item {topic_attr_name}.{name}")
                             continue
                         if name in fields:
-                            raise RuntimeError(
-                                f"field name {name!r} already found in section {section.name}"
-                            )
+                            raise RuntimeError(f"field name {name!r} already found in section {section.name}")
 
                         # WARNING: this will catch a lot of problems:
                         if units == "":
-                            raise RuntimeError(
-                                f"field name {name!r} needs Unit in section {section.name}"
-                            )
+                            raise RuntimeError(f"field name {name!r} needs Unit in section {section.name}")
                         if description == "":
-                            raise RuntimeError(
-                                f"field name {name!r} needs Comment in section {section.name}"
-                            )
+                            raise RuntimeError(f"field name {name!r} needs Comment in section {section.name}")
                         units = UNITS_TRANSLATION_DICT.get(units, units)
                         field_info = FieldInfo(
                             name=name,
@@ -371,13 +359,9 @@ class TMATelemetryConfigParser:
                 raise RuntimeError(f"unrecognized key {key} in section {section.name}")
 
         if topic_id is None:
-            raise RuntimeError(
-                f"Bug: topic_id is None at end of section {section.name}"
-            )
+            raise RuntimeError(f"Bug: topic_id is None at end of section {section.name}")
         if "timestamp" in fields:
-            raise RuntimeError(
-                f"Bug: timestamp field found and not skipped in section {section.name}"
-            )
+            raise RuntimeError(f"Bug: timestamp field found and not skipped in section {section.name}")
         fields["timestamp"] = FieldInfo(
             name="timestamp",
             sal_type="double",
@@ -412,11 +396,7 @@ class TMATelemetryConfigParser:
             base_name, sequence_number_str = NAME_INT_RE.match(field_name).groups()
             sequence_number = 0 if not sequence_number_str else int(sequence_number_str)
 
-            if (
-                sequence_number == 1
-                and sequence_base_name is None
-                and len(sequence_number_str) < 3
-            ):
+            if sequence_number == 1 and sequence_base_name is None and len(sequence_number_str) < 3:
                 # Start accumulating a potential sequence.
                 sequence_base_name = base_name
                 sequence_field_names = [field_name]
@@ -475,9 +455,7 @@ class TMATelemetryConfigParser:
                 )
                 timestamp_fields[field_timestamp_name] = field_timestap
         consolidated_fields.update(timestamp_fields)
-        consolidated_fields = {
-            key: value for key, value in sorted(consolidated_fields.items())
-        }
+        consolidated_fields = {key: value for key, value in sorted(consolidated_fields.items())}
 
         return consolidated_fields
 
@@ -512,9 +490,7 @@ class TMATelemetryConfigParser:
             but only if this list starts at 1 and increases by 1s.
         """
         num_members = len(sequence_numbers)
-        if len(sequence_numbers) > 1 and sorted(sequence_numbers) == list(
-            range(1, 1 + num_members)
-        ):
+        if len(sequence_numbers) > 1 and sorted(sequence_numbers) == list(range(1, 1 + num_members)):
             # Sequence is legit!
             print(f"{base_name} sequence {sequence_numbers} is legit")
             first_field_info = fields[sequence_field_names[0]]
@@ -540,9 +516,7 @@ class TMATelemetryConfigParser:
                 continue
             topic_sal_name = TOPIC_NAME_TRANSLATION_DICT.get(section.name)
             if topic_sal_name is None:
-                topic_sal_name = section.name[0].lower() + section.name[1:].replace(
-                    " ", ""
-                )
+                topic_sal_name = section.name[0].lower() + section.name[1:].replace(" ", "")
             topic_attr_name = f"tel_{topic_sal_name}"
 
             # Dict of field_name: FieldInfo
@@ -663,9 +637,7 @@ def run_tma_telemetry_config_parser():
     parser = argparse.ArgumentParser(
         "Convert the TMA TelemetryTopicsConfiguration.ini file to MTMount_Telemetry.xml"
     )
-    parser.add_argument(
-        "tma_config_path", help="path to TMA TelemetryTopicsConfiguration.ini file"
-    )
+    parser.add_argument("tma_config_path", help="path to TMA TelemetryTopicsConfiguration.ini file")
     parser.add_argument(
         "--output",
         default="MTMount_Telemetry.xml",
