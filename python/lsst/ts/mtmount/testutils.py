@@ -119,8 +119,6 @@ def make_random_command_with_defaults(command_type):
         Message constructed with random data.
     """
     kwargs = {
-        finfo.name: get_random_value(finfo)
-        for finfo in command_type.field_infos
-        if finfo.default is None
+        finfo.name: get_random_value(finfo) for finfo in command_type.field_infos if finfo.default is None
     }
     return command_type(**kwargs)

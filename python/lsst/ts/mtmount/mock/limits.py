@@ -64,13 +64,9 @@ class Limits:
 CmdLimitsDict = {
     # From LTS-103. Note that LTS-103 also specifies that the performance
     # requirements need only be met between 15 and 86.5 degrees.
-    System.ELEVATION: Limits(
-        min_position=0, max_position=90.0, max_velocity=3.5, max_acceleration=3.5
-    ),
+    System.ELEVATION: Limits(min_position=0, max_position=90.0, max_velocity=3.5, max_acceleration=3.5),
     # From LTS-103.
-    System.AZIMUTH: Limits(
-        min_position=-270, max_position=270, max_velocity=7.0, max_acceleration=7.0
-    ),
+    System.AZIMUTH: Limits(min_position=-270, max_position=270, max_velocity=7.0, max_acceleration=7.0),
     # From LTS-218.
     System.CAMERA_CABLE_WRAP: Limits(
         min_position=-90, max_position=90, max_velocity=6.0, max_acceleration=1.5

@@ -27,9 +27,7 @@ import textwrap
 MAX_DOC_LENGTH = 79
 
 
-_ParamWrapper = textwrap.TextWrapper(
-    width=MAX_DOC_LENGTH, initial_indent="    ", subsequent_indent="    "
-)
+_ParamWrapper = textwrap.TextWrapper(width=MAX_DOC_LENGTH, initial_indent="    ", subsequent_indent="    ")
 
 
 def truncate_value(value, min_value, max_value, descr):
@@ -48,9 +46,7 @@ def truncate_value(value, min_value, max_value, descr):
         If min_value >= max_value.
     """
     if min_value >= max_value:
-        raise ValueError(
-            f"Invalid {descr} limits: min_value={min_value} >= {max_value}=max_value"
-        )
+        raise ValueError(f"Invalid {descr} limits: min_value={min_value} >= {max_value}=max_value")
     if value < min_value:
         return (min_value, f"{descr} from {value:0.2f} to {min_value:0.2f}")
     elif value > max_value:

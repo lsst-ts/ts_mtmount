@@ -127,9 +127,7 @@ class OilSupplySystemDevice(BaseThermalDevice):
         if command.on and self.alarm_on:
             raise RuntimeError("Cannot power on while an alarm is on")
         if command.on and not self.cooling_on:
-            raise RuntimeError(
-                f"Cannot turn on the circulation pump if cooling={self.cooling_on} is off."
-            )
+            raise RuntimeError(f"Cannot turn on the circulation pump if cooling={self.cooling_on} is off.")
         elif not command.on and self.main_pump_on:
             raise RuntimeError(
                 f"Cannot turn off the circulation pump if the main pump={self.main_pump_on} is on."

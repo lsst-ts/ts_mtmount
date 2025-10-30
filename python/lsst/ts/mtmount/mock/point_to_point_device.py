@@ -99,9 +99,7 @@ class PointToPointDevice(BaseDevice):
     def assert_drive_all(self, command):
         """Assert that the drive argument is -1 (all drives)."""
         if command.drive != -1:
-            self.log.warning(
-                f"drive={command.drive}; must be -1 (all actuators) for this mock"
-            )
+            self.log.warning(f"drive={command.drive}; must be -1 (all actuators) for this mock")
 
     async def close(self):
         await super().close()
@@ -144,9 +142,7 @@ class PointToPointDevice(BaseDevice):
     def supersede_move_command(self, command):
         """Report the current move command (if any) as superseded."""
         if not self._move_result_task.done():
-            self._move_result_task.set_exception(
-                CommandSupersededError(command=command)
-            )
+            self._move_result_task.set_exception(CommandSupersededError(command=command))
         self._monitor_move_task.cancel()
 
     def do_move(self, command):

@@ -89,9 +89,7 @@ class MTMountCommander(salobj.CscCommander):
         # if their values change significantly) to reduce clutter.
         for event_topic_name in ("clockOffset", "cameraCableWrapTarget"):
             topic = getattr(self.remote, f"evt_{event_topic_name}")
-            topic.callback = functools.partial(
-                self.telemetry_callback, name=event_topic_name
-            )
+            topic.callback = functools.partial(self.telemetry_callback, name=event_topic_name)
 
         self.tracking_task = utils.make_done_future()
 
@@ -121,10 +119,7 @@ class MTMountCommander(salobj.CscCommander):
                 f"got {len(args)} args: {' '.join(args)}"
             )
 
-        arg_dict = {
-            name: info.type(args[i])
-            for i, (name, info) in enumerate(ramp_arg_info.items())
-        }
+        arg_dict = {name: info.type(args[i]) for i, (name, info) in enumerate(ramp_arg_info.items())}
         args = RampArgs(**arg_dict)
         self.ramp_count += 1
         self.tracking_task = asyncio.create_task(self._ramp(ramp_args=args))

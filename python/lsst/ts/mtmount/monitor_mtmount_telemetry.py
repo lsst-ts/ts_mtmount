@@ -65,14 +65,13 @@ async def _monitor_mtmount_telemetry(topic_names, duration, skip):
     """
     print(f"monitor topics {topic_names} for {duration} seconds")
 
-    async with salobj.Domain() as domain, salobj.Remote(
-        domain=domain, name="MTMount", include=topic_names
-    ) as remote:
+    async with (
+        salobj.Domain() as domain,
+        salobj.Remote(domain=domain, name="MTMount", include=topic_names) as remote,
+    ):
         for topic_name in topic_names:
             topic = getattr(remote, f"tel_{topic_name}")
-            topic.callback = functools.partial(
-                topic_callback, topic_name=topic_name, skip=skip
-            )
+            topic.callback = functools.partial(topic_callback, topic_name=topic_name, skip=skip)
         await asyncio.sleep(duration)
 
 
@@ -101,8 +100,4 @@ def monitor_mtmount_telemetry():
     )
     args = parser.parse_args()
     assert args.skip >= 0
-    asyncio.run(
-        _monitor_mtmount_telemetry(
-            topic_names=args.topics, duration=args.duration, skip=args.skip
-        )
-    )
+    asyncio.run(_monitor_mtmount_telemetry(topic_names=args.topics, duration=args.duration, skip=args.skip))

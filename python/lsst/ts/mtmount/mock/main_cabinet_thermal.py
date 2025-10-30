@@ -57,11 +57,7 @@ class MainCabinetThermalDevice(BaseThermalDevice):
 
     def do_track_ambient(self, command):
         self.assert_on()
-        self.thermal_mode = (
-            ThermalMode.TRACK_AMBIENT
-            if command.track_ambient
-            else ThermalMode.TRACK_SETPOINT
-        )
+        self.thermal_mode = ThermalMode.TRACK_AMBIENT if command.track_ambient else ThermalMode.TRACK_SETPOINT
         if command.track_ambient:
             self.set_ambient(command.setpoint)
         else:

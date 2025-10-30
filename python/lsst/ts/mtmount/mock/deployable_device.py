@@ -73,15 +73,11 @@ class DeployableDevice(PointToPointDevice):
         move_time=1,
     ):
         if deployed_position == retracted_position:
-            raise ValueError(
-                f"deployed_position must not equal retracted_position = {deployed_position}"
-            )
+            raise ValueError(f"deployed_position must not equal retracted_position = {deployed_position}")
         self.move_time = move_time
         self.retracted_position = retracted_position
         self.deployed_position = deployed_position
-        self._deploying_velocity_sign = (
-            1 if deployed_position > retracted_position else -1
-        )
+        self._deploying_velocity_sign = 1 if deployed_position > retracted_position else -1
         start_position = deployed_position if start_deployed else retracted_position
         super().__init__(
             controller=controller,
