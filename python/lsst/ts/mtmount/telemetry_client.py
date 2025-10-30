@@ -181,11 +181,7 @@ class TelemetryClient(tcpip.Client):
         namespace = parser.parse_args()
         if namespace.host is None:
             parser.error("--host is required")
-        print(
-            "MTMount telemetry client: "
-            f"host={namespace.host}; "
-            f"port={namespace.port}"
-        )
+        print(f"MTMount telemetry client: host={namespace.host}; port={namespace.port}")
         logging.basicConfig()
         telemetry_client = cls(host=namespace.host, port=namespace.port)
         telemetry_client.log.setLevel(namespace.loglevel)
@@ -208,13 +204,9 @@ class TelemetryClient(tcpip.Client):
             raise RuntimeError("Already connected")
         try:
             await asyncio.wait_for(super().start(), timeout=self.connection_timeout)
-            await self.controller.evt_telemetryConnected.set_write(
-                connected=self.connected
-            )
+            await self.controller.evt_telemetryConnected.set_write(connected=self.connected)
         except Exception as e:
-            self.log.exception(
-                f"Could not open connection to host={self.host}, port={self.port}: {e!r}"
-            )
+            self.log.exception(f"Could not open connection to host={self.host}, port={self.port}: {e!r}")
             if not self.done_task.done():
                 self.done_task.set_exception(e)
             return
@@ -292,10 +284,7 @@ class TelemetryClient(tcpip.Client):
                     )
                 try:
                     topic_id = data_dict["topicID"]
-                    if (
-                        self.next_clock_offset_task.done()
-                        and topic_id in azel_topic_ids
-                    ):
+                    if self.next_clock_offset_task.done() and topic_id in azel_topic_ids:
                         clock_offset = data_dict["timestamp"] - utils.current_tai()
                         await self.controller.evt_clockOffset.set_write(
                             offset=clock_offset,
@@ -307,22 +296,16 @@ class TelemetryClient(tcpip.Client):
                     if topic_handler is None:
                         if topic_id not in self.unsupported_topic_ids:
                             self.unsupported_topic_ids.add(topic_id)
-                            self.log.info(
-                                f"Ignoring unsupported topic ID {topic_id}; {data_dict=}"
-                            )
+                            self.log.info(f"Ignoring unsupported topic ID {topic_id}; {data_dict=}")
                         continue
                     await topic_handler(data_dict)
                 except Exception:
-                    self.log.exception(
-                        f"read_loop could not handle {data_dict}; continuing."
-                    )
+                    self.log.exception(f"read_loop could not handle {data_dict}; continuing.")
             self.log.info("Telemetry client read loop ends: not connected")
         except asyncio.CancelledError:
             self.log.info("Telemetry client read loop cancelled")
         except asyncio.TimeoutError:
-            self.log.error(
-                "Telemetry client timed out waiting for telemetry; giving up."
-            )
+            self.log.error("Telemetry client timed out waiting for telemetry; giving up.")
             asyncio.ensure_future(self.close())
         except (ConnectionResetError, asyncio.IncompleteReadError):
             self.log.info("Telemetry client lost its connection; giving up.")

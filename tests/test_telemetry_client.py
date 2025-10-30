@@ -101,14 +101,10 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             start_time = utils.current_tai()
             azimuth_data["timestamp"] = start_time + desired_offset
             await self.publish_data(azimuth_data)
-            data = await self.remote.evt_clockOffset.next(
-                flush=False, timeout=STD_TIMEOUT
-            )
+            data = await self.remote.evt_clockOffset.next(flush=False, timeout=STD_TIMEOUT)
             while data.private_sndStamp <= start_time:
                 self.log.debug(f"Discarding sample {data}.")
-                data = await self.remote.evt_clockOffset.next(
-                    flush=False, timeout=STD_TIMEOUT
-                )
+                data = await self.remote.evt_clockOffset.next(flush=False, timeout=STD_TIMEOUT)
 
             assert data.offset == pytest.approx(desired_offset, abs=0.1)
 
@@ -133,17 +129,13 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
 
             # Wait until the timer expires, then send one more
             # telemetry with a big clock offset.
-            await asyncio.wait_for(
-                self.telemetry_client.next_clock_offset_task, timeout=STD_TIMEOUT
-            )
+            await asyncio.wait_for(self.telemetry_client.next_clock_offset_task, timeout=STD_TIMEOUT)
 
             desired_offset = -0.70
             curr_tai = utils.current_tai()
             azimuth_data["timestamp"] = curr_tai + desired_offset
             await self.publish_data(azimuth_data)
-            data = await self.remote.evt_clockOffset.next(
-                flush=False, timeout=STD_TIMEOUT
-            )
+            data = await self.remote.evt_clockOffset.next(flush=False, timeout=STD_TIMEOUT)
             assert data.offset == pytest.approx(desired_offset, abs=0.1)
 
     async def test_handle_telemetry(self):
@@ -189,8 +181,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                     except AttributeError:
                         if (
                             sal_topic_name in backward_compatile_telemetry_attribute
-                            and fieldname
-                            in backward_compatile_telemetry_attribute[sal_topic_name]
+                            and fieldname in backward_compatile_telemetry_attribute[sal_topic_name]
                         ):
                             continue
                         else:
@@ -204,13 +195,9 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                     elif dtype is int:
                         # Note: using dtype=int doesn't work; json refuses
                         # to serialize the values.
-                        values = [
-                            int(value) for value in random.integers(0, 10000, fieldlen)
-                        ]
+                        values = [int(value) for value in random.integers(0, 10000, fieldlen)]
                     elif dtype is bool:
-                        values = [
-                            bool(value) for value in random.integers(0, 10000, fieldlen)
-                        ]
+                        values = [bool(value) for value in random.integers(0, 10000, fieldlen)]
                     else:
                         raise RuntimeError(
                             f"Unrecognized {dtype=} for {sal_topic_name}.{fieldname}, {null_field_data=}"
@@ -223,9 +210,9 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                         for i in range(fieldlen):
                             tma_data[
                                 (
-                                    f"{fieldname}{i+1}"
+                                    f"{fieldname}{i + 1}"
                                     if not fieldname.endswith("Timestamp")
-                                    else f"{fieldname[:-9]}{i+1}Timestamp"
+                                    else f"{fieldname[:-9]}{i + 1}Timestamp"
                                 )
                             ] = values[i]
 
@@ -235,9 +222,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_heartbeat(self):
         async with self.make_all():
             if not hasattr(self.remote, "tel_telemetryClientHeartbeat"):
-                raise unittest.SkipTest(
-                    "No telemetryClientHeartbeat topic; ts_xml too old."
-                )
+                raise unittest.SkipTest("No telemetryClientHeartbeat topic; ts_xml too old.")
             await self.assert_next_telemetry(
                 topic=self.remote.tel_telemetryClientHeartbeat,
                 desired_data=dict(),
@@ -250,17 +235,13 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
         Wait for the telemetry client to time out and exit.
         """
         async with self.make_all():
-            await asyncio.wait_for(
-                self.telemetry_client.start_task, timeout=STD_TIMEOUT
-            )
+            await asyncio.wait_for(self.telemetry_client.start_task, timeout=STD_TIMEOUT)
             await asyncio.wait_for(
                 self.telemetry_client.done_task,
                 timeout=mtmount.TELEMETRY_TIMEOUT + STD_TIMEOUT,
             )
 
-    async def assert_next_telemetry(
-        self, topic, desired_data, delta=1e-7, timeout=STD_TIMEOUT
-    ):
+    async def assert_next_telemetry(self, topic, desired_data, delta=1e-7, timeout=STD_TIMEOUT):
         """Assert that the next telemetry topic matches the desired data.
 
         Parameters
@@ -287,9 +268,7 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             value = data[key]
             if isinstance(value, float):
                 if abs(value - desired_value) > delta:
-                    error_msgs.append(
-                        f"{key} {value} - {desired_value} = {value - desired_value}"
-                    )
+                    error_msgs.append(f"{key} {value} - {desired_value} = {value - desired_value}")
             elif isinstance(value, list):
                 if isinstance(value[0], float):
                     np.testing.assert_allclose(value, desired_value, atol=delta)

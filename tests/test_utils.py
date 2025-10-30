@@ -33,9 +33,7 @@ class UtilsTestCase(unittest.TestCase):
     def test_wrap_parameter_doc(self):
         # The following text was chosen so when duplicated and wrapped
         # some of the text reaches 79 columns.
-        long_text = (
-            "This is a long line of text that will reach column 79 when wrapped. " * 50
-        )
+        long_text = "This is a long line of text that will reach column 79 when wrapped. " * 50
         wrapped_text = mtmount.wrap_parameter_doc(long_text)
         lines = wrapped_text.split("\n")
         for line in lines:
@@ -48,13 +46,9 @@ class UtilsTestCase(unittest.TestCase):
         for min_value, max_value in itertools.product(limits, limits):
             if min_value >= max_value:
                 with pytest.raises(ValueError):
-                    mtmount.truncate_value(
-                        value=0, min_value=min_value, max_value=max_value, descr=descr
-                    )
+                    mtmount.truncate_value(value=0, min_value=min_value, max_value=max_value, descr=descr)
             else:
-                for diff, core_value in itertools.product(
-                    (-0.001, 0, 0.001), (min_value, max_value)
-                ):
+                for diff, core_value in itertools.product((-0.001, 0, 0.001), (min_value, max_value)):
                     value = core_value + diff
                     truncated_value, message = mtmount.truncate_value(
                         value=value,

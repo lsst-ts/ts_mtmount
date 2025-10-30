@@ -108,8 +108,6 @@ class TMATelemetryConfigParserParserTestCase(unittest.TestCase):
     def test_invalid_configs(self):
         for bad_config_path in DATA_DIR.glob("bad_*.ini"):
             with self.subTest(bad_config_path=bad_config_path):
-                processor = mtmount.TMATelemetryConfigParser(
-                    tma_config_path=bad_config_path
-                )
+                processor = mtmount.TMATelemetryConfigParser(tma_config_path=bad_config_path)
                 with pytest.raises(RuntimeError):
                     processor.process_file()

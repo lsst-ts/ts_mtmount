@@ -315,9 +315,7 @@ class Controller:
             axis_settings["TcsMaxVelocity"] = axis_cmd_limits.max_velocity
             axis_settings["TcsMaxAcceleration"] = axis_cmd_limits.max_acceleration
             axis_settings["SoftmotionTrackingMaxSpeed"] = axis_actuator.max_velocity
-            axis_settings["SoftmotionTrackingMaxAcceleration"] = (
-                axis_actuator.max_acceleration
-            )
+            axis_settings["SoftmotionTrackingMaxAcceleration"] = axis_actuator.max_acceleration
 
         ccw_device = self.device_dict[System.CAMERA_CABLE_WRAP]
         ccw_actuator = ccw_device.actuator
@@ -369,8 +367,7 @@ class Controller:
             "--random-ports",
             action="store_true",
             default=False,
-            help="Use random available ports for commands and telemetry? "
-            "Intended for unit tests.",
+            help="Use random available ports for commands and telemetry? Intended for unit tests.",
         )
         parser.add_argument(
             "--loglevel",
@@ -566,10 +563,7 @@ class Controller:
                 )
             )
 
-        if (
-            system_id != System.CAMERA_CABLE_WRAP
-            and device.homed != self.homed_dict[system_id]
-        ):
+        if system_id != System.CAMERA_CABLE_WRAP and device.homed != self.homed_dict[system_id]:
             self.homed_dict[system_id] = device.homed
 
             if not self.command_server.connected:
@@ -1001,10 +995,7 @@ class Controller:
             # TODO DM-35226: go to fault if heartbeat is not seen often enough
             return
 
-        if (
-            self.commander != enums.Source.CSC
-            and command.command_code not in ALWAYS_ALLOWED_COMMANDS
-        ):
+        if self.commander != enums.Source.CSC and command.command_code not in ALWAYS_ALLOWED_COMMANDS:
             await self.write_cmd_rejected(
                 command=command,
                 explanation=f"The commander is {self.commander!r}, not the CSC.",
@@ -1013,9 +1004,7 @@ class Controller:
 
         command_func = self.command_dict.get(command.command_code)
         if command_func is None:
-            await self.write_cmd_rejected(
-                command=command, explanation="This command is not yet supported"
-            )
+            await self.write_cmd_rejected(command=command, explanation="This command is not yet supported")
             return
 
         try:
@@ -1169,8 +1158,7 @@ class Controller:
             and command.source != enums.Source.HHD
         ):
             raise RuntimeError(
-                f"HHD has command; cannot give command to {command.commander!r}; "
-                f"from source={command.source}"
+                f"HHD has command; cannot give command to {command.commander!r}; from source={command.source}"
             )
         if self.commander != command.commander:
             self.commander = command.commander
@@ -1264,12 +1252,8 @@ class Controller:
             * A task that monitors completion, or None if already done.
         """
         return self.run_commands_in_parallel(
-            commands.AzimuthMove(
-                sequence_id=command.sequence_id, position=command.azimuth
-            ),
-            commands.ElevationMove(
-                sequence_id=command.sequence_id, position=command.elevation
-            ),
+            commands.AzimuthMove(sequence_id=command.sequence_id, position=command.azimuth),
+            commands.ElevationMove(sequence_id=command.sequence_id, position=command.elevation),
         )
 
     def do_both_axes_power(self, command):
@@ -1604,10 +1588,7 @@ class Controller:
                     self.log.exception(f"Ignoring unparsable command {read_str}: {e!r}")
                     continue
                 if self.command_queue and not self.command_queue.full():
-                    if (
-                        self.queue_heartbeat_commands
-                        or command.command_code != enums.CommandCode.HEARTBEAT
-                    ):
+                    if self.queue_heartbeat_commands or command.command_code != enums.CommandCode.HEARTBEAT:
                         self.command_queue.put_nowait(command)
                 asyncio.create_task(self.handle_command(command))
         except asyncio.CancelledError:
