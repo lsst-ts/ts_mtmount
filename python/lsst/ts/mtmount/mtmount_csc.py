@@ -132,6 +132,10 @@ TRACK_COMMAND_TIMEOUT = 1
 # Minimum tracking advance time (sec) allowed in trackTarget commands
 MIN_TRACKING_ADVANCE_TIME = 0.05
 
+# Maximum number of consecutive tracking commands that
+# can be discarded.
+MAX_DISCARDED_CONSECUTIVE_TRACKING = 2
+
 # How many iterations to wait for the low level controller to become
 # commandable by the CSC.
 MAX_COMMANDABLE_LOOP_ITER = 50
@@ -504,6 +508,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.command_history = collections.deque(maxlen=100)
         self.command_reply_history = collections.deque(maxlen=100)
         self.subsequent_failed_track_target = 0
+        self.discarded_track_commands = 0
         self.max_subsequent_failed_track_target = 2
         self._start_tracking_delay = 0.5
 
@@ -1582,13 +1587,18 @@ class MTMountCsc(salobj.ConfigurableCsc):
             # sent, because the intervening code is quick and has no awaits.
             send_tai = utils.current_tai()
             advance_time = data.taiTime - send_tai
-            if advance_time < MIN_TRACKING_ADVANCE_TIME:
+            if (
+                advance_time < MIN_TRACKING_ADVANCE_TIME
+                and self.discarded_track_commands < MAX_DISCARDED_CONSECUTIVE_TRACKING
+            ):
                 self.log.warning(
                     f"Ignoring a trackTarget command with taiTime={data.taiTime}: "
                     f"{advance_time=:0.3f} < {MIN_TRACKING_ADVANCE_TIME=} "
                     f"after a message delay of {start_tai - data.private_sndStamp:0.3f} seconds "
-                    f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the main axes lock"
+                    f"and waiting {send_tai - start_tai:0.3f} seconds to obtain the main axes lock. "
+                    f"Consecutive discarded track commands {self.discarded_track_commands}."
                 )
+                self.discarded_track_commands += 1
                 return
             self.log.log(
                 LOG_LEVEL_COMMANDS,
@@ -1623,6 +1633,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
             else:
                 self.subsequent_failed_track_target = 0
+                self.discarded_track_commands = 0
 
         await self.evt_target.set_write(
             azimuth=data.azimuth,
@@ -1639,6 +1650,9 @@ class MTMountCsc(salobj.ConfigurableCsc):
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled_and_not_disabling()
+
+        self.discarded_track_commands = 0
+
         assert self.move_p2p_task.done(), (
             "Mount is currently moving, "
             "cannot start tracking while the mount is moving. "
