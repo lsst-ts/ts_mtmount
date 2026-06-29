@@ -27,6 +27,7 @@ import unittest
 
 import numpy as np
 import pytest
+
 from lsst.ts import mtmount, salobj, tcpip, utils
 
 # Standard timeout for TCP/IP messages (sec).

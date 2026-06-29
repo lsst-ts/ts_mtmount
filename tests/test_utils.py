@@ -23,6 +23,7 @@ import itertools
 import unittest
 
 import pytest
+
 from lsst.ts import mtmount
 from lsst.ts.mtmount.utils import MAX_DOC_LENGTH
 

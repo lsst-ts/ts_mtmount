@@ -24,6 +24,7 @@ import logging
 import unittest
 
 import pytest
+
 from lsst.ts import mtmount, simactuators, utils
 from lsst.ts.xml.enums.MTMount import AxisMotionState, DeployableMotionState, System
 

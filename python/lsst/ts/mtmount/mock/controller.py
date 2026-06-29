@@ -29,6 +29,7 @@ import math
 import signal
 
 import astropy.time
+
 from lsst.ts import salobj, tcpip, utils
 from lsst.ts.xml.enums.MTMount import (
     DeployableMotionState,

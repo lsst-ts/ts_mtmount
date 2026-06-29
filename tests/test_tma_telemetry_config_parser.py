@@ -26,6 +26,7 @@ import tempfile
 import unittest
 
 import pytest
+
 from lsst.ts import mtmount
 
 DATA_DIR = pathlib.Path(__file__).parent / "data" / "tma_telemetry_config"
