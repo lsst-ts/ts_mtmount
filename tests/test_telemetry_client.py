@@ -165,6 +165,12 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
                 "setpointTemperatureCabinets",
                 "setpointTemperatureCabinetsTimestamp",
             },
+            topEndChiller={
+                "leakDetectorAlarm",
+                "leakDetectorAlarmTimestamp",
+                "leakDetectorFailure",
+                "leakDetectorFailureTimestamp",
+            },
         )
         async with self.make_all():
             for topic_id, (
