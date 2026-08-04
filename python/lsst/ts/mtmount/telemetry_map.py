@@ -310,6 +310,10 @@ RAW_TELEMETRY_MAP = yaml.safe_load(
   heatExchangerSupplyTemperatureTimestamp: 1
   internalTemperatureElectricalCabinet: 4
   internalTemperatureElectricalCabinetTimestamp: 4
+  leakDetectorAlarm: 1
+  leakDetectorAlarmTimestamp: 1
+  leakDetectorFailure: 1
+  leakDetectorFailureTimestamp: 1
   temperatureSensor0501: 1
   temperatureSensor0501Timestamp: 1
   threeWayValvePosition201: 1
