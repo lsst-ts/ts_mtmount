@@ -41,6 +41,15 @@ Please only do this if you are sure it will not interfere with operations:
 
     command_mtmount.py --host ccw-mgmt.cp.lsst.org
 
+To generate the **MTMount_Telemetry.xml** file automatically for `ts_xml <https://github.com/lsst-ts/ts_xml>`_ to use, you can use the telemetry configuration parser script, passing the `TelemetryTopicsConfiguration <https://github.com/lsst-ts/ts_tma_labview_hmi-computers/blob/develop/Configuration/TelemetryTopicsConfiguration.ini>`_ file:
+
+.. prompt:: bash
+
+    run_tma_telemetry_config_parser TelemetryTopicsConfiguration.ini --output <path-to-xml>
+
+You may want to put the **TelemetryTopicsConfiguration.ini** and **MTMount_Telemetry.xml** in ``tests/data/tma_telemetry_config`` directory.
+Note the **TelemetryTopicsConfiguration.ini** is renamed to be **good_TelemetryTopicsConfiguration.ini**.
+
 .. _lsst.ts.mtmount-pyapi:
 
 Developer Guide

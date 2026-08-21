@@ -23,6 +23,7 @@ import unittest
 
 import jsonschema
 import pytest
+
 from lsst.ts import mtmount, salobj
 
 

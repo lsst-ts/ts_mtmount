@@ -27,6 +27,7 @@ import unittest
 
 import numpy as np
 import pytest
+
 from lsst.ts import mtmount, salobj, tcpip, utils
 
 # Standard timeout for TCP/IP messages (sec).
@@ -163,6 +164,12 @@ class TelemetryClientTestCase(unittest.IsolatedAsyncioTestCase):
             oilSupplySystem={
                 "setpointTemperatureCabinets",
                 "setpointTemperatureCabinetsTimestamp",
+            },
+            topEndChiller={
+                "leakDetectorAlarm",
+                "leakDetectorAlarmTimestamp",
+                "leakDetectorFailure",
+                "leakDetectorFailureTimestamp",
             },
         )
         async with self.make_all():

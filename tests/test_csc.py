@@ -28,6 +28,8 @@ import pathlib
 import unittest
 
 import pytest
+from numpy.testing import assert_array_equal
+
 from lsst.ts import mtmount, salobj, utils
 from lsst.ts.mtmount.mtmount_csc import SET_THERMAL_FIELD_SYSTEM_ID_DICT
 from lsst.ts.xml.enums.MTMount import (
@@ -40,7 +42,6 @@ from lsst.ts.xml.enums.MTMount import (
     System,
     ThermalCommandState,
 )
-from numpy.testing import assert_array_equal
 
 STD_TIMEOUT = 60  # standard command timeout (sec)
 
