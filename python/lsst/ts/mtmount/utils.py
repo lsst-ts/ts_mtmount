@@ -19,15 +19,30 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ["truncate_value", "wrap_parameter_doc"]
+__all__ = [
+    "truncate_value",
+    "wrap_parameter_doc",
+    "disable_in_ccw_only_mode",
+]
 
 import textwrap
+from functools import wraps
 
 # Maximum documentation string length (chars)
 MAX_DOC_LENGTH = 79
 
 
 _ParamWrapper = textwrap.TextWrapper(width=MAX_DOC_LENGTH, initial_indent="    ", subsequent_indent="    ")
+
+
+def disable_in_ccw_only_mode(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if getattr(self, "ccw_only_mode_enabled", False):
+            raise RuntimeError("Operation not available in CCW only mode. ")
+        return func(self, *args, **kwargs)
+
+    return wrapper
 
 
 def truncate_value(value, min_value, max_value, descr):
