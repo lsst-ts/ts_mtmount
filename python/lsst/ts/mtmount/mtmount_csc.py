@@ -1737,11 +1737,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         await self.cmd_stop.ack_in_progress(data, timeout=STOP_TIMEOUT)
         self.track_started = False
+        cmd_list = [] if self.ccw_only_mode_enabled else [commands.BothAxesStop()]
+        cmd_list.extend(
+            [
+                commands.CameraCableWrapStop(),
+                commands.MirrorCoverLocksStop(),
+                commands.MirrorCoversStop(),
+            ]
+        )
+
         await self.send_commands(
-            commands.BothAxesStop(),
-            commands.CameraCableWrapStop(),
-            commands.MirrorCoverLocksStop(),
-            commands.MirrorCoversStop(),
+            *cmd_list,
             do_lock=False,
         )
 
