@@ -8,6 +8,35 @@ Version History
 
 .. towncrier release notes start
 
+v0.34.0 (2026-08-21)
+===================
+
+New Features
+------------
+
+- Add the details of generating the xml file in the user guide. (`OSW-2602 <https://rubinobs.atlassian.net//browse/OSW-2602>`_)
+- Add the leakDetectorAlarm and leakDetectorFailure and the related timestamps to telemetry_map.py. (`OSW-2602 <https://rubinobs.atlassian.net//browse/OSW-2602>`_)
+
+
+Bug Fixes
+---------
+
+- Added a tolerance to the maximum number of consecutive discarded track targets commands in mtmount_csc.py. (`OSW-2442 <https://rubinobs.atlassian.net//browse/OSW-2442>`_)
+
+
+Documentation
+-------------
+
+- Added support for towncrier to manage change log. (`OSW-2442 <https://rubinobs.atlassian.net//browse/OSW-2442>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Implemented mechanism to throttle logging the warning message when discarding late track target commands. (`OSW-2442 <https://rubinobs.atlassian.net//browse/OSW-2442>`_)
+- Fixed linting errors after updating pre-commit hooks. (`OSW-2442 <https://rubinobs.atlassian.net//browse/OSW-2442>`_)
+
+
 v0.33.4
 -------
 

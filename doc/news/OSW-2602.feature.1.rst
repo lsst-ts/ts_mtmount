@@ -1,1 +1,0 @@
-Add the details of generating the xml file in the user guide.
