@@ -28,7 +28,7 @@ CONFIG_SCHEMA = yaml.safe_load(
 $schema: http://json-schema.org/draft-07/schema#
 $id: https://github.com/lsst-ts/ts_mtmount/blob/master/python/lsst/ts/mtmount/config_schema.py
 # title must end with one or more spaces followed by the schema version, which must begin with "v"
-title: MTMount v4
+title: MTMount v5
 description: Schema for MTMount configuration files
 type: object
 properties:
@@ -53,6 +53,10 @@ properties:
       Time limit for reading a command acknowledgement from the TCP/IP interface (sec).
     type: number
     exclusiveMinimum: 0
+  ccw_only_mode:
+    description: >-
+        Run in CCW only mode?
+    type: boolean
   camera_cable_wrap_advance_time:
     description: >-
       How far in advance of the current time to make the tai time field of camera cable wrap
