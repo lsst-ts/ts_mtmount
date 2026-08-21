@@ -79,8 +79,6 @@ SAFETY_INTERLOCKS_FIELDS = (
     "effects",
 )
 
-logging.basicConfig()
-
 
 class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     @classmethod
@@ -2015,3 +2013,29 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 await self.assert_next_sample(
                     self.remote.evt_motionLockState, timeout=SHORT_TIMEOUT, flush=False
                 )
+
+    async def test_ccw_only_mode(self):
+        async with self.make_csc(
+            initial_state=salobj.State.STANDBY,
+        ):
+            await salobj.set_summary_state(
+                self.remote,
+                salobj.State.ENABLED,
+                override="enable_ccw_only_mode.yaml",
+            )
+
+            for command in (
+                self.remote.cmd_moveToTarget.start(timeout=SHORT_TIMEOUT),
+                self.remote.cmd_startTracking.start(timeout=SHORT_TIMEOUT),
+                self.remote.cmd_homeBothAxes.start(timeout=SHORT_TIMEOUT),
+                self.remote.cmd_park.start(timeout=SHORT_TIMEOUT),
+                self.remote.cmd_unpark.start(timeout=SHORT_TIMEOUT),
+            ):
+                with (
+                    self.subTest(command=command),
+                    salobj.assertRaisesAckError(
+                        ack=salobj.SalRetCode.CMD_FAILED,
+                        result_contains="Operation not available in CCW only mode.",
+                    ),
+                ):
+                    await command
