@@ -886,31 +886,38 @@ class MTMountCsc(salobj.ConfigurableCsc):
     def _get_devices_to_initialize(self):
         """Get a list of devices initialization commands."""
         return (
-            # Disabled 2023-06-26 because the system is broken.
-            # Re-enable when it is fixed.
-            # commands.MainCabinetThermalResetAlarm(),
-            # Disabled for 2022-10 commissioning
-            # commands.TopEndChillerResetAlarm(),
-            (commands.OilSupplySystemResetAlarm(), None, False),
-            (commands.MainAxesPowerSupplyResetAlarm(), None, False),
-            (commands.MirrorCoverLocksResetAlarm(), None, False),
-            (commands.MirrorCoversResetAlarm(), None, False),
-            (commands.CameraCableWrapResetAlarm(), None, False),
-            # Disabled for 2022-10 commissioning
-            # commands.TopEndChillerPower(on=True),
-            # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
-            (commands.MainAxesPowerSupplyPower(on=True), None, False),
-            # Disabled for 2022-10 commissioning
-            (commands.OilSupplySystemSetMode(auto=True), None, False),
-            (commands.OilSupplySystemPower(on=True), None, False),
-            # Cannot successfully reset the axes alarms
-            # until the main power supply is on.
-            # Sometimes a second reset is needed for the main axes
-            # (a known bug in the TMA as of 2022-11-03).
-            (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, True),
-            (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, False),
-            (commands.BothAxesPower(on=True), None, False),
-            (commands.CameraCableWrapPower(on=True), None, False),
+            (
+                # Disabled 2023-06-26 because the system is broken.
+                # Re-enable when it is fixed.
+                # commands.MainCabinetThermalResetAlarm(),
+                # Disabled for 2022-10 commissioning
+                # commands.TopEndChillerResetAlarm(),
+                (commands.OilSupplySystemResetAlarm(), None, False),
+                (commands.MainAxesPowerSupplyResetAlarm(), None, False),
+                (commands.MirrorCoverLocksResetAlarm(), None, False),
+                (commands.MirrorCoversResetAlarm(), None, False),
+                (commands.CameraCableWrapResetAlarm(), None, False),
+                # Disabled for 2022-10 commissioning
+                # commands.TopEndChillerPower(on=True),
+                # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
+                (commands.MainAxesPowerSupplyPower(on=True), None, False),
+                # Disabled for 2022-10 commissioning
+                (commands.OilSupplySystemSetMode(auto=True), None, False),
+                (commands.OilSupplySystemPower(on=True), None, False),
+                # Cannot successfully reset the axes alarms
+                # until the main power supply is on.
+                # Sometimes a second reset is needed for the main axes
+                # (a known bug in the TMA as of 2022-11-03).
+                (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, True),
+                (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, False),
+                (commands.BothAxesPower(on=True), None, False),
+                (commands.CameraCableWrapPower(on=True), None, False),
+            )
+            if not self.ccw_only_mode_enabled
+            else (
+                (commands.CameraCableWrapResetAlarm(), None, False),
+                (commands.CameraCableWrapPower(on=True), None, False),
+            )
         )
 
     async def disable_devices(self):
