@@ -49,7 +49,7 @@ from lsst.ts.xml.enums.MTMount import (
 from . import __version__, commands, constants, enums
 from .command_futures import CommandFutures
 from .config_schema import CONFIG_SCHEMA
-from .utils import truncate_value
+from .utils import disable_in_ccw_only_mode, truncate_value
 
 # If a command ack is later than this value (seconds) log a warning.
 LATE_COMMAND_ACK_INTERVAL = 0.05
@@ -515,10 +515,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.max_subsequent_failed_track_target = 2
         self._start_tracking_delay = 0.5
 
+        self.config = None
+
     @property
     def has_command(self):
         """Does the CSC have command of the low-level controller?"""
         return self.evt_commander.data.commander == enums.Source.CSC
+
+    @property
+    def ccw_only_mode_enabled(self):
+        """Is CSC running in CCW-Only mode?"""
+        return getattr(self.config, "ccw_only_mode", False)
 
     def assert_enabled_and_not_disabling(self):
         self.assert_enabled()
@@ -1455,6 +1462,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             await self.camera_cable_wrap_follow_start_task
 
+    @disable_in_ccw_only_mode
     async def do_homeBothAxes(self, data):
         self.assert_enabled_and_not_disabling()
         await self.send_command(
@@ -1475,6 +1483,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
             await self.open_or_close_mirror_cover_task
 
+    @disable_in_ccw_only_mode
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command."""
         self.assert_enabled_and_not_disabling()
@@ -1568,7 +1577,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise salobj.ExpectedError("Failed on one or more subsystems: " + ", ".join(task_errors))
 
     async def do_trackTarget(self, data):
-        """Handle the trackTarget command."""
+        """Handle the trackTarget command.
+
+        Notes
+        -----
+        Note that, although this command is not disabled in CCW-Only mode,
+        the startTracking command is disabled, which essentially preents
+        this command from working when in CCW-Only mode.
+        """
         self.assert_enabled_and_not_disabling()
         start_tai = utils.current_tai()
 
@@ -1659,6 +1675,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             force_output=True,
         )
 
+    @disable_in_ccw_only_mode
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled_and_not_disabling()
@@ -1744,6 +1761,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 settings_to_apply=data.settings.split(","),
             )
 
+    @disable_in_ccw_only_mode
     async def do_park(self, data):
         """Handle the park command."""
         self.assert_enabled_and_not_disabling()
@@ -1806,6 +1824,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 settings_to_apply=[],
             )
 
+    @disable_in_ccw_only_mode
     async def do_unpark(self, data):
         """Handle the unpark command."""
         self.assert_enabled()
