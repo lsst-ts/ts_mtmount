@@ -1,6 +1,6 @@
 # This file is part of ts_mtmount.
 #
-# Developed for Rubin Observatory Telescope and Site Systems.
+# Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -13,11 +13,11 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 __all__ = ["MTMountCsc", "run_mtmount"]
 
@@ -49,7 +49,7 @@ from lsst.ts.xml.enums.MTMount import (
 from . import __version__, commands, constants, enums
 from .command_futures import CommandFutures
 from .config_schema import CONFIG_SCHEMA
-from .utils import truncate_value
+from .utils import disable_in_ccw_only_mode, truncate_value
 
 # If a command ack is later than this value (seconds) log a warning.
 LATE_COMMAND_ACK_INTERVAL = 0.05
@@ -515,10 +515,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
         self.max_subsequent_failed_track_target = 2
         self._start_tracking_delay = 0.5
 
+        self.config = None
+
     @property
     def has_command(self):
         """Does the CSC have command of the low-level controller?"""
         return self.evt_commander.data.commander == enums.Source.CSC
+
+    @property
+    def ccw_only_mode_enabled(self):
+        """Is CSC running in CCW-Only mode?"""
+        return getattr(self.config, "ccw_only_mode", False)
 
     def assert_enabled_and_not_disabling(self):
         self.assert_enabled()
@@ -879,31 +886,38 @@ class MTMountCsc(salobj.ConfigurableCsc):
     def _get_devices_to_initialize(self):
         """Get a list of devices initialization commands."""
         return (
-            # Disabled 2023-06-26 because the system is broken.
-            # Re-enable when it is fixed.
-            # commands.MainCabinetThermalResetAlarm(),
-            # Disabled for 2022-10 commissioning
-            # commands.TopEndChillerResetAlarm(),
-            (commands.OilSupplySystemResetAlarm(), None, False),
-            (commands.MainAxesPowerSupplyResetAlarm(), None, False),
-            (commands.MirrorCoverLocksResetAlarm(), None, False),
-            (commands.MirrorCoversResetAlarm(), None, False),
-            (commands.CameraCableWrapResetAlarm(), None, False),
-            # Disabled for 2022-10 commissioning
-            # commands.TopEndChillerPower(on=True),
-            # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
-            (commands.MainAxesPowerSupplyPower(on=True), None, False),
-            # Disabled for 2022-10 commissioning
-            (commands.OilSupplySystemSetMode(auto=True), None, False),
-            (commands.OilSupplySystemPower(on=True), None, False),
-            # Cannot successfully reset the axes alarms
-            # until the main power supply is on.
-            # Sometimes a second reset is needed for the main axes
-            # (a known bug in the TMA as of 2022-11-03).
-            (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, True),
-            (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, False),
-            (commands.BothAxesPower(on=True), None, False),
-            (commands.CameraCableWrapPower(on=True), None, False),
+            (
+                # Disabled 2023-06-26 because the system is broken.
+                # Re-enable when it is fixed.
+                # commands.MainCabinetThermalResetAlarm(),
+                # Disabled for 2022-10 commissioning
+                # commands.TopEndChillerResetAlarm(),
+                (commands.OilSupplySystemResetAlarm(), None, False),
+                (commands.MainAxesPowerSupplyResetAlarm(), None, False),
+                (commands.MirrorCoverLocksResetAlarm(), None, False),
+                (commands.MirrorCoversResetAlarm(), None, False),
+                (commands.CameraCableWrapResetAlarm(), None, False),
+                # Disabled for 2022-10 commissioning
+                # commands.TopEndChillerPower(on=True),
+                # commands.TopEndChillerTrackAmbient(on=True, temperature=0),
+                (commands.MainAxesPowerSupplyPower(on=True), None, False),
+                # Disabled for 2022-10 commissioning
+                (commands.OilSupplySystemSetMode(auto=True), None, False),
+                (commands.OilSupplySystemPower(on=True), None, False),
+                # Cannot successfully reset the axes alarms
+                # until the main power supply is on.
+                # Sometimes a second reset is needed for the main axes
+                # (a known bug in the TMA as of 2022-11-03).
+                (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, True),
+                (commands.BothAxesResetAlarm(), self.config.ack_timeout_long, False),
+                (commands.BothAxesPower(on=True), None, False),
+                (commands.CameraCableWrapPower(on=True), None, False),
+            )
+            if not self.ccw_only_mode_enabled
+            else (
+                (commands.CameraCableWrapResetAlarm(), None, False),
+                (commands.CameraCableWrapPower(on=True), None, False),
+            )
         )
 
     async def disable_devices(self):
@@ -1455,6 +1469,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             )
             await self.camera_cable_wrap_follow_start_task
 
+    @disable_in_ccw_only_mode
     async def do_homeBothAxes(self, data):
         self.assert_enabled_and_not_disabling()
         await self.send_command(
@@ -1475,6 +1490,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
             await self.open_or_close_mirror_cover_task
 
+    @disable_in_ccw_only_mode
     async def do_moveToTarget(self, data):
         """Handle the moveToTarget command."""
         self.assert_enabled_and_not_disabling()
@@ -1568,7 +1584,14 @@ class MTMountCsc(salobj.ConfigurableCsc):
             raise salobj.ExpectedError("Failed on one or more subsystems: " + ", ".join(task_errors))
 
     async def do_trackTarget(self, data):
-        """Handle the trackTarget command."""
+        """Handle the trackTarget command.
+
+        Notes
+        -----
+        Note that, although this command is not disabled in CCW-Only mode,
+        the startTracking command is disabled, which essentially preents
+        this command from working when in CCW-Only mode.
+        """
         self.assert_enabled_and_not_disabling()
         start_tai = utils.current_tai()
 
@@ -1659,6 +1682,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
             force_output=True,
         )
 
+    @disable_in_ccw_only_mode
     async def do_startTracking(self, data):
         """Handle the startTracking command."""
         self.assert_enabled_and_not_disabling()
@@ -1713,11 +1737,17 @@ class MTMountCsc(salobj.ConfigurableCsc):
 
         await self.cmd_stop.ack_in_progress(data, timeout=STOP_TIMEOUT)
         self.track_started = False
+        cmd_list = [] if self.ccw_only_mode_enabled else [commands.BothAxesStop()]
+        cmd_list.extend(
+            [
+                commands.CameraCableWrapStop(),
+                commands.MirrorCoverLocksStop(),
+                commands.MirrorCoversStop(),
+            ]
+        )
+
         await self.send_commands(
-            commands.BothAxesStop(),
-            commands.CameraCableWrapStop(),
-            commands.MirrorCoverLocksStop(),
-            commands.MirrorCoversStop(),
+            *cmd_list,
             do_lock=False,
         )
 
@@ -1744,6 +1774,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 settings_to_apply=data.settings.split(","),
             )
 
+    @disable_in_ccw_only_mode
     async def do_park(self, data):
         """Handle the park command."""
         self.assert_enabled_and_not_disabling()
@@ -1806,6 +1837,7 @@ class MTMountCsc(salobj.ConfigurableCsc):
                 settings_to_apply=[],
             )
 
+    @disable_in_ccw_only_mode
     async def do_unpark(self, data):
         """Handle the unpark command."""
         self.assert_enabled()
