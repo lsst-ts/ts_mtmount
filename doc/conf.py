@@ -3,11 +3,9 @@
 This configuration only affects single-package Sphinx documentation builds.
 """
 
-import lsst.ts.mtmount  # noqa
-from documenteer.conf.pipelinespkg import *  # type: ignore # noqa
+from documenteer.conf.guide import *  # type: ignore # noqa
 
 project = "ts_mtmount"
-html_theme_options["logotext"] = project  # type: ignore # noqa
 html_title = project
 html_short_title = project
 doxylink = {}  # Avoid warning: Could not find tag file _doxygen/doxygen.tag
