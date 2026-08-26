@@ -1,1 +1,0 @@
-Updated do_stop in mtmount_csc.py to skip stopping azimuth and elevation axes when running in CCW-only mode.
