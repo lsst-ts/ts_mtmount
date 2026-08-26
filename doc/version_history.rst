@@ -8,6 +8,25 @@ Version History
 
 .. towncrier release notes start
 
+v0.35.0 (2026-08-26)
+====================
+
+New Features
+------------
+
+- Updated do_stop in mtmount_csc.py to skip stopping azimuth and elevation axes when running in CCW-only mode. (`OSW-2846 <https://rubinobs.atlassian.net//browse/OSW-2846>`_)
+- Updated _get_devices_to_initialize in mtmount_csc.py to return the correct list of devices to initialize when in CCW-only mode. (`OSW-2846 <https://rubinobs.atlassian.net//browse/OSW-2846>`_)
+- Updated the configuration schema to add an option to run in CCW-only mode. (`OSW-2846 <https://rubinobs.atlassian.net//browse/OSW-2846>`_)
+- Added support for CCW-only mode in mtmount_csc.py. (`OSW-2846 <https://rubinobs.atlassian.net//browse/OSW-2846>`_)
+- Added a decorator in utils.py that allows disabling a method when CCW-only mode is enabled. (`OSW-2846 <https://rubinobs.atlassian.net//browse/OSW-2846>`_)
+
+
+Documentation
+-------------
+
+- Update documentation build to the latest version of documenteer. (`OSW-2846 <https://rubinobs.atlassian.net//browse/OSW-2846>`_)
+
+
 v0.34.0 (2026-08-21)
 ===================
 
