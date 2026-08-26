@@ -1,0 +1,1 @@
+Updated _get_devices_to_initialize in mtmount_csc.py to return the correct list of devices to initialize when in CCW-only mode.

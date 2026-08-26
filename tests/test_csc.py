@@ -1,6 +1,6 @@
 # This file is part of ts_mtmount.
 #
-# Developed for Rubin Observatory Telescope and Site Systems.
+# Developed for the Vera C. Rubin Observatory Telescope and Site Systems.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
@@ -13,11 +13,11 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
 import contextlib
@@ -78,8 +78,6 @@ SAFETY_INTERLOCKS_FIELDS = (
     "subcausesBrakesFailed",
     "effects",
 )
-
-logging.basicConfig()
 
 
 class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
@@ -2015,3 +2013,29 @@ class CscTestCase(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
                 await self.assert_next_sample(
                     self.remote.evt_motionLockState, timeout=SHORT_TIMEOUT, flush=False
                 )
+
+    async def test_ccw_only_mode(self):
+        async with self.make_csc(
+            initial_state=salobj.State.STANDBY,
+        ):
+            await salobj.set_summary_state(
+                self.remote,
+                salobj.State.ENABLED,
+                override="enable_ccw_only_mode.yaml",
+            )
+
+            for command in (
+                self.remote.cmd_moveToTarget.start(timeout=SHORT_TIMEOUT),
+                self.remote.cmd_startTracking.start(timeout=SHORT_TIMEOUT),
+                self.remote.cmd_homeBothAxes.start(timeout=SHORT_TIMEOUT),
+                self.remote.cmd_park.start(timeout=SHORT_TIMEOUT),
+                self.remote.cmd_unpark.start(timeout=SHORT_TIMEOUT),
+            ):
+                with (
+                    self.subTest(command=command),
+                    salobj.assertRaisesAckError(
+                        ack=salobj.SalRetCode.CMD_FAILED,
+                        result_contains="Operation not available in CCW only mode.",
+                    ),
+                ):
+                    await command
